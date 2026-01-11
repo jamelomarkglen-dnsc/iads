@@ -804,7 +804,7 @@ if ($endorsementStmt) {
 <main class="content dashboard-content" role="main">
     <div class="container-fluid py-4">
         <div class="mb-4">
-            <h1 class="h4 fw-semibold text-success mb-1">Program Chairperson Command Center</h1>
+            <h1 class="h4 fw-semibold text-success mb-1">Program Chairperson Dashboard</h1>
             <p class="text-muted mb-0">Monitor faculty resources, review student submissions, and coordinate panels in one place.</p>
         </div>
         <?php if ($finalPickAlert): ?>
