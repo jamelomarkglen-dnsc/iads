@@ -126,8 +126,11 @@ function notice_status_badge(string $status): string
                 $body = build_notice_commence_body($studentName, $finalTitle, $programName, $notice['start_date'] ?? null);
             }
             $chairName = $notice['chair_name'] ?? 'Program Chairperson';
-            $deanName = $notice['dean_name'] ?? 'Dean, Institute of Advanced Studies';
             $status = $notice['status'] ?? 'Pending';
+            $chairTitle = $programName !== '' ? "Program Chairperson, {$programName}" : 'Program Chairperson';
+            $deanApproved = $status === 'Approved';
+            $deanName = $notice['dean_name'] ?? 'Dean, Institute of Advanced Studies';
+            $deanDisplay = $deanApproved ? $deanName : 'Pending approval';
             ?>
             <div class="card notice-card">
                 <div class="card-body">
@@ -141,14 +144,18 @@ function notice_status_badge(string $status): string
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <div class="fw-semibold">TO: <?= htmlspecialchars($studentName); ?></div>
-                        <div class="text-muted small ms-2"><?= htmlspecialchars($programLabel); ?></div>
-                    </div>
-
-                    <div class="d-flex justify-content-between flex-wrap mb-3">
-                        <div class="text-muted small">
-                            <strong>Subject:</strong> <?= htmlspecialchars($subject); ?>
+                    <div class="mb-4">
+                        <div class="row align-items-start g-2">
+                            <div class="col-sm-8">
+                                <div class="fw-semibold">TO&nbsp;&nbsp;:&nbsp;&nbsp;<?= htmlspecialchars($studentName); ?></div>
+                                <div class="text-muted small ms-4"><?= htmlspecialchars($programLabel); ?></div>
+                            </div>
+                            <div class="col-sm-4 text-sm-end text-muted small">
+                                <strong>DATE&nbsp;&nbsp;:</strong> <?= htmlspecialchars($noticeDateLabel ?: 'Date not set'); ?>
+                            </div>
+                        </div>
+                        <div class="text-muted small mt-2">
+                            <strong>SUBJECT&nbsp;&nbsp;:</strong> <?= htmlspecialchars($subject); ?>
                         </div>
                     </div>
 
@@ -158,11 +165,11 @@ function notice_status_badge(string $status): string
                         <div class="col-md-6">
                             <div class="text-muted small">Recommending approval:</div>
                             <div class="fw-semibold mt-2"><?= htmlspecialchars($chairName); ?></div>
-                            <div class="text-muted small">Program Chairperson</div>
+                            <div class="text-muted small"><?= htmlspecialchars($chairTitle); ?></div>
                         </div>
                         <div class="col-md-6">
                             <div class="text-muted small">Approved:</div>
-                            <div class="fw-semibold mt-2"><?= htmlspecialchars($deanName); ?></div>
+                            <div class="fw-semibold mt-2"><?= htmlspecialchars($deanDisplay); ?></div>
                             <div class="text-muted small">Dean, Institute of Advanced Studies</div>
                         </div>
                     </div>

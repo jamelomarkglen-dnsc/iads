@@ -244,14 +244,17 @@ include 'sidebar.php';
                 <div class="card card-shell p-4">
                     <h5 class="fw-bold text-success mb-3">Create Notice</h5>
                     <?php if (empty($eligibleSubmissions)): ?>
-                        <p class="text-muted mb-0">No approved outline defense submissions available yet.</p>
-                    <?php else: ?>
-                        <form method="post" id="noticeForm">
-                            <input type="hidden" name="submit_notice_commence" value="1">
-                            <input type="hidden" name="student_id" id="studentId">
-                            <div class="mb-3">
-                                <label class="form-label">Select Approved Submission</label>
-                                <select name="submission_id" id="submissionSelect" class="form-select" required>
+                        <p class="text-muted">No approved outline defense submissions available yet.</p>
+                    <?php endif; ?>
+                    <form method="post" id="noticeForm">
+                        <input type="hidden" name="submit_notice_commence" value="1">
+                        <input type="hidden" name="student_id" id="studentId">
+                        <div class="mb-3">
+                            <label class="form-label">Select Approved Submission</label>
+                            <select name="submission_id" id="submissionSelect" class="form-select" required <?= empty($eligibleSubmissions) ? 'disabled' : ''; ?>>
+                                <?php if (empty($eligibleSubmissions)): ?>
+                                    <option value="">No approved submissions available</option>
+                                <?php else: ?>
                                     <option value="">Choose student...</option>
                                     <?php foreach ($eligibleSubmissions as $submission): ?>
                                         <?php
@@ -272,55 +275,64 @@ include 'sidebar.php';
                                             <?= htmlspecialchars($studentName ?: 'Student'); ?><?= htmlspecialchars($suffix); ?>
                                         </option>
                                     <?php endforeach; ?>
-                                </select>
-                                <div class="small-muted mt-1">Only approved outline defense submissions can be issued a notice.</div>
-                            </div>
+                                <?php endif; ?>
+                            </select>
+                            <div class="small-muted mt-1">Only approved outline defense submissions can be issued a notice.</div>
+                        </div>
 
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label class="form-label">Student</label>
-                                    <input type="text" id="studentName" class="form-control" readonly>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Program</label>
-                                    <input type="text" id="programInput" class="form-control" readonly>
-                                </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Student</label>
+                                <input type="text" id="studentName" class="form-control" readonly>
                             </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Program</label>
+                                <input type="text" id="programInput" class="form-control" readonly>
+                            </div>
+                        </div>
 
-                            <div class="mt-3">
-                                <label class="form-label">Approved Title</label>
-                                <input type="text" id="titleInput" class="form-control" readonly>
-                            </div>
+                        <div class="mt-3">
+                            <label class="form-label">Approved Title</label>
+                            <input type="text" id="titleInput" class="form-control" readonly>
+                        </div>
 
-                            <div class="row g-3 mt-2">
-                                <div class="col-md-6">
-                                    <label class="form-label">Notice Date</label>
-                                    <input type="date" name="notice_date" id="noticeDate" class="form-control" value="<?= htmlspecialchars(date('Y-m-d')); ?>">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Research Start Date</label>
-                                    <input type="date" name="start_date" id="startDate" class="form-control" value="<?= htmlspecialchars(date('Y-m-d')); ?>">
-                                </div>
+                        <div class="row g-3 mt-2">
+                            <div class="col-md-6">
+                                <label class="form-label">Notice Date</label>
+                                <input type="date" name="notice_date" id="noticeDate" class="form-control" value="<?= htmlspecialchars(date('Y-m-d')); ?>">
                             </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Research Start Date</label>
+                                <input type="date" name="start_date" id="startDate" class="form-control" value="<?= htmlspecialchars(date('Y-m-d')); ?>">
+                            </div>
+                        </div>
 
-                            <div class="mt-3">
-                                <label class="form-label">Subject</label>
-                                <input type="text" name="subject" id="subjectInput" class="form-control" value="NOTIFICATION TO COMMENCE THE APPROVED PROPOSAL">
-                            </div>
+                        <div class="mt-3">
+                            <label class="form-label">Subject</label>
+                            <input type="text" name="subject" id="subjectInput" class="form-control" value="NOTIFICATION TO COMMENCE THE APPROVED PROPOSAL">
+                        </div>
 
-                            <div class="mt-3">
-                                <label class="form-label">Notice Body</label>
-                                <textarea name="notice_body" id="noticeBody" class="form-control" rows="10"></textarea>
-                                <div class="small-muted mt-1">You can adjust the message before sending to the dean.</div>
-                            </div>
+                        <div class="mt-3">
+                            <label class="form-label">Notice Body</label>
+                            <textarea name="notice_body" id="noticeBody" class="form-control" rows="10"><?=
+                                htmlspecialchars(
+                                    build_notice_commence_body(
+                                        'the student',
+                                        'your research proposal',
+                                        '',
+                                        date('Y-m-d')
+                                    )
+                                );
+                            ?></textarea>
+                            <div class="small-muted mt-1">You can adjust the message before sending to the dean.</div>
+                        </div>
 
-                            <div class="d-flex justify-content-end mt-4">
-                                <button type="submit" class="btn btn-success">
-                                    <i class="bi bi-send-check me-2"></i>Send to Dean
-                                </button>
-                            </div>
-                        </form>
-                    <?php endif; ?>
+                        <div class="d-flex justify-content-end mt-4">
+                            <button type="submit" class="btn btn-success" id="sendToDeanBtn" <?= empty($eligibleSubmissions) ? 'disabled' : ''; ?>>
+                                <i class="bi bi-send-check me-2"></i>Send to Dean
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
 
@@ -370,6 +382,7 @@ const noticeDateInput = document.getElementById('noticeDate');
 const startDateInput = document.getElementById('startDate');
 const subjectInput = document.getElementById('subjectInput');
 const bodyInput = document.getElementById('noticeBody');
+const sendToDeanBtn = document.getElementById('sendToDeanBtn');
 
 let bodyDirty = false;
 
@@ -398,8 +411,11 @@ function fillNoticeFields() {
         studentNameInput.value = '';
         programInput.value = '';
         titleInput.value = '';
-        if (!bodyDirty) {
-            bodyInput.value = '';
+        if (!bodyDirty && bodyInput && bodyInput.value.trim() === '') {
+            bodyInput.value = buildNoticeBody();
+        }
+        if (sendToDeanBtn) {
+            sendToDeanBtn.disabled = true;
         }
         return;
     }
@@ -412,6 +428,9 @@ function fillNoticeFields() {
     }
     bodyDirty = false;
     bodyInput.value = buildNoticeBody();
+    if (sendToDeanBtn) {
+        sendToDeanBtn.disabled = false;
+    }
 }
 
 if (submissionSelect) {
