@@ -278,7 +278,7 @@ if (isset($_POST['login'])) {
         }
         ?>
 
-        <h4 class="text-center mb-4">Welcome Back Markglen Pogi!</h4>
+        <h4 class="text-center mb-4">Welcome Back!</h4>
         <?php if (!empty($error)) echo "<div class='alert alert-danger'>$error</div>"; ?>
         <form method="POST">
             <div class="mb-3">
