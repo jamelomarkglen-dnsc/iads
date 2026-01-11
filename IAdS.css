@@ -1,0 +1,66 @@
+body {
+    background: #f2f6fc;
+    font-family: Arial, sans-serif;
+}
+
+.login-box {
+    max-width: 400px;
+    width: 100%;
+}
+
+h2 {
+    font-weight: bold;
+}
+
+/* register css */
+body {
+    background: #f8f9fa;
+    font-family: Arial, sans-serif;
+}
+
+.header {
+    background: #004aad;
+    color: white;
+}
+
+.header h5 {
+    color: white;
+}
+
+.header small {
+    color: #d1d1d1;
+}
+
+/* Header styling */
+.header {
+    background: #093a01;
+    color: white;
+    padding: 10rem;
+    margin: 5px;
+    border: 3px solid red;
+}
+.header .logo h5,
+.header .logo small {
+    color: white;
+}
+.header .dropdown-toggle {
+    color: white !important;
+}
+
+/* remove background to the hidden eye*/
+
+
+    .btn-transparent {
+        background: none !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    .btn-transparent:hover,
+    .btn-transparent:focus {
+        background: none !important;
+        color: inherit !important;
+        outline: none !important;
+    }
+
+
+

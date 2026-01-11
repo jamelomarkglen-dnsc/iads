@@ -1,0 +1,116 @@
+<?php
+require_once 'db.php';
+session_start();
+
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'panel') {
+    header("Location: login.php");
+    exit;
+}
+
+$firstName = $_SESSION['first_name'] ?? $_SESSION['firstname'] ?? '';
+$lastName = $_SESSION['last_name'] ?? $_SESSION['lastname'] ?? '';
+$panelName = trim($firstName . ' ' . $lastName);
+
+$sql = "
+  SELECT ds.id AS defense_id, ds.defense_date, ds.defense_time, ds.venue, ds.status,
+         dp.id AS panel_entry_id,
+         CONCAT(u.firstname, ' ', u.lastname) AS student_name,
+         s.title AS submission_title,
+         GROUP_CONCAT(dp2.panel_member SEPARATOR ', ') AS panel_members
+  FROM defense_schedules ds
+  JOIN users u ON ds.student_id = u.id
+  JOIN defense_panels dp ON dp.defense_id = ds.id
+  JOIN defense_panels dp2 ON dp2.defense_id = ds.id
+  LEFT JOIN submissions s ON s.student_id = ds.student_id
+  WHERE dp.panel_member LIKE CONCAT('%', ?, '%') AND dp.response = 'Accepted'
+  GROUP BY ds.id
+  ORDER BY ds.defense_date ASC
+";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("s", $panelName);
+$stmt->execute();
+$result = $stmt->get_result();
+$schedule = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+$stmt->close();
+
+include 'header.php';
+include 'sidebar.php';
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Panel Defense Schedule - DNSC IAdS</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+body { background: #f6f8fb; }
+.content { margin-left: 220px; padding: 24px; min-height: 100vh; transition: margin-left .3s; }
+#sidebar.collapsed ~ .content { margin-left: 60px; }
+.schedule-card { border-left: 6px solid #16562c; border-radius: 14px; box-shadow: 0 12px 24px rgba(22,86,44,0.08); transition: transform .2s; }
+.schedule-card:hover { transform: translateY(-2px); }
+.badge-status { font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="content">
+  <div class="container-fluid">
+    <div class="d-flex justify-content-between flex-wrap align-items-center mb-4">
+      <div>
+        <h3 class="fw-bold text-success mb-1"><i class="bi bi-calendar-week me-2"></i>Defense Schedule</h3>
+        <p class="text-muted mb-0">All accepted defenses assigned to you.</p>
+      </div>
+      <a href="panel.php" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to dashboard</a>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Accepted Schedules</span>
+        <input type="search" id="scheduleSearch" class="form-control form-control-sm w-auto" placeholder="Search schedule...">
+      </div>
+      <div class="card-body">
+        <?php if (empty($schedule)): ?>
+          <div class="alert alert-light text-center mb-0">
+            <i class="bi bi-calendar2-x"></i> No accepted defenses yet.
+          </div>
+        <?php else: ?>
+          <?php foreach ($schedule as $assignment): ?>
+            <?php
+              $scheduleLabel = ($assignment['defense_date'] ? date('F d, Y', strtotime($assignment['defense_date'])) : 'TBD') . ' ' .
+                               ($assignment['defense_time'] ? date('g:i A', strtotime($assignment['defense_time'])) : '');
+              $status = $assignment['status'] ?? 'Pending';
+              $badgeClass = $status === 'Confirmed' ? 'bg-success' : ($status === 'Completed' ? 'bg-primary' : 'bg-secondary');
+              $searchable = strtolower(($assignment['student_name'] ?? '') . ' ' . ($assignment['submission_title'] ?? '') . ' ' . $status);
+            ?>
+            <div class="schedule-card bg-white p-4 mb-4" data-search="<?= htmlspecialchars($searchable); ?>">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0 text-success"><i class="bi bi-mortarboard me-2"></i><?= htmlspecialchars($assignment['student_name']); ?> — <?= htmlspecialchars($assignment['submission_title'] ?? 'Research Title'); ?></h5>
+                <span class="badge <?= $badgeClass; ?> badge-status"><?= htmlspecialchars($status); ?></span>
+              </div>
+              <p class="mb-1"><strong>Date:</strong> <?= htmlspecialchars(trim($scheduleLabel)); ?></p>
+              <p class="mb-1"><strong>Venue:</strong> <?= htmlspecialchars($assignment['venue'] ?? 'To be announced'); ?></p>
+              <p class="text-muted mb-0"><i class="bi bi-people-fill me-1"></i> <?= htmlspecialchars($assignment['panel_members']); ?></p>
+            </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const searchInput = document.getElementById('scheduleSearch');
+if (searchInput) {
+  searchInput.addEventListener('input', () => {
+    const value = searchInput.value.toLowerCase();
+    document.querySelectorAll('.schedule-card').forEach(card => {
+      const searchable = (card.dataset.search || '').toLowerCase();
+      card.style.display = searchable.includes(value) ? '' : 'none';
+    });
+  });
+}
+</script>
+</body>
+</html>
+

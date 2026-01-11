@@ -1,0 +1,36 @@
+body {
+    background-color: #f8f9fa;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 240px;
+    background-color: #16562c;
+    min-height: 100vh;
+    position: fixed;
+    top: 0;
+    left: -240px;
+    transition: all 0.3s ease;
+    z-index: 2000;
+}
+.sidebar.active {
+    left: 0;
+}
+.sidebar a:hover {
+    background: #198754;
+    border-radius: 4px;
+}
+
+/* Content */
+.content {
+    margin-left: 0;
+    transition: margin-left 0.3s ease;
+}
+@media (min-width: 768px) {
+    .sidebar {
+        left: 0;
+    }
+    .content {
+        margin-left: 240px;
+    }
+}

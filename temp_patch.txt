@@ -1,0 +1,187 @@
+*** Begin Patch
+*** Update File: concept_review_helpers.php
+@@
+ function ensureReviewerInviteFeedbackTable(mysqli $conn): void
+ {
+@@
+ }
+ 
+ function recordReviewerInviteFeedback(mysqli $conn, array $payload): void
+ {
+@@
+ }
++
++function ensureConceptReviewMessagesTable(mysqli $conn): void
++{
++    static $ensured = false;
++    if ($ensured) {
++        return;
++    }
++
++    $sql = "
++        CREATE TABLE IF NOT EXISTS concept_review_messages (
++            id INT AUTO_INCREMENT PRIMARY KEY,
++            assignment_id INT NOT NULL,
++            concept_paper_id INT NOT NULL,
++            student_id INT NOT NULL,
++            sender_id INT NOT NULL,
++            sender_role VARCHAR(50) NOT NULL,
++            message TEXT NOT NULL,
++            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
++            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
++            INDEX idx_assignment (assignment_id),
++            INDEX idx_student (student_id),
++            CONSTRAINT fk_crm_assignment FOREIGN KEY (assignment_id) REFERENCES concept_reviewer_assignments(id) ON DELETE CASCADE,
++            CONSTRAINT fk_crm_sender FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
++        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
++    ";
++
++    $conn->query($sql);
++    $ensured = true;
++}
++
++function saveConceptReviewMessage(mysqli $conn, array $payload): bool
++{
++    ensureConceptReviewMessagesTable($conn);
++
++    $assignmentId = (int)($payload['assignment_id'] ?? 0);
++    $conceptPaperId = (int)($payload['concept_paper_id'] ?? 0);
++    $studentId = (int)($payload['student_id'] ?? 0);
++    $senderId = (int)($payload['sender_id'] ?? 0);
++    $senderRole = trim((string)($payload['sender_role'] ?? ''));
++    $message = trim((string)($payload['message'] ?? ''));
++
++    if ($assignmentId <= 0 || $conceptPaperId <= 0 || $studentId <= 0 || $senderId <= 0 || $senderRole === '' || $message === '') {
++        return false;
++    }
++
++    $stmt = $conn->prepare("
++        INSERT INTO concept_review_messages (assignment_id, concept_paper_id, student_id, sender_id, sender_role, message)
++        VALUES (?, ?, ?, ?, ?, ?)
++    ");
++    if (!$stmt) {
++        return false;
++    }
++    $stmt->bind_param('iiiiis', $assignmentId, $conceptPaperId, $studentId, $senderId, $senderRole, $message);
++    $result = $stmt->execute();
++    $stmt->close();
++
++    return $result;
++}
++
++function fetchConceptReviewMessagesByAssignments(mysqli $conn, array $assignmentIds): array
++{
++    ensureConceptReviewMessagesTable($conn);
++
++    $assignmentIds = array_values(array_unique(array_filter(array_map('intval', $assignmentIds))));
++    if (empty($assignmentIds)) {
++        return [];
++    }
++
++    $placeholders = implode(',', array_fill(0, count($assignmentIds), '?'));
++    $types = str_repeat('i', count($assignmentIds));
++    $sql = "
++        SELECT
++            crm.id,
++            crm.assignment_id,
++            crm.concept_paper_id,
++            crm.student_id,
++            crm.sender_id,
++            crm.sender_role,
++            crm.message,
++            crm.created_at,
++            crm.updated_at,
++            CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, '')) AS sender_name,
++            COALESCE(u.role, '') AS sender_account_role
++        FROM concept_review_messages crm
++        LEFT JOIN users u ON u.id = crm.sender_id
++        WHERE crm.assignment_id IN ($placeholders)
++        ORDER BY crm.assignment_id ASC, crm.created_at ASC
++    ";
++
++    $stmt = $conn->prepare($sql);
++    if (!$stmt) {
++        return [];
++    }
++
++    $stmt->bind_param($types, ...$assignmentIds);
++    $stmt->execute();
++    $result = $stmt->get_result();
++    $messages = [];
++    if ($result) {
++        while ($row = $result->fetch_assoc()) {
++            $assignmentId = (int)($row['assignment_id'] ?? 0);
++            if (!isset($messages[$assignmentId])) {
++                $messages[$assignmentId] = [];
++            }
++            $messages[$assignmentId][] = $row;
++        }
++        $result->free();
++    }
++    $stmt->close();
++
++    return $messages;
++}
++
++function fetchRemainingReviewerFeedback(mysqli $conn, int $limit = 6, ?int $reviewerId = null): array
++{
++    ensureReviewerInviteFeedbackTable($conn);
++
++    $limit = max(1, min(50, $limit));
++    $whereClause = '';
++    $types = '';
++    $params = [];
++
++    if ($reviewerId !== null && $reviewerId > 0) {
++        $whereClause = 'WHERE rif.reviewer_id = ?';
++        $types = 'i';
++        $params[] = $reviewerId;
++    }
++
++    $sql = "
++        SELECT
++            rif.id,
++            rif.assignment_id,
++            rif.reason,
++            rif.created_at,
++            rif.reviewer_role,
++            cp.title AS concept_title,
++            CONCAT(COALESCE(stu.firstname, ''), ' ', COALESCE(stu.lastname, '')) AS student_name,
++            CONCAT(COALESCE(r.firstname, ''), ' ', COALESCE(r.lastname, '')) AS reviewer_name,
++            COALESCE(r.email, '') AS reviewer_email
++        FROM reviewer_invite_feedback rif
++        LEFT JOIN concept_papers cp ON cp.id = rif.concept_paper_id
++        LEFT JOIN users stu ON stu.id = rif.student_id
++        LEFT JOIN users r ON r.id = rif.reviewer_id
++        {$whereClause}
++        ORDER BY rif.created_at DESC
++        LIMIT ?
++    ";
++
++    $types .= 'i';
++    $params[] = $limit;
++
++    $stmt = $conn->prepare($sql);
++    if (!$stmt) {
++        return [];
++    }
++
++    $stmt->bind_param($types, ...$params);
++    $stmt->execute();
++    $result = $stmt->get_result();
++    $rows = [];
++    if ($result) {
++        while ($row = $result->fetch_assoc()) {
++            $rows[] = $row;
++        }
++        $result->free();
++    }
++    $stmt->close();
++
++    return $rows;
++}
+ 
+ /**
+  * Lightweight helper to check if a column exists on a table (cached per request).
+  */
+*** End Patch
