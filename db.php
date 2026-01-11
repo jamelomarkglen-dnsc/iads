@@ -1,8 +1,16 @@
 <?php
 $servername = "localhost";
-$username = "root";
-$password = ""; // Leave this empty if using XAMPP with no MySQL password
-$database = "advance_studies";
+
+// Live
+$username = "u645049065_iads";
+$password = "Dnsc01606";
+$database = "u645049065_iads";
+
+// Local
+// $username = "root";
+// $password = ""; 
+// $database = "advance_studies";
+
 
 $conn = new mysqli($servername, $username, $password, $database);
 
