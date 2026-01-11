@@ -19,6 +19,25 @@ function safe_json_response(array $payload): void
     exit;
 }
 
+function columnExists(mysqli $conn, string $column): bool
+{
+    $column = $conn->real_escape_string($column);
+    $sql = "
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'users'
+          AND COLUMN_NAME = '{$column}'
+        LIMIT 1
+    ";
+    $result = $conn->query($sql);
+    $exists = $result && $result->num_rows > 0;
+    if ($result) {
+        $result->free();
+    }
+    return $exists;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $action = $_GET['action'] ?? 'search';
     if ($action !== 'search') {
@@ -78,8 +97,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         safe_json_response(['success' => false, 'error' => 'Invalid student identifier']);
     }
 
+    // Determine which adviser columns exist
+    $advisorColumns = [];
+    if (columnExists($conn, 'adviser_id')) {
+        $advisorColumns[] = 'adviser_id';
+    }
+    if (columnExists($conn, 'advisor_id')) {
+        $advisorColumns[] = 'advisor_id';
+    }
+    if (empty($advisorColumns)) {
+        safe_json_response(['success' => false, 'error' => 'System configuration error']);
+    }
+
+    // Build dynamic SELECT query
+    $selectColumns = 'id, firstname, lastname, email, ' . implode(', ', $advisorColumns);
     $checkStmt = $conn->prepare("
-        SELECT id, firstname, lastname, email, adviser_id, advisor_id
+        SELECT {$selectColumns}
         FROM users
         WHERE id = ? AND role = 'student'
         LIMIT 1
@@ -92,12 +125,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$studentRow) {
         safe_json_response(['success' => false, 'error' => 'Student record not found']);
     }
-    if (!empty($studentRow['adviser_id']) || !empty($studentRow['advisor_id'])) {
-        safe_json_response(['success' => false, 'error' => 'Student is already assigned to an adviser']);
+    
+    // Check if student is already assigned
+    foreach ($advisorColumns as $col) {
+        if (!empty($studentRow[$col])) {
+            safe_json_response(['success' => false, 'error' => 'Student is already assigned to an adviser']);
+        }
     }
 
-    $assignStmt = $conn->prepare("UPDATE users SET adviser_id = ?, advisor_id = ? WHERE id = ?");
-    $assignStmt->bind_param("iii", $adviserId, $adviserId, $studentId);
+    // Build dynamic UPDATE query
+    $updates = [];
+    $bindTypes = '';
+    $bindValues = [];
+    
+    foreach ($advisorColumns as $col) {
+        $updates[] = "{$col} = ?";
+        $bindTypes .= 'i';
+        $bindValues[] = $adviserId;
+    }
+    
+    $bindTypes .= 'i';
+    $bindValues[] = $studentId;
+    
+    $updateSql = "UPDATE users SET " . implode(', ', $updates) . " WHERE id = ?";
+    $assignStmt = $conn->prepare($updateSql);
+    
+    if (!$assignStmt) {
+        safe_json_response(['success' => false, 'error' => 'Failed to prepare assignment']);
+    }
+    
+    $bindParams = [$bindTypes];
+    foreach ($bindValues as $key => $value) {
+        $bindParams[] = &$bindValues[$key];
+    }
+    call_user_func_array([$assignStmt, 'bind_param'], $bindParams);
+    
     $ok = $assignStmt->execute();
     $assignStmt->close();
 
@@ -116,6 +178,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'Adviser assigned',
         'You have been added to an adviser in the DNSC IAdS system. Open your dashboard to start collaborating.',
         'student_dashboard.php'
+    );
+
+    notify_user(
+        $conn,
+        $adviserId,
+        'New advisee added',
+        'You have successfully added ' . $studentName . ' to your advisory list.',
+        'adviser_directory.php',
+        false
     );
 
     safe_json_response(['success' => true]);

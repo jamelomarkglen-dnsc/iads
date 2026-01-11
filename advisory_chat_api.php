@@ -102,9 +102,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $snippet = mb_strlen($message) > 120 ? mb_substr($message, 0, 117) . '...' : $message;
     $link = $counterpartRole === 'student' ? 'student_dashboard.php' : 'advisory.php';
-    notify_user(
+    notify_user_for_role(
         $conn,
         $counterpartId,
+        $counterpartRole,
         'New advisory message',
         $snippet,
         $link

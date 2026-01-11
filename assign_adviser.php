@@ -66,6 +66,7 @@ $adviserAssignmentEnabled = !empty($advisorColumns);
 $unassignedClause = buildAdvisorUnassignedClause('u', $advisorColumns);
 $studentScopeCondition = render_scope_condition($conn, $chairScope, 'u');
 $adviserScopeCondition = render_scope_condition($conn, $chairScope, 'a');
+$restrictAdvisersToScope = false;
 $chairQuickLookupValue = '';
 
 if (isset($_GET['chair_assign_search']) && $_GET['chair_assign_search'] === '1') {
@@ -235,9 +236,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['chair_assign_advisee'] ?? 
                 LEFT JOIN user_roles ar ON ar.user_id = a.id AND ar.role_code = 'adviser'
                 WHERE a.id = ?
                   AND a.role NOT IN ('student', 'program_chairperson')
-                  AND (a.role = 'adviser' OR ar.user_id IS NOT NULL)
+                  AND (a.role IN ('adviser', 'faculty') OR ar.user_id IS NOT NULL)
             ";
-            if ($adviserScopeCondition !== '') {
+            if ($adviserScopeCondition !== '' && $restrictAdvisersToScope) {
                 $adviserCheckSql .= " AND {$adviserScopeCondition}";
             }
             $adviserCheckSql .= " LIMIT 1";
@@ -296,6 +297,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['chair_assign_advisee'] ?? 
                         $updateStmt->bind_param($updateTypes, ...$updateParams);
                         if ($updateStmt->execute() && $updateStmt->affected_rows > 0) {
                             $assignedCount = $updateStmt->affected_rows;
+                            $hadAdviserRole = false;
+                            $roleCheckStmt = $conn->prepare("
+                                SELECT 1 FROM user_roles
+                                WHERE user_id = ? AND role_code = 'adviser'
+                                LIMIT 1
+                            ");
+                            if ($roleCheckStmt) {
+                                $roleCheckStmt->bind_param('i', $selectedAdviserId);
+                                $roleCheckStmt->execute();
+                                $roleCheckStmt->store_result();
+                                $hadAdviserRole = $roleCheckStmt->num_rows > 0;
+                                $roleCheckStmt->close();
+                            }
+                            ensureUserRoleAssignment($conn, $selectedAdviserId, 'adviser');
+                            if (!$hadAdviserRole) {
+                                $roleConfirmStmt = $conn->prepare("
+                                    SELECT 1 FROM user_roles
+                                    WHERE user_id = ? AND role_code = 'adviser'
+                                    LIMIT 1
+                                ");
+                                if ($roleConfirmStmt) {
+                                    $roleConfirmStmt->bind_param('i', $selectedAdviserId);
+                                    $roleConfirmStmt->execute();
+                                    $roleConfirmStmt->store_result();
+                                    $roleAssigned = $roleConfirmStmt->num_rows > 0;
+                                    $roleConfirmStmt->close();
+                                    if ($roleAssigned) {
+                                        notify_user(
+                                            $conn,
+                                            $selectedAdviserId,
+                                            'Adviser role assigned',
+                                            'You have been granted the Adviser role. Switch to Adviser to view your advisees and advisory chat.',
+                                            'adviser.php'
+                                        );
+                                    }
+                                }
+                            }
                             $assignedStudents = [];
                             if (!empty($selectedStudentIds)) {
                                 $assignedPlaceholders = implode(',', array_fill(0, count($selectedStudentIds), '?'));
@@ -421,9 +459,9 @@ $adviserSql = "
     FROM users a
     LEFT JOIN user_roles ar ON ar.user_id = a.id AND ar.role_code = 'adviser'
     WHERE a.role NOT IN ('student', 'program_chairperson')
-      AND (a.role = 'adviser' OR ar.user_id IS NOT NULL)
+      AND (a.role IN ('adviser', 'faculty') OR ar.user_id IS NOT NULL)
 ";
-if ($adviserScopeCondition !== '') {
+if ($adviserScopeCondition !== '' && $restrictAdvisersToScope) {
     $adviserSql .= " AND {$adviserScopeCondition}";
 }
 $adviserSql .= " ORDER BY a.lastname, a.firstname";

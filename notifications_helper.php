@@ -303,11 +303,6 @@ if (!function_exists('fetch_user_notifications')) {
         $params = [];
         $types = '';
         $role = trim((string)($role ?? ''));
-        if ($defaultRole === null && $userId !== null) {
-            $defaultRole = fetch_user_default_role($conn, $userId);
-        }
-        $defaultRole = trim((string)($defaultRole ?? ''));
-
         if ($userId !== null) {
             $userConditions = [];
             if ($role !== '') {
@@ -316,14 +311,11 @@ if (!function_exists('fetch_user_notifications')) {
                 $params[] = $role;
                 $types .= 'is';
             }
-            if ($role === '' || ($defaultRole !== '' && $role === $defaultRole)) {
-                $userConditions[] = "(user_id = ? AND (role IS NULL OR role = ''))";
-                $params[] = (int)$userId;
-                $types .= 'i';
-            }
-            if (!empty($userConditions)) {
-                $conditions[] = '(' . implode(' OR ', $userConditions) . ')';
-            }
+            // Always include user-targeted notifications regardless of active role.
+            $userConditions[] = "(user_id = ? AND (role IS NULL OR role = ''))";
+            $params[] = (int)$userId;
+            $types .= 'i';
+            $conditions[] = '(' . implode(' OR ', $userConditions) . ')';
         }
         if ($role !== null && $role !== '') {
             $conditions[] = '(role = ? AND (user_id IS NULL OR user_id = 0))';
@@ -381,10 +373,6 @@ if (!function_exists('count_unread_notifications')) {
 
         $targetConditions = [];
         $role = trim((string)($role ?? ''));
-        if ($defaultRole === null && $userId !== null) {
-            $defaultRole = fetch_user_default_role($conn, $userId);
-        }
-        $defaultRole = trim((string)($defaultRole ?? ''));
         if ($userId !== null) {
             $userConditions = [];
             if ($role !== '') {
@@ -393,14 +381,11 @@ if (!function_exists('count_unread_notifications')) {
                 $params[] = $role;
                 $types .= 'is';
             }
-            if ($role === '' || ($defaultRole !== '' && $role === $defaultRole)) {
-                $userConditions[] = "(user_id = ? AND (role IS NULL OR role = ''))";
-                $params[] = (int)$userId;
-                $types .= 'i';
-            }
-            if (!empty($userConditions)) {
-                $targetConditions[] = '(' . implode(' OR ', $userConditions) . ')';
-            }
+            // Always include user-targeted notifications regardless of active role.
+            $userConditions[] = "(user_id = ? AND (role IS NULL OR role = ''))";
+            $params[] = (int)$userId;
+            $types .= 'i';
+            $targetConditions[] = '(' . implode(' OR ', $userConditions) . ')';
         }
         if ($role !== null && $role !== '') {
             $targetConditions[] = '(role = ? AND (user_id IS NULL OR user_id = 0))';
