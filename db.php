@@ -2,9 +2,9 @@
 $servername = "localhost";
 
 // Live
-$username = "u645049065_iads";
+$username = "u645049065_iads2";
 $password = "Dnsc01606";
-$database = "u645049065_iads";
+$database = "u645049065_iads2";
 
 // Local
 // $username = "root";
