@@ -766,7 +766,7 @@ $conceptProposals = [
                     ['program_chairperson', 'committee_chairperson', 'committee_chair', 'adviser'],
                     'New paper submission',
                     $message,
-                    'submissions.php'
+                    'submissions.php?view=all'
                 );
             } else {
                 $error = "Database error: " . $conn->error;

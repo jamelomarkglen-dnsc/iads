@@ -21,13 +21,26 @@ if (!empty($chairScope['college']) && empty($_SESSION['college'])) {
     $_SESSION['college'] = $chairScope['college'];
 }
 
-[$scopeClause, $scopeTypes, $scopeParams] = build_scope_condition($chairScope, 'u');
+// Check if viewing all submissions (from notification)
+$viewAll = isset($_GET['view']) && $_GET['view'] === 'all';
+
+// Build scope condition - if no scope is set, show all submissions
+// If view=all is set (from notification), ignore scope filtering
+if ($viewAll) {
+    $scopeClause = '';
+    $scopeTypes = '';
+    $scopeParams = [];
+    error_log("DEBUG submissions.php - Viewing ALL submissions (from notification)");
+} else {
+    [$scopeClause, $scopeTypes, $scopeParams] = build_scope_condition($chairScope, 'u');
+    error_log("DEBUG submissions.php - Chair ID: {$chairId}, Scope: " . json_encode($chairScope) . ", Scope Clause: '{$scopeClause}'");
+}
 
 $sql = "
   SELECT s.id, s.title, s.type, s.abstract, s.keywords, s.file_path,
          s.concept_file_1, s.concept_file_2, s.concept_file_3,
          s.status, s.created_at,
-         u.firstname, u.lastname, u.email
+         u.firstname, u.lastname, u.email, u.program, u.department, u.college
   FROM submissions s
   JOIN users u ON s.student_id = u.id
 ";
@@ -38,12 +51,14 @@ $sql .= " ORDER BY s.created_at DESC";
 
 $submissions = [];
 if ($scopeClause === '') {
+    error_log("DEBUG: No scope clause - fetching all submissions");
     $result = $conn->query($sql);
     if ($result) {
         $submissions = $result->fetch_all(MYSQLI_ASSOC);
         $result->free();
     }
 } else {
+    error_log("DEBUG: Using scope clause: {$scopeClause} with params: " . json_encode($scopeParams));
     $stmt = $conn->prepare($sql);
     if ($stmt && bind_scope_params($stmt, $scopeTypes, $scopeParams)) {
         $stmt->execute();
@@ -53,8 +68,12 @@ if ($scopeClause === '') {
             $result->free();
         }
         $stmt->close();
+    } else {
+        error_log("DEBUG: Failed to prepare or bind statement");
     }
 }
+
+error_log("DEBUG: Total submissions fetched: " . count($submissions));
 
 $availableStatuses = [];
 $availableTypes = [];
