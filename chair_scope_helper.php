@@ -68,26 +68,7 @@ function student_matches_scope(mysqli $conn, int $studentId, array $scope): bool
         return true;
     }
 
-    static $studentCache = [];
-    if (!isset($studentCache[$studentId])) {
-        $stmt = $conn->prepare("SELECT program, department, college FROM users WHERE id = ? LIMIT 1");
-        if (!$stmt) {
-            return false;
-        }
-        $stmt->bind_param('i', $studentId);
-        if (!$stmt->execute()) {
-            $stmt->close();
-            return false;
-        }
-        $result = $stmt->get_result();
-        $studentCache[$studentId] = $result ? $result->fetch_assoc() : null;
-        if ($result) {
-            $result->free();
-        }
-        $stmt->close();
-    }
-
-    $student = $studentCache[$studentId] ?? null;
+    $student = fetch_student_scope_fields($conn, $studentId);
     if (!$student) {
         return false;
     }
@@ -107,6 +88,119 @@ function student_matches_scope(mysqli $conn, int $studentId, array $scope): bool
     }
 
     return true;
+}
+
+function build_scope_condition_any(array $scope, string $alias = 'u'): array
+{
+    $fields = [
+        'program' => trim((string)($scope['program'] ?? '')),
+        'department' => trim((string)($scope['department'] ?? '')),
+        'college' => trim((string)($scope['college'] ?? '')),
+    ];
+
+    $parts = [];
+    $params = [];
+    $types = '';
+    $seen = [];
+
+    foreach ($fields as $field => $value) {
+        if ($value === '') {
+            continue;
+        }
+        $key = strtolower($value);
+        if (isset($seen[$key])) {
+            continue;
+        }
+        $seen[$key] = true;
+        $parts[] = "{$alias}.{$field} = ?";
+        $params[] = $value;
+        $types .= 's';
+    }
+
+    if (empty($parts)) {
+        return ['', '', []];
+    }
+
+    return ['(' . implode(' OR ', $parts) . ')', $types, $params];
+}
+
+function student_matches_scope_any(mysqli $conn, int $studentId, array $scope): bool
+{
+    if ($studentId <= 0) {
+        return false;
+    }
+
+    $fields = [
+        'program' => trim((string)($scope['program'] ?? '')),
+        'department' => trim((string)($scope['department'] ?? '')),
+        'college' => trim((string)($scope['college'] ?? '')),
+    ];
+
+    $hasFilter = false;
+    foreach ($fields as $value) {
+        if ($value !== '') {
+            $hasFilter = true;
+            break;
+        }
+    }
+    if (!$hasFilter) {
+        return true;
+    }
+
+    $student = fetch_student_scope_fields($conn, $studentId);
+    if (!$student) {
+        return false;
+    }
+
+    $studentProgram = trim((string)($student['program'] ?? ''));
+    $studentDepartment = trim((string)($student['department'] ?? ''));
+    $studentCollege = trim((string)($student['college'] ?? ''));
+
+    foreach ($fields as $field => $value) {
+        if ($value === '') {
+            continue;
+        }
+        if ($field === 'program' && strcasecmp($studentProgram, $value) === 0) {
+            return true;
+        }
+        if ($field === 'department' && strcasecmp($studentDepartment, $value) === 0) {
+            return true;
+        }
+        if ($field === 'college' && strcasecmp($studentCollege, $value) === 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function fetch_student_scope_fields(mysqli $conn, int $studentId): ?array
+{
+    if ($studentId <= 0) {
+        return null;
+    }
+
+    static $studentCache = [];
+    if (!array_key_exists($studentId, $studentCache)) {
+        $stmt = $conn->prepare("SELECT program, department, college FROM users WHERE id = ? LIMIT 1");
+        if (!$stmt) {
+            $studentCache[$studentId] = null;
+        } else {
+            $stmt->bind_param('i', $studentId);
+            if ($stmt->execute()) {
+                $result = $stmt->get_result();
+                $studentCache[$studentId] = $result ? $result->fetch_assoc() : null;
+                if ($result) {
+                    $result->free();
+                }
+            } else {
+                $studentCache[$studentId] = null;
+            }
+            $stmt->close();
+        }
+    }
+
+    return $studentCache[$studentId] ?? null;
 }
 
 function bind_scope_params(mysqli_stmt $stmt, string $types, array $params): bool

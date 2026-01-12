@@ -224,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify_endorsement'])
 
         if (!$endorsementRow) {
             $endorsementAlert = ['type' => 'danger', 'message' => 'Unable to locate that endorsement.'];
-        } elseif (!student_matches_scope($conn, (int)($endorsementRow['student_id'] ?? 0), $chairScope)) {
+        } elseif (!student_matches_scope_any($conn, (int)($endorsementRow['student_id'] ?? 0), $chairScope)) {
             $endorsementAlert = ['type' => 'danger', 'message' => 'You can only verify endorsements for students in your scope.'];
         } elseif (($endorsementRow['status'] ?? '') === 'Verified') {
             $endorsementAlert = ['type' => 'warning', 'message' => 'This endorsement has already been verified.'];
@@ -840,7 +840,7 @@ $endorsements = [];
 $endorsementScopeClause = '';
 $endorsementScopeTypes = '';
 $endorsementScopeParams = [];
-[$endorsementScopeClause, $endorsementScopeTypes, $endorsementScopeParams] = build_scope_condition($chairScope, 'stu');
+[$endorsementScopeClause, $endorsementScopeTypes, $endorsementScopeParams] = build_scope_condition_any($chairScope, 'stu');
 $endorsementSql = "
     SELECT
         er.id,
