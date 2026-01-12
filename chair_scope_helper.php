@@ -92,18 +92,14 @@ function student_matches_scope(mysqli $conn, int $studentId, array $scope): bool
 
 function build_scope_condition_any(array $scope, string $alias = 'u'): array
 {
-    $fields = [
-        'program' => trim((string)($scope['program'] ?? '')),
-        'department' => trim((string)($scope['department'] ?? '')),
-        'college' => trim((string)($scope['college'] ?? '')),
+    $rawValues = [
+        trim((string)($scope['program'] ?? '')),
+        trim((string)($scope['department'] ?? '')),
+        trim((string)($scope['college'] ?? '')),
     ];
-
-    $parts = [];
-    $params = [];
-    $types = '';
+    $values = [];
     $seen = [];
-
-    foreach ($fields as $field => $value) {
+    foreach ($rawValues as $value) {
         if ($value === '') {
             continue;
         }
@@ -112,13 +108,24 @@ function build_scope_condition_any(array $scope, string $alias = 'u'): array
             continue;
         }
         $seen[$key] = true;
-        $parts[] = "{$alias}.{$field} = ?";
-        $params[] = $value;
-        $types .= 's';
+        $values[] = $value;
     }
 
-    if (empty($parts)) {
+    if (empty($values)) {
         return ['', '', []];
+    }
+
+    $fields = ['program', 'department', 'college'];
+    $parts = [];
+    $params = [];
+    $types = '';
+    $placeholders = implode(',', array_fill(0, count($values), '?'));
+    foreach ($fields as $field) {
+        $parts[] = "{$alias}.{$field} IN ({$placeholders})";
+        foreach ($values as $value) {
+            $params[] = $value;
+            $types .= 's';
+        }
     }
 
     return ['(' . implode(' OR ', $parts) . ')', $types, $params];
@@ -130,20 +137,25 @@ function student_matches_scope_any(mysqli $conn, int $studentId, array $scope): 
         return false;
     }
 
-    $fields = [
-        'program' => trim((string)($scope['program'] ?? '')),
-        'department' => trim((string)($scope['department'] ?? '')),
-        'college' => trim((string)($scope['college'] ?? '')),
+    $rawValues = [
+        trim((string)($scope['program'] ?? '')),
+        trim((string)($scope['department'] ?? '')),
+        trim((string)($scope['college'] ?? '')),
     ];
-
-    $hasFilter = false;
-    foreach ($fields as $value) {
-        if ($value !== '') {
-            $hasFilter = true;
-            break;
+    $values = [];
+    $seen = [];
+    foreach ($rawValues as $value) {
+        if ($value === '') {
+            continue;
         }
+        $key = strtolower($value);
+        if (isset($seen[$key])) {
+            continue;
+        }
+        $seen[$key] = true;
+        $values[] = $value;
     }
-    if (!$hasFilter) {
+    if (empty($values)) {
         return true;
     }
 
@@ -156,17 +168,14 @@ function student_matches_scope_any(mysqli $conn, int $studentId, array $scope): 
     $studentDepartment = trim((string)($student['department'] ?? ''));
     $studentCollege = trim((string)($student['college'] ?? ''));
 
-    foreach ($fields as $field => $value) {
-        if ($value === '') {
-            continue;
-        }
-        if ($field === 'program' && strcasecmp($studentProgram, $value) === 0) {
+    foreach ($values as $value) {
+        if (strcasecmp($studentProgram, $value) === 0) {
             return true;
         }
-        if ($field === 'department' && strcasecmp($studentDepartment, $value) === 0) {
+        if (strcasecmp($studentDepartment, $value) === 0) {
             return true;
         }
-        if ($field === 'college' && strcasecmp($studentCollege, $value) === 0) {
+        if (strcasecmp($studentCollege, $value) === 0) {
             return true;
         }
     }

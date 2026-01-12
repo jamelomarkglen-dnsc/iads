@@ -42,7 +42,7 @@ $panelOptions = fetch_users_by_roles($conn, ['panel', 'faculty']);
 $studentScopeClause = '';
 $studentScopeTypes = '';
 $studentScopeParams = [];
-[$studentScopeClause, $studentScopeTypes, $studentScopeParams] = build_scope_condition($chairScope, 'u');
+[$studentScopeClause, $studentScopeTypes, $studentScopeParams] = build_scope_condition_any($chairScope, 'u');
 $studentSql = "
     SELECT u.id, u.firstname, u.lastname, u.email, u.program
     FROM users u
@@ -83,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_committee_requ
     $errors = [];
     if ($studentId <= 0) {
         $errors[] = 'Please select a student.';
-    } elseif (!student_matches_scope($conn, $studentId, $chairScope)) {
+    } elseif (!student_matches_scope_any($conn, $studentId, $chairScope)) {
         $errors[] = 'You can only assign committees for students in your scope.';
     }
     if ($adviserId <= 0 || $chairId <= 0 || $panelOneId <= 0 || $panelTwoId <= 0) {
@@ -229,7 +229,7 @@ $requests = [];
 $requestScopeClause = '';
 $requestScopeTypes = '';
 $requestScopeParams = [];
-[$requestScopeClause, $requestScopeTypes, $requestScopeParams] = build_scope_condition($chairScope, 'stu');
+[$requestScopeClause, $requestScopeTypes, $requestScopeParams] = build_scope_condition_any($chairScope, 'stu');
 
 $requestSql = "
     SELECT
