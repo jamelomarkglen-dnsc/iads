@@ -445,7 +445,7 @@ if ($userLastLogin !== '') {
                             <a href="student_directory.php" class="nav-sub-link <?php echo ($currentPage == 'student_directory.php') ? 'active' : ''; ?>">
                                 Student Directory
                             </a>
-                            <a href="submissions.php" class="nav-sub-link <?php echo ($currentPage == 'submissions.php') ? 'active' : ''; ?>">
+                            <a href="submissions.php?view=all" class="nav-sub-link <?php echo ($currentPage == 'submissions.php') ? 'active' : ''; ?>">
                                 Submissions
                             </a>
                             <a href="status_logs.php" class="nav-sub-link <?php echo ($currentPage == 'status_logs.php') ? 'active' : ''; ?>">

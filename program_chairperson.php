@@ -1313,7 +1313,7 @@ if ($endorsementStmt) {
                             <h2 class="h6 fw-semibold mb-1">Recent Concept Submissions</h2>
                             <p class="text-muted small mb-0">Latest papers filed by graduate students.</p>
                         </div>
-                        <a href="submissions.php" class="btn btn-sm btn-outline-primary">
+                        <a href="submissions.php?view=all" class="btn btn-sm btn-outline-primary">
                             <i class="bi bi-box-arrow-up-right me-1"></i> View All
                         </a>
                     </div>
