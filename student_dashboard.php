@@ -265,6 +265,27 @@ $finalPickMessages = array_values(array_filter(
     }
 ));
 $latestFinalPickMessage = $finalPickMessages[0] ?? null;
+if (function_exists('notifications_bootstrap')) {
+    notifications_bootstrap($conn);
+}
+$finalPickMessageStmt = $conn->prepare("
+    SELECT id, title, message, created_at
+    FROM notifications
+    WHERE user_id = ? AND title = 'Final concept recommendation'
+    ORDER BY created_at DESC
+    LIMIT 1
+");
+if ($finalPickMessageStmt) {
+    $finalPickMessageStmt->bind_param('i', $studentId);
+    if ($finalPickMessageStmt->execute()) {
+        $finalPickMessageResult = $finalPickMessageStmt->get_result();
+        $finalPickMessageRow = $finalPickMessageResult ? $finalPickMessageResult->fetch_assoc() : null;
+        if ($finalPickMessageRow) {
+            $latestFinalPickMessage = $finalPickMessageRow;
+        }
+    }
+    $finalPickMessageStmt->close();
+}
 $chairFeedbackFeed = [];
 $chairFeedbackSql = "
     SELECT
@@ -372,6 +393,7 @@ if ($hasFinalSubmissionTable) {
     }
 }
 $finalPickStatusClass = statusBadgeClass($finalPickStatusLabel);
+$finalPickStatusDisplay = ucwords(strtolower($finalPickStatusLabel));
 
 $committeeRequest = null;
 $committeeStatusLabel = 'Not requested';
@@ -557,6 +579,17 @@ if ($studentFullName === '') {
             font-size: 1rem;
             font-weight: 600;
             color: #16562c;
+        }
+        .final-pick-message {
+            border: 1px solid rgba(22, 86, 44, 0.28);
+            background: #f6fbf7;
+            border-radius: 1rem;
+            padding: 16px 18px;
+        }
+        .final-pick-message .message-title {
+            color: #0f6b35;
+            font-weight: 700;
+            margin-bottom: 8px;
         }
         .quick-action-list li + li {
             border-top: 1px solid rgba(22, 86, 44, 0.08);
@@ -884,19 +917,24 @@ if ($studentFullName === '') {
                                 </div>
                                 <div class="text-end">
                                     <div class="text-muted small mb-1">Final submission status</div>
-                                    <span class="<?php echo $finalPickStatusClass; ?> text-capitalize"><?php echo htmlspecialchars($finalPickStatusLabel); ?></span>
+                                    <span class="<?php echo $finalPickStatusClass; ?> text-capitalize"><?php echo htmlspecialchars($finalPickStatusDisplay); ?></span>
                                     <?php if ($finalSubmissionTitle !== ''): ?>
                                         <div class="text-muted small mt-2">Submitted title: <?php echo htmlspecialchars($finalSubmissionTitle); ?></div>
                                     <?php endif; ?>
                                 </div>
                             </div>
                             <?php if (!empty($latestFinalPickMessage['message'])): ?>
-                                <div class="alert alert-success-subtle border-success-subtle text-success small mt-3 mb-0">
-                                    <div class="fw-semibold mb-1">Message from the Program Chairperson</div>
-                                    <?php echo nl2br(htmlspecialchars($latestFinalPickMessage['message'])); ?>
+                                <div class="final-pick-message mt-3">
+                                    <div class="message-title">Message from the Program Chairperson</div>
+                                    <div class="text-success"><?php echo nl2br(htmlspecialchars($latestFinalPickMessage['message'])); ?></div>
                                     <div class="text-muted small mt-2">
                                         <i class="bi bi-clock me-1"></i><?php echo formatTimestamp($latestFinalPickMessage['created_at'] ?? null, 'Just now'); ?>
                                     </div>
+                                </div>
+                            <?php elseif ($finalPick): ?>
+                                <div class="final-pick-message mt-3">
+                                    <div class="message-title">Message from the Program Chairperson</div>
+                                    <div class="text-muted">No message yet. The Program Chairperson will send the final pick note here.</div>
                                 </div>
                             <?php endif; ?>
                         <?php endif; ?>
