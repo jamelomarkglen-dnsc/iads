@@ -803,6 +803,114 @@ function renderTypeBadge(?string $type): string
 
       applyFilters();
     })();
+
+    // Notification Integration: Auto-refresh submissions when notifications arrive
+    (function () {
+      let lastNotificationCount = window.APP_NOTIFICATIONS ? window.APP_NOTIFICATIONS.unread : 0;
+      let lastNotificationList = window.APP_NOTIFICATIONS ? (window.APP_NOTIFICATIONS.list || []) : [];
+
+      function refreshSubmissionsTable() {
+        location.reload();
+      }
+
+      function checkForSubmissionNotifications() {
+        fetch('notifications_api.php?action=list&limit=100')
+          .then(function (res) { return res.json(); })
+          .then(function (payload) {
+            if (!payload || payload.error) {
+              return;
+            }
+
+            const currentNotifications = payload.notifications || [];
+            const currentUnread = payload.unread || 0;
+
+            // Check if there are new notifications related to submissions
+            const newNotifications = currentNotifications.filter(function (note) {
+              return !lastNotificationList.some(function (oldNote) {
+                return oldNote.id === note.id;
+              });
+            });
+
+            // If new notifications exist and contain submission-related keywords, refresh the table
+            const submissionKeywords = ['submission', 'submitted', 'concept paper', 'paper', 'student submission'];
+            const hasSubmissionNotification = newNotifications.some(function (note) {
+              const titleLower = (note.title || '').toLowerCase();
+              const messageLower = (note.message || '').toLowerCase();
+              return submissionKeywords.some(function (keyword) {
+                return titleLower.includes(keyword) || messageLower.includes(keyword);
+              });
+            });
+
+            if (hasSubmissionNotification) {
+              // Show a toast notification to the user
+              showSubmissionNotificationToast(newNotifications[0]);
+              // Refresh the submissions table after a short delay
+              setTimeout(refreshSubmissionsTable, 1500);
+            }
+
+            lastNotificationCount = currentUnread;
+            lastNotificationList = currentNotifications;
+          })
+          .catch(function (err) {
+            console.error('Failed to check notifications', err);
+          });
+      }
+
+      function showSubmissionNotificationToast(notification) {
+        // Create a toast container if it doesn't exist
+        let toastContainer = document.getElementById('submissionNotificationContainer');
+        if (!toastContainer) {
+          toastContainer = document.createElement('div');
+          toastContainer.id = 'submissionNotificationContainer';
+          toastContainer.style.cssText = 'position: fixed; top: 80px; right: 20px; z-index: 9999;';
+          document.body.appendChild(toastContainer);
+        }
+
+        // Create toast element
+        const toastEl = document.createElement('div');
+        toastEl.className = 'toast show';
+        toastEl.style.cssText = 'min-width: 300px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);';
+        toastEl.innerHTML = ''
+          + '<div class="toast-header bg-success text-white">'
+          + '  <i class="bi bi-bell-fill me-2"></i>'
+          + '  <strong class="me-auto">New Submission</strong>'
+          + '  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>'
+          + '</div>'
+          + '<div class="toast-body">'
+          + '  <strong>' + escapeHtml(notification.title || 'New Submission') + '</strong>'
+          + '  <p class="mb-0 mt-2 text-muted">' + escapeHtml(notification.message || '') + '</p>'
+          + '</div>';
+
+        toastContainer.appendChild(toastEl);
+
+        // Auto-remove toast after 5 seconds
+        setTimeout(function () {
+          toastEl.remove();
+        }, 5000);
+      }
+
+      function escapeHtml(value) {
+        if (value === null || value === undefined) {
+          return '';
+        }
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      // Check for notifications every 30 seconds
+      setInterval(checkForSubmissionNotifications, 30000);
+
+      // Also check when the page becomes visible (user returns to tab)
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) {
+          checkForSubmissionNotifications();
+        }
+      });
+    })();
   </script>
 </body>
 </html>
