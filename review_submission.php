@@ -668,7 +668,7 @@ $isDraftExisting = isset($review['is_draft']) ? (int)$review['is_draft'] === 1 :
     <div class="content">
         <div class="container my-4">
             <div class="page-heading mb-3">
-                <a href="submissions.php" class="back-chip mb-1 mt-0">
+                <a href="submissions.php?view=all" class="back-chip mb-1 mt-0">
                         <i class="bi bi-arrow-left"></i>
                         Back to Submissions
                 </a>
