@@ -64,7 +64,25 @@ if ($hasAdvisorIdColumn) {
 }
 $adviserAssignmentEnabled = !empty($advisorColumns);
 $unassignedClause = buildAdvisorUnassignedClause('u', $advisorColumns);
-$studentScopeCondition = render_scope_condition($conn, $chairScope, 'u');
+$studentScopeCondition = '';
+if (!empty(array_filter($chairScope))) {
+    $scopeParts = [];
+    $programScope = trim((string)($chairScope['program'] ?? ''));
+    $departmentScope = trim((string)($chairScope['department'] ?? ''));
+    $collegeScope = trim((string)($chairScope['college'] ?? ''));
+    if ($programScope !== '') {
+        $scopeParts[] = "u.program = '" . $conn->real_escape_string($programScope) . "'";
+    }
+    if ($departmentScope !== '') {
+        $scopeParts[] = "u.department = '" . $conn->real_escape_string($departmentScope) . "'";
+    }
+    if ($collegeScope !== '') {
+        $scopeParts[] = "u.college = '" . $conn->real_escape_string($collegeScope) . "'";
+    }
+    if (!empty($scopeParts)) {
+        $studentScopeCondition = '(' . implode(' OR ', $scopeParts) . ')';
+    }
+}
 $adviserScopeCondition = render_scope_condition($conn, $chairScope, 'a');
 $restrictAdvisersToScope = false;
 $chairQuickLookupValue = '';
