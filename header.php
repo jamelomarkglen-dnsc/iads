@@ -60,13 +60,13 @@ if (isset($_SESSION['role'])) {
 
     <div class="ms-auto d-flex align-items-center gap-4 pe-3">
         <div class="dropdown me-2">
-            <a href="#" class="text-white position-relative" id="notifDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+            <button type="button" class="btn btn-link text-white position-relative p-0" id="notifDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="bi bi-bell-fill fs-4"></i>
                 <span id="notifBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger <?php echo $unreadCount > 0 ? '' : 'd-none'; ?>">
                     <span id="notifCount"><?php echo htmlspecialchars((string)$unreadCount); ?></span>
                     <span class="visually-hidden">unread notifications</span>
                 </span>
-            </a>
+            </button>
             <ul class="dropdown-menu dropdown-menu-end p-0" aria-labelledby="notifDropdown" style="min-width: 320px;" id="notifMenu">
                 <li class="dropdown-header d-flex justify-content-between align-items-center px-3 py-2">
                     <span>Notifications</span>
@@ -79,8 +79,17 @@ if (isset($_SESSION['role'])) {
                             <div class="list-group-item text-center text-muted small py-3">No notifications yet.</div>
                         <?php else: ?>
                             <?php foreach ($notifications as $note): ?>
+                                <?php
+                                $noteLink = $note['link'] ?? '';
+                                if (!$noteLink) {
+                                    $titleLower = strtolower(trim((string)($note['title'] ?? '')));
+                                    if ($titleLower === 'outline defense endorsement') {
+                                        $noteLink = 'program_chairperson.php#endorsement-inbox';
+                                    }
+                                }
+                                ?>
                                 <a
-                                    href="<?php echo $note['link'] ? htmlspecialchars($note['link']) : '#'; ?>"
+                                    href="<?php echo $noteLink ? htmlspecialchars($noteLink) : '#'; ?>"
                                     class="list-group-item list-group-item-action d-flex flex-column gap-1<?php echo (int)$note['is_read'] === 0 ? ' fw-semibold' : ''; ?>"
                                     data-notification-id="<?php echo (int)$note['id']; ?>"
                                     data-is-read="<?php echo (int)$note['is_read']; ?>"
@@ -153,6 +162,17 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function resolveNotificationLink(note) {
+        if (note && note.link) {
+            return note.link;
+        }
+        const title = note && note.title ? String(note.title).toLowerCase().trim() : '';
+        if (title === 'outline defense endorsement') {
+            return 'program_chairperson.php#endorsement-inbox';
+        }
+        return '#';
+    }
+
     function renderNotifications(data) {
         itemsContainer.innerHTML = '';
         const notes = data.notifications || [];
@@ -161,7 +181,7 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             notes.forEach(function (note) {
                 const link = document.createElement('a');
-                link.href = note.link ? note.link : '#';
+                link.href = resolveNotificationLink(note);
                 link.className = 'list-group-item list-group-item-action d-flex flex-column gap-1' + (parseInt(note.is_read, 10) === 0 ? ' fw-semibold' : '');
                 link.dataset.notificationId = note.id;
                 link.dataset.isRead = note.is_read;
@@ -248,6 +268,12 @@ document.addEventListener('DOMContentLoaded', function () {
             const noteId = link.dataset.notificationId;
             if (noteId) {
                 markNotificationRead(noteId);
+            }
+            const href = link.getAttribute('href');
+            const isModifiedClick = event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+            if (href && href !== '#' && !isModifiedClick) {
+                event.preventDefault();
+                window.location.href = href;
             }
         }
     });
