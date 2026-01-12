@@ -455,12 +455,13 @@ $rankingSql = "
         SUM(CASE WHEN cr.rank_order = 2 THEN 1 ELSE 0 END) AS rank_two_votes,
         SUM(CASE WHEN cr.rank_order = 3 THEN 1 ELSE 0 END) AS rank_three_votes
     FROM concept_reviews cr
+    JOIN concept_reviewer_assignments cra ON cra.id = cr.assignment_id
     JOIN concept_papers cp ON cp.id = cr.concept_paper_id
     LEFT JOIN users u ON u.id = cp.student_id
     WHERE cr.rank_order IS NOT NULL
 ";
 if ($conceptScopeWhere !== '') {
-    $rankingSql .= "      AND {$conceptScopeWhere}\n";
+    $rankingSql .= "      AND ({$conceptScopeWhere} OR cra.assigned_by = {$programChairId})\n";
 }
 $rankingSql .= "
     GROUP BY cp.id, cp.student_id, cp.title, cp.created_at, student_name, u.email
