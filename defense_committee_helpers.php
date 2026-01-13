@@ -178,6 +178,92 @@ if (!function_exists('fetch_final_pick_title_for_student')) {
     }
 }
 
+if (!function_exists('defense_committee_format_date')) {
+    function defense_committee_format_date(?string $date): string
+    {
+        if (!$date) {
+            return '';
+        }
+        $timestamp = strtotime($date);
+        if ($timestamp === false) {
+            return $date;
+        }
+        return date('F j, Y', $timestamp);
+    }
+}
+
+if (!function_exists('defense_committee_format_time')) {
+    function defense_committee_format_time(?string $time): string
+    {
+        if (!$time) {
+            return '';
+        }
+        $timestamp = strtotime($time);
+        if ($timestamp === false) {
+            return $time;
+        }
+        return date('g:i A', $timestamp);
+    }
+}
+
+if (!function_exists('build_outline_defense_memo_body')) {
+    function build_outline_defense_memo_body(array $payload): string
+    {
+        $studentName = trim((string)($payload['student_name'] ?? '')) ?: 'Student';
+        $finalTitle = trim((string)($payload['final_title'] ?? ''));
+        $adviserName = trim((string)($payload['adviser_name'] ?? '')) ?: 'Adviser Name';
+        $chairName = trim((string)($payload['chair_name'] ?? '')) ?: 'Committee Chair';
+        $panelOneName = trim((string)($payload['panel_one_name'] ?? '')) ?: 'Panel Member';
+        $panelTwoName = trim((string)($payload['panel_two_name'] ?? '')) ?: 'Panel Member';
+        $defenseDate = defense_committee_format_date($payload['defense_date'] ?? '');
+        $defenseTime = defense_committee_format_time($payload['defense_time'] ?? '');
+        $venue = trim((string)($payload['venue'] ?? '')) ?: 'TBA';
+        $memoNumber = trim((string)($payload['memo_number'] ?? '')) ?: '___';
+        $seriesYear = trim((string)($payload['series_year'] ?? '')) ?: date('Y');
+        $memoDate = defense_committee_format_date($payload['memo_date'] ?? date('Y-m-d'));
+        $memoSubject = trim((string)($payload['memo_subject'] ?? '')) ?: 'OUTLINE DEFENSE';
+        $titleLine = $finalTitle !== '' ? 'the thesis titled "' . $finalTitle . '"' : 'the outline defense';
+
+        $lines = [
+            'OFFICE OF THE DEAN',
+            "Memorandum No. {$memoNumber}",
+            "Series of {$seriesYear}",
+            '',
+            'To:',
+            "{$adviserName}, Thesis Adviser",
+            "{$chairName}, TAC Chairperson",
+            "{$panelOneName}, TAC Member",
+            "{$panelTwoName}, TAC Member",
+            '',
+            "Date: {$memoDate}",
+            '',
+            "Subject: {$memoSubject}",
+            '',
+            "We are pleased to inform you that the candidate has applied for Outline Defense for {$titleLine}. With this, we kindly request your attendance as panel member to assist the student.",
+            '',
+            'The thesis panel will consist of the following members:',
+            "{$adviserName}, Thesis Adviser",
+            "{$chairName}, TAC Chairperson",
+            "{$panelOneName}, TAC Member",
+            "{$panelTwoName}, TAC Member",
+            '',
+            'The Outline Defense will be held as follows:',
+            "Student: {$studentName}",
+            "Date: " . ($defenseDate !== '' ? $defenseDate : 'TBA'),
+            "Time: " . ($defenseTime !== '' ? $defenseTime : 'TBA'),
+            "Location: {$venue}",
+            '',
+            "Your expertise and insights will be valuable in ensuring a thorough evaluation of the candidate's research work.",
+            '',
+            'Thank you for your time and confirmation. We truly appreciate your continued support.',
+            '',
+            'Dean, Institute of Advanced Studies',
+        ];
+
+        return implode("\n", $lines);
+    }
+}
+
 if (!function_exists('ensureDefensePanelMemberColumns')) {
     function ensureDefensePanelMemberColumns(mysqli $conn): void
     {
