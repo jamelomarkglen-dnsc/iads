@@ -178,22 +178,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_committee_requ
             }
             $panelStmt->close();
 
+            $studentName = fetch_user_fullname($conn, $studentId);
+            $adviserName = fetch_user_fullname($conn, $adviserId);
+            $chairName = fetch_user_fullname($conn, $chairId);
+            $panelOneName = fetch_user_fullname($conn, $panelOneId);
+            $panelTwoName = fetch_user_fullname($conn, $panelTwoId);
+            $finalTitle = fetch_final_pick_title_for_student($conn, $studentId);
+            $memoFinalTitle = $finalTitle;
+            $memoSubject = 'OUTLINE DEFENSE';
+            $memoSeriesYear = date('Y');
+            $memoDate = date('Y-m-d');
+            $memoBody = build_outline_defense_memo_body([
+                'student_name' => $studentName,
+                'final_title' => $finalTitle,
+                'adviser_name' => $adviserName,
+                'chair_name' => $chairName,
+                'panel_one_name' => $panelOneName,
+                'panel_two_name' => $panelTwoName,
+                'defense_date' => $dateValue,
+                'defense_time' => $startTime,
+                'venue' => $venue,
+                'memo_subject' => $memoSubject,
+                'memo_date' => $memoDate,
+                'series_year' => $memoSeriesYear,
+            ]);
+
             $requestStmt = $conn->prepare("
                 INSERT INTO defense_committee_requests
-                    (student_id, defense_id, adviser_id, chair_id, panel_member_one_id, panel_member_two_id, request_notes, requested_by, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
+                    (student_id, defense_id, adviser_id, chair_id, panel_member_one_id, panel_member_two_id, memo_series_year, memo_date, memo_subject, memo_body, memo_final_title, request_notes, requested_by, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')
             ");
             if (!$requestStmt) {
                 throw new Exception('Unable to submit committee request.');
             }
             $requestStmt->bind_param(
-                'iiiiiisi',
+                'iiiiiissssssi',
                 $studentId,
                 $defenseId,
                 $adviserId,
                 $chairId,
                 $panelOneId,
                 $panelTwoId,
+                $memoSeriesYear,
+                $memoDate,
+                $memoSubject,
+                $memoBody,
+                $memoFinalTitle,
                 $requestNotes,
                 $programChairId
             );
@@ -212,8 +242,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_committee_requ
                 grant_switch_roles($conn, (int)$grant['id'], $grant['roles']);
             }
 
-            $studentName = fetch_user_fullname($conn, $studentId);
-            $message = "Defense committee selection for {$studentName} scheduled on {$dateValue} at {$startTime} ({$venue}). Please verify.";
+            $message = "Defense committee selection for {$studentName} scheduled on {$dateValue} at {$startTime} ({$venue}). Please verify and review the outline defense memo draft.";
             notify_role($conn, 'dean', 'Defense committee verification requested', $message, 'dean_defense_committee.php', false);
 
             $conn->commit();
@@ -239,6 +268,8 @@ $requestSql = "
         r.review_notes,
         r.requested_at,
         r.reviewed_at,
+        r.memo_body,
+        r.memo_final_title,
         ds.defense_date,
         ds.defense_time,
         ds.venue,

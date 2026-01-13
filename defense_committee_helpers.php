@@ -71,7 +71,9 @@ if (!function_exists('ensureDefenseCommitteeRequestsTable')) {
             'memo_date' => "ALTER TABLE defense_committee_requests ADD COLUMN memo_date DATE NULL AFTER memo_series_year",
             'memo_subject' => "ALTER TABLE defense_committee_requests ADD COLUMN memo_subject VARCHAR(255) NULL AFTER memo_date",
             'memo_body' => "ALTER TABLE defense_committee_requests ADD COLUMN memo_body TEXT NULL AFTER memo_subject",
-            'memo_updated_at' => "ALTER TABLE defense_committee_requests ADD COLUMN memo_updated_at TIMESTAMP NULL DEFAULT NULL AFTER memo_body",
+            'memo_final_title' => "ALTER TABLE defense_committee_requests ADD COLUMN memo_final_title VARCHAR(255) NULL AFTER memo_body",
+            'memo_received_at' => "ALTER TABLE defense_committee_requests ADD COLUMN memo_received_at TIMESTAMP NULL DEFAULT NULL AFTER memo_final_title",
+            'memo_updated_at' => "ALTER TABLE defense_committee_requests ADD COLUMN memo_updated_at TIMESTAMP NULL DEFAULT NULL AFTER memo_received_at",
         ];
         foreach ($memoColumns as $column => $statement) {
             if (!defense_committee_column_exists($conn, 'defense_committee_requests', $column)) {

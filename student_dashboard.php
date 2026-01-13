@@ -401,6 +401,9 @@ $committeeStatusClass = 'badge bg-secondary-subtle text-secondary';
 $committeeScheduleLabel = 'TBA';
 $committeeVenueLabel = '';
 $committeeReviewNotes = '';
+$committeeMemoTitle = '';
+$committeeMemoReceivedAt = null;
+$committeeMemoAvailable = false;
 $committeeMembers = [
     'adviser' => '',
     'chair' => '',
@@ -412,6 +415,9 @@ $committeeSql = "
         r.review_notes,
         r.requested_at,
         r.reviewed_at,
+        r.memo_final_title,
+        r.memo_received_at,
+        r.memo_body,
         ds.defense_date,
         ds.defense_time,
         ds.venue,
@@ -451,6 +457,10 @@ if ($committeeRequest) {
     }
     $committeeVenueLabel = trim((string)($committeeRequest['venue'] ?? ''));
     $committeeReviewNotes = trim((string)($committeeRequest['review_notes'] ?? ''));
+    $committeeMemoTitle = trim((string)($committeeRequest['memo_final_title'] ?? ''));
+    $committeeMemoReceivedAt = $committeeRequest['memo_received_at'] ?? null;
+    $committeeMemoAvailable = $committeeStatusLabel === 'Approved'
+        && trim((string)($committeeRequest['memo_body'] ?? '')) !== '';
     $committeeMembers['adviser'] = trim((string)($committeeRequest['adviser_name'] ?? ''));
     $committeeMembers['chair'] = trim((string)($committeeRequest['chair_name'] ?? ''));
     $panelNames = array_filter([
@@ -961,6 +971,23 @@ if ($studentFullName === '') {
                                 <?php endif; ?>
                                 <div class="text-muted small mt-1">Final defense schedule will be set by the program chairperson.</div>
                             </div>
+                            <?php if ($committeeMemoAvailable && $committeeMemoTitle !== ''): ?>
+                                <div class="mb-3">
+                                    <div class="text-muted small">Outline Defense Title</div>
+                                    <div class="fw-semibold text-success"><?php echo htmlspecialchars($committeeMemoTitle); ?></div>
+                                    <?php if (!empty($committeeMemoReceivedAt)): ?>
+                                        <div class="text-muted small mt-1">
+                                            <i class="bi bi-check-circle-fill text-success me-1"></i>
+                                            Memo received <?php echo htmlspecialchars(formatTimestamp($committeeMemoReceivedAt, 'Just now')); ?>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="text-muted small mt-1">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            Open the memo notification to unlock manuscript submission.
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
                             <div class="mb-2"><strong>Adviser:</strong> <?php echo htmlspecialchars($committeeMembers['adviser'] ?: 'TBA'); ?></div>
                             <div class="mb-2"><strong>Committee Chairperson:</strong> <?php echo htmlspecialchars($committeeMembers['chair'] ?: 'TBA'); ?></div>
                             <div class="mb-2"><strong>Panel Members:</strong> <?php echo htmlspecialchars($committeeMembers['panel'] ?: 'TBA'); ?></div>

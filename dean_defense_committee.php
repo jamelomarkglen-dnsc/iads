@@ -195,7 +195,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_committee_requ
         $requestInfo = null;
         $lookup = $conn->prepare("
             SELECT r.defense_id, r.requested_by, r.status, r.adviser_id, r.chair_id,
-                   r.panel_member_one_id, r.panel_member_two_id, r.student_id,
+                   r.panel_member_one_id, r.panel_member_two_id, r.student_id, r.memo_final_title,
                    CONCAT(u.firstname, ' ', u.lastname) AS student_name
             FROM defense_committee_requests r
             JOIN users u ON u.id = r.student_id
@@ -230,6 +230,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_committee_requ
         }
 
         if (!$alert) {
+            $memoFinalTitle = trim((string)($requestInfo['memo_final_title'] ?? ''));
+            if ($memoFinalTitle === '') {
+                $memoFinalTitle = fetch_final_pick_title_for_student($conn, (int)($requestInfo['student_id'] ?? 0));
+            }
             $update = $conn->prepare("
                 UPDATE defense_committee_requests
                 SET status = ?,
@@ -241,6 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_committee_requ
                     memo_date = ?,
                     memo_subject = ?,
                     memo_body = ?,
+                    memo_final_title = ?,
                     memo_updated_at = NOW()
                 WHERE id = ?
             ");
@@ -248,7 +253,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_committee_requ
                 $seriesYear = $memoSeriesYear !== '' ? $memoSeriesYear : date('Y');
                 $memoDateParam = $memoDate ?? null;
                 $update->bind_param(
-                    'sissssssi',
+                    'sisssssssi',
                     $decision,
                     $deanId,
                     $reviewNotes,
@@ -257,6 +262,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_committee_requ
                     $memoDateParam,
                     $memoSubject,
                     $memoBody,
+                    $memoFinalTitle,
                     $requestId
                 );
                 if ($update->execute()) {
@@ -434,6 +440,7 @@ $requestSql = "
         r.memo_date,
         r.memo_subject,
         r.memo_body,
+        r.memo_final_title,
         ds.defense_date,
         ds.defense_time,
         ds.venue,
@@ -461,7 +468,10 @@ if ($requestResult) {
 }
 $requests = array_map(function ($request) use ($conn) {
     $studentId = (int)($request['student_id'] ?? 0);
-    $request['final_pick_title'] = fetch_final_pick_title_for_student($conn, $studentId);
+    $memoTitle = trim((string)($request['memo_final_title'] ?? ''));
+    $request['final_pick_title'] = $memoTitle !== ''
+        ? $memoTitle
+        : fetch_final_pick_title_for_student($conn, $studentId);
     return $request;
 }, $requests);
 

@@ -22,6 +22,35 @@ $studentName = $studentName !== '' ? $studentName : 'Student';
 $finalPick = getEligibleConceptForFinalSubmission($conn, $studentId);
 $finalPickTitle = trim((string)($finalPick['title'] ?? ''));
 
+$memoRequest = null;
+$memoFinalTitle = '';
+$memoReceivedAt = null;
+$memoApproved = false;
+$memoReady = false;
+$memoStmt = $conn->prepare("
+    SELECT status, memo_body, memo_final_title, memo_received_at
+    FROM defense_committee_requests
+    WHERE student_id = ?
+    ORDER BY reviewed_at DESC, requested_at DESC
+    LIMIT 1
+");
+if ($memoStmt) {
+    $memoStmt->bind_param('i', $studentId);
+    $memoStmt->execute();
+    $memoRequest = $memoStmt->get_result()->fetch_assoc();
+    $memoStmt->close();
+}
+if ($memoRequest) {
+    $memoFinalTitle = trim((string)($memoRequest['memo_final_title'] ?? ''));
+    $memoReceivedAt = $memoRequest['memo_received_at'] ?? null;
+    $memoApproved = ($memoRequest['status'] ?? '') === 'Approved'
+        && trim((string)($memoRequest['memo_body'] ?? '')) !== '';
+    $memoReady = $memoApproved && !empty($memoReceivedAt);
+    if ($memoReady && $memoFinalTitle !== '') {
+        $finalPickTitle = $memoFinalTitle;
+    }
+}
+
 $currentSubmission = fetchLatestFinalPaperSubmission($conn, $studentId);
 $currentStatus = trim((string)($currentSubmission['status'] ?? ''));
 $currentVersion = (int)($currentSubmission['version'] ?? 0);
@@ -37,7 +66,15 @@ if (!empty($currentSubmission['id'])) {
     $reviewSummary = fetchFinalPaperReviews($conn, (int)$currentSubmission['id']);
 }
 
-$formEnabled = $finalPickTitle !== '';
+if ($currentSubmission && !$memoReady) {
+    $memoReady = true;
+    $submissionTitle = trim((string)($currentSubmission['final_title'] ?? ''));
+    if ($submissionTitle !== '' && $finalPickTitle === '') {
+        $finalPickTitle = $submissionTitle;
+    }
+}
+
+$formEnabled = $memoReady && $finalPickTitle !== '';
 $canResubmit = $currentSubmission && in_array($currentStatus, ['Needs Revision', 'Minor Revision', 'Major Revision', 'Rejected'], true);
 $canSubmit = $formEnabled && (!$currentSubmission || $canResubmit);
 $canSendPacket = $currentSubmission !== null;
@@ -46,7 +83,7 @@ $success = '';
 $error = '';
 
 $formValues = [
-    'final_title' => $finalPickTitle !== '' ? $finalPickTitle : '',
+    'final_title' => ($memoReady && $finalPickTitle !== '') ? $finalPickTitle : '',
     'introduction' => '',
     'background' => '',
     'methodology' => '',
@@ -410,7 +447,11 @@ include 'sidebar.php';
                     <?php endif; ?>
                     <?php if (!$formEnabled): ?>
                         <div class="alert alert-warning mt-3 mb-0">
-                            Final pick is not available yet. Please wait for the program chairperson.
+                            <?php if (!$memoApproved): ?>
+                                Outline defense memo has not been approved yet. Please wait for the program chairperson.
+                            <?php else: ?>
+                                Please open the outline defense memo to enable manuscript submission.
+                            <?php endif; ?>
                         </div>
                     <?php elseif ($currentSubmission && !$canResubmit): ?>
                         <div class="alert alert-info mt-3 mb-0">
@@ -429,9 +470,9 @@ include 'sidebar.php';
                                    name="final_title"
                                    class="form-control"
                                    value="<?= htmlspecialchars($formValues['final_title']); ?>"
-                                   <?= $finalPickTitle !== '' ? 'readonly' : ''; ?>
+                                   <?= ($memoReady && $finalPickTitle !== '') ? 'readonly' : ''; ?>
                                    required>
-                            <div class="form-text">Auto-filled from your final pick.</div>
+                            <div class="form-text">Auto-filled from your outline defense memo.</div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Notes (optional)</label>

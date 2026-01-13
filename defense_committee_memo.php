@@ -33,6 +33,9 @@ if ($requestId <= 0) {
             r.memo_date,
             r.memo_subject,
             r.memo_body,
+            r.memo_final_title,
+            r.memo_received_at,
+            r.status,
             ds.defense_date,
             ds.defense_time,
             ds.venue,
@@ -80,6 +83,22 @@ if ($requestId <= 0) {
             $memo = null;
         } elseif (trim((string)($memo['memo_body'] ?? '')) === '') {
             $error = 'Memo is not available yet.';
+        } elseif ($role === 'student' && ($memo['status'] ?? '') !== 'Approved') {
+            $error = 'Memo is not available yet.';
+            $memo = null;
+        } elseif ($role === 'student' && empty($memo['memo_received_at'])) {
+            $update = $conn->prepare("
+                UPDATE defense_committee_requests
+                SET memo_received_at = NOW()
+                WHERE id = ? AND memo_received_at IS NULL
+            ");
+            if ($update) {
+                $update->bind_param('i', $requestId);
+                if ($update->execute()) {
+                    $memo['memo_received_at'] = date('Y-m-d H:i:s');
+                }
+                $update->close();
+            }
         }
     }
 }
