@@ -86,6 +86,8 @@ if (!function_exists('ensureFinalPaperTables')) {
                     final_decision_notes TEXT NULL,
                     final_decision_at TIMESTAMP NULL DEFAULT NULL,
                     committee_reviews_completed_at TIMESTAMP NULL DEFAULT NULL,
+                    outline_defense_verdict VARCHAR(50) NULL,
+                    outline_defense_verdict_at TIMESTAMP NULL DEFAULT NULL,
                     CONSTRAINT fk_final_paper_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
                     CONSTRAINT fk_final_paper_decider FOREIGN KEY (final_decision_by) REFERENCES users(id) ON DELETE SET NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
@@ -106,6 +108,8 @@ if (!function_exists('ensureFinalPaperTables')) {
             'final_decision_notes' => "ALTER TABLE final_paper_submissions ADD COLUMN final_decision_notes TEXT NULL AFTER final_decision_by",
             'final_decision_at' => "ALTER TABLE final_paper_submissions ADD COLUMN final_decision_at TIMESTAMP NULL DEFAULT NULL AFTER final_decision_notes",
             'committee_reviews_completed_at' => "ALTER TABLE final_paper_submissions ADD COLUMN committee_reviews_completed_at TIMESTAMP NULL DEFAULT NULL AFTER final_decision_at",
+            'outline_defense_verdict' => "ALTER TABLE final_paper_submissions ADD COLUMN outline_defense_verdict VARCHAR(50) NULL AFTER committee_reviews_completed_at",
+            'outline_defense_verdict_at' => "ALTER TABLE final_paper_submissions ADD COLUMN outline_defense_verdict_at TIMESTAMP NULL DEFAULT NULL AFTER outline_defense_verdict",
         ];
         foreach ($columns as $column => $sql) {
             if (!final_paper_column_exists($conn, 'final_paper_submissions', $column)) {
@@ -423,6 +427,84 @@ if (!function_exists('finalPaperReviewStatusClass')) {
             'needs revision', 'minor revision', 'major revision' => 'bg-warning-subtle text-warning',
             'rejected' => 'bg-danger-subtle text-danger',
             default => 'bg-secondary-subtle text-secondary',
+        };
+    }
+}
+
+if (!function_exists('setOutlineDefenseVerdict')) {
+    function setOutlineDefenseVerdict(mysqli $conn, int $submissionId, string $verdict): bool
+    {
+        if ($submissionId <= 0 || $verdict === '') {
+            return false;
+        }
+        $stmt = $conn->prepare("
+            UPDATE final_paper_submissions
+            SET outline_defense_verdict = ?,
+                outline_defense_verdict_at = NOW()
+            WHERE id = ?
+        ");
+        if (!$stmt) {
+            return false;
+        }
+        $stmt->bind_param('si', $verdict, $submissionId);
+        $ok = $stmt->execute();
+        $stmt->close();
+        return $ok;
+    }
+}
+
+if (!function_exists('getOutlineDefenseVerdict')) {
+    function getOutlineDefenseVerdict(mysqli $conn, int $submissionId): ?array
+    {
+        if ($submissionId <= 0) {
+            return null;
+        }
+        $stmt = $conn->prepare("
+            SELECT outline_defense_verdict, outline_defense_verdict_at
+            FROM final_paper_submissions
+            WHERE id = ?
+            LIMIT 1
+        ");
+        if (!$stmt) {
+            return null;
+        }
+        $stmt->bind_param('i', $submissionId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result ? $result->fetch_assoc() : null;
+        if ($result) {
+            $result->free();
+        }
+        $stmt->close();
+        return $row ?: null;
+    }
+}
+
+if (!function_exists('outlineDefenseVerdictClass')) {
+    function outlineDefenseVerdictClass(string $verdict): string
+    {
+        $verdict = strtolower(trim($verdict));
+        return match ($verdict) {
+            'passed' => 'bg-success-subtle text-success',
+            'passed with revision' => 'bg-warning-subtle text-warning',
+            'failed' => 'bg-danger-subtle text-danger',
+            'pending' => 'bg-secondary-subtle text-secondary',
+            default => 'bg-secondary-subtle text-secondary',
+        };
+    }
+}
+
+if (!function_exists('outlineDefenseVerdictLabel')) {
+    function outlineDefenseVerdictLabel(string $verdict): string
+    {
+        $verdict = trim($verdict);
+        $normalized = strtolower($verdict);
+        return match ($normalized) {
+            'passed' => 'Passed',
+            'passed with revision' => 'Passed with Revision',
+            'failed' => 'Failed',
+            'pending' => 'Pending',
+            default => $verdict !== '' ? ucwords($verdict) : 'Pending',
         };
     }
 }

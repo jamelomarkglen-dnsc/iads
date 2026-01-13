@@ -545,10 +545,33 @@ include 'sidebar.php';
         <?php endif; ?>
 
         <div class="card info-card p-4 mt-4">
-            <h5 class="fw-bold text-success mb-3">Reviewer Feedback</h5>
+            <h5 class="fw-bold text-success mb-3">Reviewer Feedback & Verdict</h5>
             <?php if (!$currentSubmission): ?>
                 <p class="mb-0 text-muted">Submit your manuscript to receive feedback from the committee.</p>
             <?php else: ?>
+                <!-- Outline Defense Verdict -->
+                <?php
+                $verdictInfo = getOutlineDefenseVerdict($conn, (int)$currentSubmission['id']);
+                $verdict = $verdictInfo ? trim((string)($verdictInfo['outline_defense_verdict'] ?? '')) : '';
+                $verdictAt = $verdictInfo ? ($verdictInfo['outline_defense_verdict_at'] ?? null) : null;
+                ?>
+                <?php if ($verdict !== ''): ?>
+                    <div class="mb-4 p-3 rounded-3" style="background: linear-gradient(135deg, rgba(22, 86, 44, 0.1), rgba(22, 86, 44, 0.05)); border-left: 4px solid #16562c;">
+                        <div class="fw-semibold text-success mb-2">Outline Defense Verdict</div>
+                        <div class="d-flex align-items-center gap-3">
+                            <span class="badge <?= outlineDefenseVerdictClass($verdict); ?>" style="font-size: 1rem; padding: 0.6rem 1.2rem;">
+                                <?= htmlspecialchars(outlineDefenseVerdictLabel($verdict)); ?>
+                            </span>
+                            <?php if ($verdictAt): ?>
+                                <span class="small text-muted">
+                                    <i class="bi bi-clock me-1"></i>
+                                    <?= htmlspecialchars(date('M d, Y g:i A', strtotime($verdictAt))); ?>
+                                </span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
+
                 <div class="mb-4">
                     <div class="fw-semibold text-success mb-1">Overall Decision (Committee Chairperson)</div>
                     <div class="small text-muted mb-2">

@@ -517,3 +517,145 @@ if (!function_exists('resolve_user_id_by_name')) {
         return $user ? (int)$user['id'] : null;
     }
 }
+
+if (!function_exists('notify_outline_defense_submission')) {
+    /**
+     * Notify reviewers when a student submits an outline defense manuscript.
+     */
+    function notify_outline_defense_submission(
+        mysqli $conn,
+        int $studentId,
+        int $submissionId,
+        string $studentName,
+        array $reviewerIds
+    ): int {
+        $count = 0;
+        $link = 'outline_defense_review.php?submission_id=' . $submissionId;
+        
+        foreach ($reviewerIds as $reviewerId) {
+            $reviewerId = (int)$reviewerId;
+            if ($reviewerId <= 0) {
+                continue;
+            }
+            if (notify_user(
+                $conn,
+                $reviewerId,
+                'Outline Defense Manuscript Submitted',
+                "{$studentName} has submitted an outline defense manuscript for your review.",
+                $link,
+                true
+            )) {
+                $count++;
+            }
+        }
+        return $count;
+    }
+}
+
+if (!function_exists('notify_outline_defense_review_completed')) {
+    /**
+     * Notify student when a reviewer completes their review.
+     */
+    function notify_outline_defense_review_completed(
+        mysqli $conn,
+        int $studentId,
+        string $reviewerName,
+        string $reviewerRole,
+        string $reviewStatus
+    ): bool {
+        $roleLabel = match ($reviewerRole) {
+            'adviser' => 'Thesis Adviser',
+            'committee_chairperson' => 'Committee Chairperson',
+            'panel' => 'Panel Member',
+            default => ucfirst(str_replace('_', ' ', $reviewerRole)),
+        };
+
+        $statusLabel = match ($reviewStatus) {
+            'Approved' => 'Approved',
+            'Rejected' => 'Rejected',
+            'Needs Revision' => 'Needs Revision',
+            'Minor Revision' => 'Passed with Minor Revision',
+            'Major Revision' => 'Passed with Major Revision',
+            default => $reviewStatus,
+        };
+
+        return notify_user(
+            $conn,
+            $studentId,
+            'Outline Defense Review Completed',
+            "{$reviewerName} ({$roleLabel}) has completed their review. Status: {$statusLabel}",
+            'submit_final_paper.php',
+            false
+        );
+    }
+}
+
+if (!function_exists('notify_outline_defense_decision')) {
+    /**
+     * Notify student when the committee chairperson makes a final decision.
+     */
+    function notify_outline_defense_decision(
+        mysqli $conn,
+        int $studentId,
+        string $chairName,
+        string $verdict,
+        string $decisionNotes = ''
+    ): bool {
+        $verdictLabel = match ($verdict) {
+            'Passed' => 'Passed',
+            'Passed with Revision' => 'Passed with Revision',
+            'Failed' => 'Failed',
+            default => $verdict,
+        };
+
+        $message = "{$chairName} has made the final decision on your outline defense manuscript. Verdict: {$verdictLabel}.";
+        if ($decisionNotes !== '') {
+            $message .= " Please check your submission page for the detailed decision notes.";
+        }
+
+        return notify_user(
+            $conn,
+            $studentId,
+            'Outline Defense Final Decision',
+            $message,
+            'submit_final_paper.php',
+            false
+        );
+    }
+}
+
+if (!function_exists('notify_outline_defense_route_slip_submitted')) {
+    /**
+     * Notify reviewers when a student submits a route slip packet.
+     */
+    function notify_outline_defense_route_slip_submitted(
+        mysqli $conn,
+        int $studentId,
+        int $submissionId,
+        string $studentName,
+        array $reviewerIds,
+        bool $hasRevision = false
+    ): int {
+        $count = 0;
+        $link = 'outline_defense_review.php?submission_id=' . $submissionId;
+        $message = "{$studentName} submitted the route slip" . ($hasRevision ? ' and revised manuscript' : '') . " for review.";
+        
+        foreach ($reviewerIds as $reviewerId) {
+            $reviewerId = (int)$reviewerId;
+            if ($reviewerId <= 0) {
+                continue;
+            }
+            if (notify_user(
+                $conn,
+                $reviewerId,
+                'Route Slip Packet Submitted',
+                $message,
+                $link,
+                true
+            )) {
+                $count++;
+            }
+        }
+        return $count;
+    }
+}
