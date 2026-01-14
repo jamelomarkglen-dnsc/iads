@@ -166,6 +166,38 @@ if ($panelStmt) {
     $panelStmt->close();
 }
 
+// Fetch PDF submissions for this adviser
+$pdfSubmissions = [];
+$pdfSubmissionsSql = "
+    SELECT
+        ps.submission_id,
+        ps.student_id,
+        ps.original_filename,
+        ps.file_size,
+        ps.submission_status,
+        ps.submission_timestamp,
+        ps.version_number,
+        CONCAT(u.firstname, ' ', u.lastname) AS student_name,
+        u.email AS student_email
+    FROM pdf_submissions ps
+    JOIN users u ON u.id = ps.student_id
+    WHERE ps.adviser_id = ?
+    ORDER BY ps.submission_timestamp DESC
+";
+$pdfSubmissionsStmt = $conn->prepare($pdfSubmissionsSql);
+if ($pdfSubmissionsStmt) {
+    $pdfSubmissionsStmt->bind_param('i', $advisorId);
+    $pdfSubmissionsStmt->execute();
+    $pdfSubmissionsResult = $pdfSubmissionsStmt->get_result();
+    if ($pdfSubmissionsResult) {
+        while ($row = $pdfSubmissionsResult->fetch_assoc()) {
+            $pdfSubmissions[] = $row;
+        }
+        $pdfSubmissionsResult->free();
+    }
+    $pdfSubmissionsStmt->close();
+}
+
 $totalStudents = count($students);
 $submittedCount = count(array_filter($students, fn($s) => ($s['submission_status'] ?? '') === 'Submitted'));
 $pendingCount = $totalStudents - $submittedCount;
@@ -581,6 +613,28 @@ include 'sidebar.php';
                                                         <i class="bi bi-hourglass-split"></i> Waiting
                                                     </button>
                                                 <?php endif; ?>
+                                                
+                                                <?php
+                                                // Check for PDF submissions for this student
+                                                $studentPdfSql = "SELECT submission_id FROM pdf_submissions
+                                                                  WHERE student_id = ? AND adviser_id = ?
+                                                                  ORDER BY submission_timestamp DESC LIMIT 1";
+                                                $studentPdfStmt = $conn->prepare($studentPdfSql);
+                                                if ($studentPdfStmt) {
+                                                    $studentPdfStmt->bind_param('ii', $student['id'], $advisorId);
+                                                    $studentPdfStmt->execute();
+                                                    $studentPdfResult = $studentPdfStmt->get_result();
+                                                    $studentPdfSubmission = $studentPdfResult->fetch_assoc();
+                                                    $studentPdfStmt->close();
+                                                    
+                                                    if ($studentPdfSubmission): ?>
+                                                        <a href="adviser_pdf_review.php?submission_id=<?= (int)$studentPdfSubmission['submission_id']; ?>"
+                                                           class="btn btn-sm btn-success ms-1" title="Review PDF with annotations">
+                                                            <i class="bi bi-file-pdf"></i> PDF
+                                                        </a>
+                                                    <?php endif;
+                                                }
+                                                ?>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -592,6 +646,71 @@ include 'sidebar.php';
                 </div>
             </div>
             <div class="col-lg-5">
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <h5 class="mb-1">PDF Submissions</h5>
+                                <p class="text-muted mb-0">Review student PDF submissions with annotations</p>
+                            </div>
+                            <div>
+                                <i class="bi bi-file-pdf text-danger fs-4"></i>
+                                <?php if (!empty($pdfSubmissions)): ?>
+                                    <span class="badge bg-danger-subtle text-danger ms-2"><?= count($pdfSubmissions); ?> new</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        
+                        <?php if (empty($pdfSubmissions)): ?>
+                            <div class="text-center text-muted py-3">
+                                <i class="bi bi-inbox fs-1 mb-2"></i>
+                                <p class="mb-0">No PDF submissions yet. Students can upload PDFs from their dashboard.</p>
+                            </div>
+                        <?php else: ?>
+                            <div class="list-group list-group-flush">
+                                <?php foreach (array_slice($pdfSubmissions, 0, 5) as $pdf): ?>
+                                    <?php
+                                        $statusBadgeClass = $pdf['submission_status'] === 'reviewed'
+                                            ? 'bg-success-subtle text-success'
+                                            : 'bg-warning-subtle text-warning';
+                                        $submittedDate = date('M d, Y g:i A', strtotime($pdf['submission_timestamp']));
+                                    ?>
+                                    <a href="adviser_pdf_review.php?submission_id=<?= (int)$pdf['submission_id']; ?>"
+                                       class="list-group-item list-group-item-action border-0 py-3">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div class="flex-grow-1">
+                                                <div class="d-flex align-items-center mb-1">
+                                                    <i class="bi bi-file-pdf text-danger me-2 fs-5"></i>
+                                                    <strong class="text-success"><?= htmlspecialchars($pdf['student_name']); ?></strong>
+                                                </div>
+                                                <div class="small text-muted mb-1">
+                                                    <?= htmlspecialchars($pdf['original_filename']); ?>
+                                                </div>
+                                                <div class="small text-muted">
+                                                    <i class="bi bi-clock me-1"></i><?= htmlspecialchars($submittedDate); ?>
+                                                    <span class="ms-2">
+                                                        <i class="bi bi-file-earmark me-1"></i>v<?= (int)$pdf['version_number']; ?>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="text-end">
+                                                <span class="badge <?= $statusBadgeClass; ?> text-capitalize">
+                                                    <?= htmlspecialchars($pdf['submission_status']); ?>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </a>
+                                <?php endforeach; ?>
+                            </div>
+                            <?php if (count($pdfSubmissions) > 5): ?>
+                                <div class="text-center mt-2">
+                                    <small class="text-muted">Showing 5 of <?= count($pdfSubmissions); ?> submissions</small>
+                                </div>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                
                 <div class="card mb-4">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-2">
