@@ -6,6 +6,7 @@ require_once 'submission_helpers.php';
 require_once 'role_helpers.php';
 require_once 'final_paper_helpers.php';
 require_once 'defense_committee_helpers.php';
+require_once 'pdf_submission_helpers.php';
 
 enforce_role_access(['student']);
 
@@ -510,6 +511,53 @@ $nextDefense = $defenseSchedules[0] ?? null;
 
 $statusTimeline = fetchStatusTimeline($conn, $studentId);
 
+// Fetch PDF submissions
+$pdfSubmissions = [];
+$pdfSubmissionsSql = "
+    SELECT
+        ps.submission_id,
+        ps.student_id,
+        ps.adviser_id,
+        ps.original_filename,
+        ps.file_size,
+        ps.submission_status,
+        ps.submission_timestamp,
+        ps.version_number,
+        CONCAT(adv.firstname, ' ', adv.lastname) AS adviser_name,
+        adv.email AS adviser_email
+    FROM pdf_submissions ps
+    LEFT JOIN users adv ON adv.id = ps.adviser_id
+    WHERE ps.student_id = ?
+    ORDER BY ps.submission_timestamp DESC
+";
+if ($pdfStmt = $conn->prepare($pdfSubmissionsSql)) {
+    $pdfStmt->bind_param('i', $studentId);
+    $pdfStmt->execute();
+    $pdfResult = $pdfStmt->get_result();
+    while ($row = $pdfResult->fetch_assoc()) {
+        $pdfSubmissions[] = $row;
+    }
+    $pdfStmt->close();
+}
+
+// Fetch advisers for dropdown - get all users who have adviser-capable roles
+$advisersForPdf = [];
+$advisersSql = "
+    SELECT DISTINCT u.id, u.firstname, u.lastname, u.email
+    FROM users u
+    INNER JOIN user_roles ur ON ur.user_id = u.id
+    WHERE ur.role_code IN ('adviser', 'faculty', 'program_chairperson', 'committee_chairperson', 'committee_chair', 'panel')
+    ORDER BY u.firstname, u.lastname
+";
+if ($advStmt = $conn->prepare($advisersSql)) {
+    $advStmt->execute();
+    $advResult = $advStmt->get_result();
+    while ($row = $advResult->fetch_assoc()) {
+        $advisersForPdf[] = $row;
+    }
+    $advStmt->close();
+}
+
 $studentFullName = trim(($studentInfo['firstname'] ?? '') . ' ' . ($studentInfo['lastname'] ?? ''));
 if ($studentFullName === '') {
     $studentFullName = 'Student';
@@ -810,6 +858,102 @@ if ($studentFullName === '') {
                                 </a>
                             </li>
                         </ul>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">PDF Submissions</h5>
+                        <?php if (!empty($pdfSubmissions)): ?>
+                            <span class="badge bg-success-subtle text-success"><?php echo count($pdfSubmissions); ?> submitted</span>
+                        <?php else: ?>
+                            <span class="badge bg-warning-subtle text-warning">None yet</span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-4">
+                            <h6 class="fw-semibold mb-3">Upload New PDF</h6>
+                            <form id="pdfUploadForm" enctype="multipart/form-data" method="POST" action="pdf_upload_handler.php">
+                                <input type="hidden" name="action" value="upload">
+                                <div class="mb-3">
+                                    <label for="pdfFile" class="form-label">Select PDF File</label>
+                                    <input type="file" class="form-control" id="pdfFile" name="pdf_file" accept=".pdf" required>
+                                    <small class="text-muted">Maximum file size: 50MB</small>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="pdfAdviser" class="form-label">Select Adviser</label>
+                                    <select class="form-select" id="pdfAdviser" name="adviser_id" required>
+                                        <option value="">-- Choose an adviser --</option>
+                                        <?php foreach ($advisersForPdf as $adviser): ?>
+                                            <option value="<?php echo (int)$adviser['id']; ?>">
+                                                <?php echo htmlspecialchars($adviser['firstname'] . ' ' . $adviser['lastname']); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="bi bi-cloud-upload me-2"></i>Upload PDF
+                                </button>
+                            </form>
+                        </div>
+
+                        <?php if (empty($pdfSubmissions)): ?>
+                            <div class="text-center text-muted py-4">
+                                <i class="bi bi-file-pdf fs-1 mb-2"></i>
+                                <p class="mb-0">No PDF submissions yet. Upload your first PDF above.</p>
+                            </div>
+                        <?php else: ?>
+                            <hr>
+                            <h6 class="fw-semibold mb-3">Your Submissions</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Filename</th>
+                                            <th>Adviser</th>
+                                            <th>Version</th>
+                                            <th>Status</th>
+                                            <th>Submitted</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($pdfSubmissions as $submission): ?>
+                                            <?php
+                                                $statusBadge = statusBadgeClass($submission['submission_status'] ?? 'pending');
+                                                $submittedDate = formatTimestamp($submission['submission_timestamp'] ?? null, 'N/A');
+                                                $adviserDisplay = trim(($submission['adviser_name'] ?? '') ?: 'Unassigned');
+                                            ?>
+                                            <tr>
+                                                <td>
+                                                    <i class="bi bi-file-pdf text-danger me-2"></i>
+                                                    <small><?php echo htmlspecialchars($submission['original_filename']); ?></small>
+                                                </td>
+                                                <td>
+                                                    <small><?php echo htmlspecialchars($adviserDisplay); ?></small>
+                                                </td>
+                                                <td>
+                                                    <small class="badge bg-light text-success">v<?php echo (int)($submission['version_number'] ?? 1); ?></small>
+                                                </td>
+                                                <td>
+                                                    <small class="<?php echo $statusBadge; ?> text-capitalize">
+                                                        <?php echo htmlspecialchars($submission['submission_status'] ?? 'pending'); ?>
+                                                    </small>
+                                                </td>
+                                                <td>
+                                                    <small class="text-muted"><?php echo $submittedDate; ?></small>
+                                                </td>
+                                                <td>
+                                                    <a href="student_pdf_view.php?submission_id=<?php echo (int)$submission['submission_id']; ?>" class="btn btn-sm btn-outline-success">
+                                                        <i class="bi bi-eye"></i> View
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
