@@ -4,6 +4,7 @@ require_once 'db.php';
 require_once 'role_helpers.php';
 require_once 'notifications_helper.php';
 require_once 'final_paper_helpers.php';
+require_once 'notice_commence_helpers.php';
 
 $allowedRoles = ['adviser', 'panel', 'committee_chairperson', 'committee_chair'];
 enforce_role_access($allowedRoles);
@@ -67,6 +68,7 @@ if (!$reviewRow) {
 }
 
 $reviews = fetchFinalPaperReviews($conn, $submissionId);
+$canFinalize = in_array($role, ['committee_chairperson', 'committee_chair'], true);
 
 $reviewSuccess = '';
 $reviewError = '';
@@ -89,12 +91,206 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_route_slip_revie
                 $reviewSuccess = 'Route slip review saved successfully.';
                 $reviewRow = fetchFinalPaperReviewForUser($conn, $submissionId, $reviewerId);
                 $reviews = fetchFinalPaperReviews($conn, $submissionId);
+
+                // Check if all route slip reviews are completed
+                $allRouteSlipReviewsComplete = true;
+                foreach ($reviews as $review) {
+                    $slipStatus = strtolower(trim((string)($review['route_slip_status'] ?? '')));
+                    if ($slipStatus === '' || $slipStatus === 'pending') {
+                        $allRouteSlipReviewsComplete = false;
+                        break;
+                    }
+                }
+
+                // If all route slip reviews are complete and this is from committee chairperson, notify student and dean
+                if ($allRouteSlipReviewsComplete && $reviewerRoleFilter === 'committee_chairperson') {
+                    $studentId = (int)($submission['student_id'] ?? 0);
+                    $studentName = $submission['student_name'] ?? 'Student';
+                    $reviewerName = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? ''));
+                    $reviewerName = $reviewerName !== '' ? $reviewerName : 'Committee Chairperson';
+
+                    // Notify student
+                    notify_user(
+                        $conn,
+                        $studentId,
+                        'Route slip review completed',
+                        "{$reviewerName} has completed the route slip review. Decision: {$newStatus}. Please check your submission page for details.",
+                        'submit_final_paper.php',
+                        false
+                    );
+
+                    // Notify dean
+                    notify_role(
+                        $conn,
+                        'dean',
+                        'Route slip final decision made',
+                        "Committee Chairperson has completed the route slip review for {$studentName}. Decision: {$newStatus}.",
+                        'submit_final_paper.php',
+                        false
+                    );
+                }
             } else {
                 $reviewError = 'Unable to save your route slip review.';
             }
             $stmt->close();
         } else {
             $reviewError = 'Unable to prepare the route slip review update.';
+        }
+    }
+}
+
+// Handle overall route slip decision from committee chairperson
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_overall_route_slip_decision']) && $canFinalize) {
+    $overallDecision = trim($_POST['overall_decision'] ?? '');
+    $decisionNotes = trim($_POST['decision_notes'] ?? '');
+
+    if (!in_array($overallDecision, ['Approved', 'Minor Revision', 'Major Revision', 'Rejected'], true)) {
+        $reviewError = 'Please choose a valid overall decision.';
+    } else {
+        $stmt = $conn->prepare("
+            UPDATE final_paper_submissions
+            SET route_slip_overall_decision = ?,
+                route_slip_decision_notes = ?,
+                route_slip_decision_by = ?,
+                route_slip_decision_at = NOW()
+            WHERE id = ?
+        ");
+        if ($stmt) {
+            $stmt->bind_param('ssii', $overallDecision, $decisionNotes, $reviewerId, $submissionId);
+            if ($stmt->execute()) {
+                $reviewSuccess = 'Overall route slip decision saved successfully.';
+                $submission = fetchFinalPaperSubmission($conn, $submissionId);
+
+                $studentId = (int)($submission['student_id'] ?? 0);
+                $studentName = $submission['student_name'] ?? 'Student';
+                $chairName = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? ''));
+                $chairName = $chairName !== '' ? $chairName : 'Committee Chairperson';
+
+                // Notify student
+                notify_user(
+                    $conn,
+                    $studentId,
+                    'Route slip overall decision made',
+                    "{$chairName} has made the overall decision on your route slip. Decision: {$overallDecision}. Please check your submission page for details.",
+                    'submit_final_paper.php',
+                    false
+                );
+
+                // Auto-create Notice to Commence if approved
+                if ($overallDecision === 'Approved') {
+                    ensureNoticeCommenceTable($conn);
+                    
+                    // Check if notice already exists
+                    $checkStmt = $conn->prepare("
+                        SELECT id FROM notice_to_commence_requests
+                        WHERE submission_id = ? AND status IN ('Pending', 'Approved')
+                        LIMIT 1
+                    ");
+                    $noticeExists = false;
+                    if ($checkStmt) {
+                        $checkStmt->bind_param('i', $submissionId);
+                        $checkStmt->execute();
+                        $checkResult = $checkStmt->get_result();
+                        $noticeExists = $checkResult && $checkResult->num_rows > 0;
+                        if ($checkResult) $checkResult->free();
+                        $checkStmt->close();
+                    }
+                    
+                    if (!$noticeExists) {
+                        // Get program chairperson for this student's program
+                        $programChairStmt = $conn->prepare("
+                            SELECT u.id, u.program
+                            FROM users u
+                            JOIN users s ON s.program = u.program
+                            WHERE s.id = ? AND u.role = 'program_chairperson'
+                            LIMIT 1
+                        ");
+                        $programChairId = 0;
+                        if ($programChairStmt) {
+                            $programChairStmt->bind_param('i', $studentId);
+                            $programChairStmt->execute();
+                            $chairResult = $programChairStmt->get_result();
+                            $chairRow = $chairResult ? $chairResult->fetch_assoc() : null;
+                            if ($chairResult) $chairResult->free();
+                            $programChairStmt->close();
+                            $programChairId = (int)($chairRow['id'] ?? 0);
+                        }
+                        
+                        if ($programChairId > 0) {
+                            $noticeDate = date('Y-m-d');
+                            $startDate = date('Y-m-d');
+                            $subject = 'NOTIFICATION TO COMMENCE THE APPROVED PROPOSAL';
+                            $finalTitle = $submission['final_title'] ?? 'the research proposal';
+                            $studentProgram = '';
+                            
+                            // Get student program
+                            $studentProgramStmt = $conn->prepare("SELECT program FROM users WHERE id = ? LIMIT 1");
+                            if ($studentProgramStmt) {
+                                $studentProgramStmt->bind_param('i', $studentId);
+                                $studentProgramStmt->execute();
+                                $progResult = $studentProgramStmt->get_result();
+                                $progRow = $progResult ? $progResult->fetch_assoc() : null;
+                                if ($progResult) $progResult->free();
+                                $studentProgramStmt->close();
+                                $studentProgram = $progRow['program'] ?? '';
+                            }
+                            
+                            $body = build_notice_commence_body($studentName, $finalTitle, $studentProgram, $startDate);
+                            
+                            // Create notice to commence
+                            $insertNoticeStmt = $conn->prepare("
+                                INSERT INTO notice_to_commence_requests
+                                    (student_id, submission_id, program_chair_id, status, notice_date, start_date, subject, body)
+                                VALUES (?, ?, ?, 'Pending', ?, ?, ?, ?)
+                            ");
+                            if ($insertNoticeStmt) {
+                                $insertNoticeStmt->bind_param(
+                                    'iiissss',
+                                    $studentId,
+                                    $submissionId,
+                                    $programChairId,
+                                    $noticeDate,
+                                    $startDate,
+                                    $subject,
+                                    $body
+                                );
+                                $insertNoticeStmt->execute();
+                                $insertNoticeStmt->close();
+                            }
+                        }
+                    }
+                }
+
+                // Notify program chairperson
+                $noticeLink = $overallDecision === 'Approved' ? 'notice_to_commence.php' : 'submit_final_paper.php';
+                $noticeMsg = $overallDecision === 'Approved'
+                    ? "Committee Chairperson has approved the route slip for {$studentName}. A Notice to Commence has been prepared for your review and submission to the Dean."
+                    : "Committee Chairperson has made the overall route slip decision for {$studentName}. Decision: {$overallDecision}.";
+                
+                notify_role(
+                    $conn,
+                    'program_chairperson',
+                    'Route slip overall decision made',
+                    $noticeMsg,
+                    $noticeLink,
+                    false
+                );
+
+                // Notify dean
+                notify_role(
+                    $conn,
+                    'dean',
+                    'Route slip overall decision made',
+                    "Committee Chairperson has made the overall route slip decision for {$studentName}. Decision: {$overallDecision}.",
+                    'submit_final_paper.php',
+                    false
+                );
+            } else {
+                $reviewError = 'Unable to save the overall decision.';
+            }
+            $stmt->close();
+        } else {
+            $reviewError = 'Unable to prepare the overall decision update.';
         }
     }
 }
@@ -189,6 +385,39 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
                         <button type="submit" name="save_route_slip_review" class="btn btn-success">Save Route Slip Review</button>
                     </form>
                 </div>
+
+                <?php if ($canFinalize): ?>
+                <div class="card review-card p-4 mt-4">
+                    <h5 class="fw-bold text-success mb-3">Overall Route Slip Decision</h5>
+                    <form method="post">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-success">Overall Decision</label>
+                            <select name="overall_decision" class="form-select" required>
+                                <option value="">-- Select Overall Decision --</option>
+                                <option value="Approved" <?= ($submission['route_slip_overall_decision'] ?? '') === 'Approved' ? 'selected' : ''; ?>>Approved</option>
+                                <option value="Minor Revision" <?= ($submission['route_slip_overall_decision'] ?? '') === 'Minor Revision' ? 'selected' : ''; ?>>Approved with Minor Revision</option>
+                                <option value="Major Revision" <?= ($submission['route_slip_overall_decision'] ?? '') === 'Major Revision' ? 'selected' : ''; ?>>Approved with Major Revision</option>
+                                <option value="Rejected" <?= ($submission['route_slip_overall_decision'] ?? '') === 'Rejected' ? 'selected' : ''; ?>>Rejected</option>
+                            </select>
+                            <div class="form-text">Select the overall decision based on all route slip reviews.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-success">Decision Notes</label>
+                            <textarea name="decision_notes" class="form-control" rows="4" placeholder="Provide the overall decision notes for the student..."><?= htmlspecialchars($submission['route_slip_decision_notes'] ?? ''); ?></textarea>
+                            <div class="form-text">This message will be visible to the student and dean.</div>
+                        </div>
+                        <button type="submit" name="save_overall_route_slip_decision" class="btn btn-success">
+                            <i class="bi bi-check-circle me-1"></i> Save Overall Decision
+                        </button>
+                    </form>
+                    <?php if (!empty($submission['route_slip_decision_at'])): ?>
+                        <div class="alert alert-info mt-3 mb-0">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Overall decision was made on <?= htmlspecialchars(date('M d, Y g:i A', strtotime($submission['route_slip_decision_at']))); ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
             </div>
         </div>
 

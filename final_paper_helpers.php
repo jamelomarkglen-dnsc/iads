@@ -110,6 +110,10 @@ if (!function_exists('ensureFinalPaperTables')) {
             'committee_reviews_completed_at' => "ALTER TABLE final_paper_submissions ADD COLUMN committee_reviews_completed_at TIMESTAMP NULL DEFAULT NULL AFTER final_decision_at",
             'outline_defense_verdict' => "ALTER TABLE final_paper_submissions ADD COLUMN outline_defense_verdict VARCHAR(50) NULL AFTER committee_reviews_completed_at",
             'outline_defense_verdict_at' => "ALTER TABLE final_paper_submissions ADD COLUMN outline_defense_verdict_at TIMESTAMP NULL DEFAULT NULL AFTER outline_defense_verdict",
+            'route_slip_overall_decision' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_overall_decision VARCHAR(50) NULL AFTER outline_defense_verdict_at",
+            'route_slip_decision_notes' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_decision_notes TEXT NULL AFTER route_slip_overall_decision",
+            'route_slip_decision_by' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_decision_by INT NULL AFTER route_slip_decision_notes",
+            'route_slip_decision_at' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_decision_at TIMESTAMP NULL DEFAULT NULL AFTER route_slip_decision_by",
         ];
         foreach ($columns as $column => $sql) {
             if (!final_paper_column_exists($conn, 'final_paper_submissions', $column)) {

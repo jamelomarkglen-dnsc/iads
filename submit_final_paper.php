@@ -570,7 +570,7 @@ include 'sidebar.php';
                     <?php endif; ?>
                 </div>
 
-                <div class="fw-semibold text-success mb-2">Reviewer Comments</div>
+                <div class="fw-semibold text-success mb-2">Manuscript Reviewer Comments</div>
                 <?php if (empty($reviewSummary)): ?>
                     <p class="mb-0 text-muted">No reviewer comments yet.</p>
                 <?php else: ?>
@@ -598,6 +598,68 @@ include 'sidebar.php';
                                         <div class="small"><?= nl2br(htmlspecialchars($reviewComments)); ?></div>
                                     <?php else: ?>
                                         <div class="small text-muted">No comment yet.</div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+
+                <!-- Route Slip Overall Decision -->
+                <?php if (!empty($currentSubmission['route_slip_overall_decision'])): ?>
+                <div class="mb-4 p-3 rounded-3 mt-4" style="background: linear-gradient(135deg, rgba(13, 110, 253, 0.1), rgba(13, 110, 253, 0.05)); border-left: 4px solid #0d6efd;">
+                    <div class="fw-semibold text-primary mb-2">Route Slip Overall Decision</div>
+                    <div class="d-flex align-items-center gap-3 mb-2">
+                        <span class="badge <?= finalPaperReviewStatusClass($currentSubmission['route_slip_overall_decision']); ?>" style="font-size: 1rem; padding: 0.6rem 1.2rem;">
+                            <?= htmlspecialchars($currentSubmission['route_slip_overall_decision']); ?>
+                        </span>
+                        <?php if (!empty($currentSubmission['route_slip_decision_at'])): ?>
+                            <span class="small text-muted">
+                                <i class="bi bi-clock me-1"></i>
+                                <?= htmlspecialchars(date('M d, Y g:i A', strtotime($currentSubmission['route_slip_decision_at']))); ?>
+                            </span>
+                        <?php endif; ?>
+                    </div>
+                    <?php if (!empty($currentSubmission['route_slip_decision_notes'])): ?>
+                        <div class="border rounded-3 p-3 bg-white">
+                            <div class="small fw-semibold text-muted mb-1">Decision Notes:</div>
+                            <?= nl2br(htmlspecialchars($currentSubmission['route_slip_decision_notes'])); ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+
+                <!-- Route Slip Reviews Section -->
+                <div class="fw-semibold text-success mb-2 mt-4">Route Slip Reviews</div>
+                <?php if (empty($reviewSummary)): ?>
+                    <p class="mb-0 text-muted">No route slip reviews yet.</p>
+                <?php else: ?>
+                    <div class="row g-3">
+                        <?php foreach ($reviewSummary as $review): ?>
+                            <?php
+                            $roleKey = $review['reviewer_role'] ?? '';
+                            $roleLabel = $roleLabels[$roleKey] ?? ucfirst($roleKey);
+                            $reviewerName = $review['reviewer_name'] ?? 'Reviewer';
+                            $routeSlipStatus = finalPaperStatusLabel($review['route_slip_status'] ?? 'Pending');
+                            $routeSlipComments = trim((string)($review['route_slip_comments'] ?? ''));
+                            $routeSlipReviewedAt = $review['route_slip_reviewed_at'] ?? null;
+                            ?>
+                            <div class="col-lg-6">
+                                <div class="border rounded-3 p-3 h-100" style="border-left: 3px solid #0d6efd !important;">
+                                    <div class="fw-semibold"><?= htmlspecialchars($reviewerName); ?></div>
+                                    <div class="small text-muted mb-2">
+                                        <?= htmlspecialchars($roleLabel); ?> - <?= htmlspecialchars($routeSlipStatus); ?>
+                                    </div>
+                                    <?php if ($routeSlipComments !== ''): ?>
+                                        <div class="small"><?= nl2br(htmlspecialchars($routeSlipComments)); ?></div>
+                                    <?php else: ?>
+                                        <div class="small text-muted">No route slip comment yet.</div>
+                                    <?php endif; ?>
+                                    <?php if ($routeSlipReviewedAt): ?>
+                                        <div class="small text-muted mt-2">
+                                            <i class="bi bi-clock me-1"></i>
+                                            <?= htmlspecialchars(date('M d, Y g:i A', strtotime($routeSlipReviewedAt))); ?>
+                                        </div>
                                     <?php endif; ?>
                                 </div>
                             </div>
