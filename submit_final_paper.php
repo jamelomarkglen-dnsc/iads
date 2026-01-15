@@ -483,22 +483,6 @@ include 'sidebar.php';
                             <input type="file" name="final_document" class="form-control" accept="application/pdf" required>
                             <div class="form-text">PDF only to keep the formatting consistent for panel review.</div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Route Slip PDF (from Adviser)</label>
-                            <?php if ($latestRouteSlip): ?>
-                                <div class="alert alert-light border small mb-2">
-                                    Latest route slip from <?= htmlspecialchars($latestRouteSlip['adviser_name'] ?? 'Adviser'); ?> -
-                                    <?= htmlspecialchars($latestRouteSlipDate); ?>.
-                                    <a href="<?= htmlspecialchars($latestRouteSlip['file_path'] ?? '#'); ?>" target="_blank" class="text-decoration-none">Download</a>
-                                </div>
-                            <?php else: ?>
-                                <div class="alert alert-warning small mb-2">
-                                    No route slip has been issued yet. Ask your adviser to send it before submitting.
-                                </div>
-                            <?php endif; ?>
-                            <input type="file" name="route_slip_document" class="form-control" accept="application/pdf">
-                            <div class="form-text">Optional for outline defense. Upload later once your adviser issues the slip.</div>
-                        </div>
                         <div class="alert alert-light border small mb-3">
                             <strong>Submission tips:</strong> use a clear filename, verify all pages are readable, and confirm the title matches your final pick.
                         </div>
