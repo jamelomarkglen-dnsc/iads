@@ -629,7 +629,9 @@ include 'sidebar.php';
                                                     
                                                     if ($studentPdfSubmission): ?>
                                                         <a href="adviser_pdf_review.php?submission_id=<?= (int)$studentPdfSubmission['submission_id']; ?>"
-                                                           class="btn btn-sm btn-success ms-1" title="Review PDF with annotations">
+                                                           class="btn btn-sm btn-success ms-1"
+                                                           title="Review PDF with annotations"
+                                                           style="text-decoration: none;">
                                                             <i class="bi bi-file-pdf"></i> PDF
                                                         </a>
                                                     <?php endif;
@@ -676,7 +678,8 @@ include 'sidebar.php';
                                         $submittedDate = date('M d, Y g:i A', strtotime($pdf['submission_timestamp']));
                                     ?>
                                     <a href="adviser_pdf_review.php?submission_id=<?= (int)$pdf['submission_id']; ?>"
-                                       class="list-group-item list-group-item-action border-0 py-3">
+                                       class="list-group-item list-group-item-action border-0 py-3"
+                                       style="text-decoration: none; cursor: pointer;">
                                         <div class="d-flex justify-content-between align-items-start">
                                             <div class="flex-grow-1">
                                                 <div class="d-flex align-items-center mb-1">
