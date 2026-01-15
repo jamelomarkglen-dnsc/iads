@@ -604,16 +604,12 @@ include 'sidebar.php';
                                                 <?php endif; ?>
                                             </td>
                                             <td>
-                                                <?php if ($status === 'Submitted'): ?>
-                                                    <a href="review_paper.php?student_id=<?= (int)$student['id']; ?>" class="btn btn-sm btn-outline-success">
-                                                        <i class="bi bi-search"></i> Review
-                                                    </a>
-                                                <?php else: ?>
+                                                <?php if ($status !== 'Submitted'): ?>
                                                     <button class="btn btn-sm btn-outline-secondary" disabled>
                                                         <i class="bi bi-hourglass-split"></i> Waiting
                                                     </button>
                                                 <?php endif; ?>
-                                                
+
                                                 <?php
                                                 // Check for PDF submissions for this student
                                                 $studentPdfSql = "SELECT submission_id FROM pdf_submissions
@@ -798,4 +794,3 @@ include 'sidebar.php';
 </script>
 </body>
 </html>
-
