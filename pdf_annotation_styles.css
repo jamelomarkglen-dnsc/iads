@@ -900,8 +900,9 @@
     }
 }
 
+/* Removed animation from comment-item to prevent disruption during polling updates */
 .comment-item {
-    animation: slideIn 0.3s ease;
+    /* animation: slideIn 0.3s ease; */
 }
 
 @keyframes fadeIn {

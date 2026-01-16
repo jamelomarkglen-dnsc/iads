@@ -482,7 +482,9 @@ $version_info = get_version_chain_info($conn, $submission_id);
             userId: <?php echo $_SESSION['user_id']; ?>,
             userRole: '<?php echo $_SESSION['role']; ?>',
             pdfViewer: pdfViewer,
-            apiEndpoint: 'pdf_annotation_api.php'
+            apiEndpoint: 'pdf_annotation_api.php',
+            enablePolling: true,
+            pollingInterval: 1000 // Poll every 1 second for real-time updates
         });
         
         // Page navigation

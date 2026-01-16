@@ -22,6 +22,13 @@ class AnnotationManager {
         this.dragStart = null;
         this.dragPreview = null;
         
+        // Polling configuration
+        this.pollingEnabled = options.enablePolling !== undefined ? options.enablePolling : false;
+        this.pollingInterval = options.pollingInterval || 3000; // Default 3 seconds
+        this.pollingTimer = null;
+        this.lastAnnotationCount = 0;
+        this.lastUpdateTimestamp = null;
+        
         this.init();
     }
     
@@ -31,6 +38,11 @@ class AnnotationManager {
     init() {
         this.setupEventListeners();
         this.loadAnnotations();
+        
+        // Start polling if enabled
+        if (this.pollingEnabled) {
+            this.startPolling();
+        }
     }
     
     /**
@@ -433,7 +445,7 @@ class AnnotationManager {
     /**
      * Load annotations from server
      */
-    async loadAnnotations() {
+    async loadAnnotations(silent = false) {
         const formData = new FormData();
         formData.append('action', 'fetch_annotations');
         formData.append('submission_id', this.submissionId);
@@ -447,15 +459,186 @@ class AnnotationManager {
             const result = await response.json();
             
             if (result.success) {
-                this.annotations = result.annotations || [];
-                this.renderCommentPanel();
+                const newAnnotations = result.annotations || [];
+                const hasChanges = this.detectAnnotationChanges(newAnnotations);
+                
+                this.annotations = newAnnotations;
+                this.lastAnnotationCount = this.annotations.length;
+                this.lastUpdateTimestamp = new Date().toISOString();
+                
+                // For silent polling updates, check if user is interacting with UI
+                if (silent) {
+                    // Skip render if user has active interactions
+                    if (this.hasActiveInteractions()) {
+                        console.log('Skipping render - user has active interactions');
+                        return;
+                    }
+                    
+                    // Silent update - preserve UI state
+                    this.renderCommentPanelSilent();
+                } else {
+                    // Normal update - full render
+                    this.renderCommentPanel();
+                }
                 
                 if (this.pdfViewer) {
                     this.pdfViewer.setAnnotations(this.annotations);
                 }
+                
+                // Update annotation count badge
+                this.updateAnnotationCountBadge();
             }
         } catch (error) {
             console.error('Error loading annotations:', error);
+        }
+    }
+    
+    /**
+     * Check if user has active interactions (forms open, popups visible, etc.)
+     */
+    hasActiveInteractions() {
+        // Check for open reply forms
+        if (document.querySelector('.reply-form')) {
+            return true;
+        }
+        
+        // Check for open delete confirmation tooltips
+        if (document.querySelector('.delete-confirmation-tooltip')) {
+            return true;
+        }
+        
+        // Check for open annotation dialog
+        if (this.annotationDialog && this.annotationDialog.classList.contains('show')) {
+            return true;
+        }
+        
+        // Check if user is typing in any textarea
+        const activeElement = document.activeElement;
+        if (activeElement && (activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT')) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Render comment panel silently (preserve UI state)
+     */
+    renderCommentPanelSilent() {
+        if (!this.commentPanel) return;
+        
+        // Store current scroll position
+        const scrollTop = this.commentPanel.scrollTop;
+        
+        // Get currently expanded/focused elements
+        const openReplyForms = Array.from(document.querySelectorAll('.reply-form')).map(form => {
+            const commentItem = form.closest('.comment-item');
+            return commentItem ? commentItem.dataset.annotationId : null;
+        }).filter(id => id !== null);
+        
+        // Perform the update
+        this.renderCommentPanel();
+        
+        // Restore scroll position
+        this.commentPanel.scrollTop = scrollTop;
+        
+        // Restore open reply forms
+        openReplyForms.forEach(annotationId => {
+            const commentItem = document.querySelector(`.comment-item[data-annotation-id="${annotationId}"]`);
+            if (commentItem && !commentItem.querySelector('.reply-form')) {
+                // Re-open the reply form
+                this.showReplyDialog(annotationId);
+            }
+        });
+    }
+    
+    /**
+     * Detect if annotations have changed
+     */
+    detectAnnotationChanges(newAnnotations) {
+        // First load
+        if (this.lastAnnotationCount === 0 && newAnnotations.length === 0) {
+            return false;
+        }
+        
+        // Count changed
+        if (newAnnotations.length !== this.lastAnnotationCount) {
+            return true;
+        }
+        
+        // Check for reply changes or content updates
+        const currentIds = new Set(this.annotations.map(a => `${a.annotation_id}-${a.replies?.length || 0}`));
+        const newIds = new Set(newAnnotations.map(a => `${a.annotation_id}-${a.replies?.length || 0}`));
+        
+        return currentIds.size !== newIds.size ||
+               ![...currentIds].every(id => newIds.has(id));
+    }
+    
+    /**
+     * Update annotation count badge
+     */
+    updateAnnotationCountBadge() {
+        const badge = document.getElementById('annotationCount');
+        if (badge) {
+            badge.textContent = this.annotations.length;
+        }
+    }
+    
+    /**
+     * Start polling for annotation updates
+     */
+    startPolling() {
+        if (this.pollingTimer) {
+            return; // Already polling
+        }
+        
+        console.log(`Starting annotation polling (interval: ${this.pollingInterval}ms)`);
+        
+        this.pollingTimer = setInterval(() => {
+            this.loadAnnotations(true); // Silent reload
+        }, this.pollingInterval);
+        
+        // Stop polling when page is hidden to save resources
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                this.pausePolling();
+            } else {
+                this.resumePolling();
+            }
+        });
+    }
+    
+    /**
+     * Stop polling for annotation updates
+     */
+    stopPolling() {
+        if (this.pollingTimer) {
+            console.log('Stopping annotation polling');
+            clearInterval(this.pollingTimer);
+            this.pollingTimer = null;
+        }
+    }
+    
+    /**
+     * Pause polling temporarily
+     */
+    pausePolling() {
+        if (this.pollingTimer && this.pollingEnabled) {
+            console.log('Pausing annotation polling');
+            clearInterval(this.pollingTimer);
+            this.pollingTimer = null;
+        }
+    }
+    
+    /**
+     * Resume polling
+     */
+    resumePolling() {
+        if (!this.pollingTimer && this.pollingEnabled) {
+            console.log('Resuming annotation polling');
+            this.startPolling();
+            // Immediate update when resuming
+            this.loadAnnotations(true);
         }
     }
     
@@ -472,23 +655,17 @@ class AnnotationManager {
             return;
         }
         
-        // Group annotations by page
-        const byPage = {};
-        this.annotations.forEach(ann => {
-            if (!byPage[ann.page_number]) {
-                byPage[ann.page_number] = [];
-            }
-            byPage[ann.page_number].push(ann);
+        // Sort annotations by creation timestamp (newest first)
+        const sortedAnnotations = [...this.annotations].sort((a, b) => {
+            const dateA = new Date(a.creation_timestamp);
+            const dateB = new Date(b.creation_timestamp);
+            return dateB - dateA; // Descending order (newest first)
         });
         
-        // Render annotations
-        Object.keys(byPage).sort((a, b) => a - b).forEach(pageNum => {
-            const pageAnnotations = byPage[pageNum];
-            
-            pageAnnotations.forEach(annotation => {
-                const item = this.createCommentItem(annotation);
-                this.commentPanel.appendChild(item);
-            });
+        // Render annotations in sorted order
+        sortedAnnotations.forEach(annotation => {
+            const item = this.createCommentItem(annotation);
+            this.commentPanel.appendChild(item);
         });
     }
     
