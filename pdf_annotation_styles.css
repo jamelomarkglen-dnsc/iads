@@ -402,17 +402,60 @@
 
 .reply-item {
     background: white;
-    border-left: 3px solid var(--info-color);
     padding: 8px;
     margin-bottom: 6px;
     border-radius: 3px;
     font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+/* Own replies - left border */
+.reply-item.reply-own {
+    border-left: 3px solid transparent;
+    border-right: none;
+}
+
+.reply-item.reply-own.reply-adviser {
+    border-left-color: var(--primary-color);
+    background: #f0f7f3;
+}
+
+.reply-item.reply-own.reply-student {
+    border-left-color: var(--info-color);
+    background: #f0f8fa;
+}
+
+/* Other person's replies - right border */
+.reply-item.reply-other {
+    border-right: 3px solid transparent;
+    border-left: none;
+    text-align: left;
+}
+
+.reply-item.reply-other.reply-adviser {
+    border-right-color: var(--primary-color);
+    background: #fafafa;
+}
+
+.reply-item.reply-other.reply-student {
+    border-right-color: var(--info-color);
+    background: #fafafa;
 }
 
 .reply-author {
     font-weight: 600;
-    color: var(--info-color);
     margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.reply-item.reply-adviser .reply-author {
+    color: var(--primary-color);
+}
+
+.reply-item.reply-student .reply-author {
+    color: var(--info-color);
 }
 
 .reply-content {
@@ -424,6 +467,106 @@
     font-size: 11px;
     color: #999;
     margin-top: 4px;
+}
+
+/* "You" badges */
+.you-badge {
+    display: inline-block;
+    background: var(--primary-color);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.you-badge-small {
+    display: inline-block;
+    background: rgba(22, 86, 44, 0.15);
+    color: var(--primary-color);
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    border: 1px solid var(--primary-color);
+}
+
+.reply-item.reply-student .you-badge-small {
+    background: rgba(23, 162, 184, 0.15);
+    color: var(--info-color);
+    border-color: var(--info-color);
+}
+
+/* =====================================================
+   INLINE REPLY FORM
+   ===================================================== */
+.reply-form {
+    margin: 12px 0;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    animation: slideIn 0.2s ease;
+}
+
+.reply-textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+    resize: vertical;
+    min-height: 60px;
+    margin-bottom: 8px;
+    transition: border-color 0.2s;
+}
+
+.reply-textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(22, 86, 44, 0.1);
+}
+
+.reply-form-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.reply-submit-btn,
+.reply-cancel-btn {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.reply-submit-btn {
+    background: var(--primary-color);
+    color: white;
+}
+
+.reply-submit-btn:hover {
+    background: #0f3d1f;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(22, 86, 44, 0.2);
+}
+
+.reply-cancel-btn {
+    background: #e0e0e0;
+    color: #333;
+}
+
+.reply-cancel-btn:hover {
+    background: #d0d0d0;
 }
 
 /* =====================================================

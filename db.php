@@ -2,14 +2,14 @@
 $servername = "localhost";
 
 // Live
-$username = "u645049065_iads2";
-$password = "Dnsc01606";
-$database = "u645049065_iads2";
+// $username = "u645049065_iads2";
+// $password = "Dnsc01606";
+// $database = "u645049065_iads2";
 
 // Local
-// $username = "root";
-// $password = ""; 
-// $database = "advance_studies";
+$username = "root";
+$password = ""; 
+$database = "advance_studies";
 
 
 $conn = new mysqli($servername, $username, $password, $database);

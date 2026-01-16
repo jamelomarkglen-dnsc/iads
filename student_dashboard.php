@@ -511,7 +511,7 @@ $nextDefense = $defenseSchedules[0] ?? null;
 
 $statusTimeline = fetchStatusTimeline($conn, $studentId);
 
-// Fetch PDF submissions
+// Fetch PDF submissions (only latest versions)
 $pdfSubmissions = [];
 $pdfSubmissionsSql = "
     SELECT
@@ -523,11 +523,16 @@ $pdfSubmissionsSql = "
         ps.submission_status,
         ps.submission_timestamp,
         ps.version_number,
+        ps.parent_submission_id,
         CONCAT(adv.firstname, ' ', adv.lastname) AS adviser_name,
         adv.email AS adviser_email
     FROM pdf_submissions ps
     LEFT JOIN users adv ON adv.id = ps.adviser_id
     WHERE ps.student_id = ?
+    AND NOT EXISTS (
+        SELECT 1 FROM pdf_submissions child
+        WHERE child.parent_submission_id = ps.submission_id
+    )
     ORDER BY ps.submission_timestamp DESC
 ";
 if ($pdfStmt = $conn->prepare($pdfSubmissionsSql)) {
@@ -871,6 +876,21 @@ if ($studentFullName === '') {
                         <?php endif; ?>
                     </div>
                     <div class="card-body">
+                        <?php if (isset($_SESSION['upload_success'])): ?>
+                            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                <i class="bi bi-check-circle-fill me-2"></i>
+                                <?php echo htmlspecialchars($_SESSION['upload_success']); ?>
+                                <?php if (isset($_SESSION['upload_version'])): ?>
+                                    <span class="badge bg-success ms-2">Version <?php echo (int)$_SESSION['upload_version']; ?></span>
+                                <?php endif; ?>
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                            <?php
+                                unset($_SESSION['upload_success']);
+                                unset($_SESSION['upload_submission_id']);
+                                unset($_SESSION['upload_version']);
+                            ?>
+                        <?php endif; ?>
                         <div class="mb-4">
                             <h6 class="fw-semibold mb-3">Upload New PDF</h6>
                             <form id="pdfUploadForm" enctype="multipart/form-data" method="POST" action="pdf_upload_handler.php">

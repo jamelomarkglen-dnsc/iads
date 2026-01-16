@@ -117,6 +117,9 @@ if ($error_message) {
 $annotations = fetch_submission_annotations($conn, $submission_id);
 $stats = get_annotation_statistics($conn, $submission_id);
 
+// Get version chain information
+$version_info = get_version_chain_info($conn, $submission_id);
+
 // =====================================================
 // UPDATE SUBMISSION STATUS IF NEEDED
 // =====================================================
@@ -304,6 +307,74 @@ if ($submission['submission_status'] === 'pending') {
                 font-size: 0.9rem;
             }
         }
+        
+        /* Version Navigation Styles */
+        .version-navigation {
+            background: linear-gradient(135deg, #16562c 0%, #0c331a 100%);
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            flex-wrap: wrap;
+            box-shadow: 0 4px 12px rgba(22, 86, 44, 0.15);
+        }
+        
+        .version-navigation .version-info {
+            color: white;
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .version-navigation .badge {
+            font-size: 0.85rem;
+            padding: 4px 10px;
+        }
+        
+        .version-navigation .btn {
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .version-navigation .btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+        }
+        
+        .version-navigation .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        
+        .version-navigation .btn-success {
+            background: #28a745;
+            border-color: #28a745;
+        }
+        
+        .version-navigation .btn-success:hover {
+            background: #218838;
+            border-color: #1e7e34;
+        }
+        
+        @media (max-width: 768px) {
+            .version-navigation {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .version-navigation .version-info {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
@@ -330,6 +401,45 @@ if ($submission['submission_status'] === 'pending') {
                     </div>
                 </div>
             </div>
+
+            <!-- Version Navigation -->
+            <?php if ($version_info && $version_info['total_versions'] > 1): ?>
+            <div class="version-navigation">
+                <a href="<?php echo $version_info['has_previous'] ? 'adviser_pdf_review.php?submission_id=' . $version_info['previous_id'] : '#'; ?>"
+                   class="btn <?php echo $version_info['has_previous'] ? '' : 'disabled'; ?>"
+                   <?php echo $version_info['has_previous'] ? '' : 'onclick="return false;"'; ?>>
+                    <i class="bi bi-arrow-left"></i> Previous Version
+                </a>
+                
+                <div class="version-info">
+                    <span>Version <?php echo $version_info['current_version']; ?> of <?php echo $version_info['total_versions']; ?></span>
+                    <?php if (!$version_info['is_latest']): ?>
+                        <span class="badge bg-warning text-dark">
+                            <i class="bi bi-exclamation-triangle"></i> Viewing Old Version
+                        </span>
+                    <?php else: ?>
+                        <span class="badge bg-success">
+                            <i class="bi bi-check-circle"></i> Latest Version
+                        </span>
+                    <?php endif; ?>
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <a href="<?php echo $version_info['has_next'] ? 'adviser_pdf_review.php?submission_id=' . $version_info['next_id'] : '#'; ?>"
+                       class="btn <?php echo $version_info['has_next'] ? '' : 'disabled'; ?>"
+                       <?php echo $version_info['has_next'] ? '' : 'onclick="return false;"'; ?>>
+                        Next Version <i class="bi bi-arrow-right"></i>
+                    </a>
+                    
+                    <?php if (!$version_info['is_latest']): ?>
+                        <a href="adviser_pdf_review.php?submission_id=<?php echo $version_info['latest_id']; ?>"
+                           class="btn btn-success">
+                            <i class="bi bi-skip-end-fill"></i> Jump to Latest
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <!-- PDF Review Wrapper -->
             <div class="pdf-review-wrapper">

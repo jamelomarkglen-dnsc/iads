@@ -142,13 +142,10 @@ if ($action === 'upload' && isset($_FILES['pdf_file'])) {
         $notification_link
     );
     
-    // Return success response
-    http_response_code(200);
-    echo json_encode([
-        'success' => true,
-        'submission_id' => $submission_id,
-        'message' => 'PDF uploaded successfully. Your adviser has been notified.'
-    ]);
+    // Redirect back to dashboard with success message
+    $_SESSION['upload_success'] = 'PDF uploaded successfully. Your adviser has been notified.';
+    $_SESSION['upload_submission_id'] = $submission_id;
+    header('Location: student_dashboard.php');
     exit;
 }
 
@@ -156,9 +153,19 @@ if ($action === 'upload' && isset($_FILES['pdf_file'])) {
 // HANDLE REVISION UPLOAD
 // =====================================================
 if ($action === 'upload_revision' && isset($_FILES['pdf_file'])) {
+    // Enable error logging
+    error_log("=== REVISION UPLOAD DEBUG START ===");
+    error_log("Student ID: " . $student_id);
+    error_log("Adviser ID: " . $adviser_id);
+    error_log("Action: " . $action);
+    error_log("POST data: " . print_r($_POST, true));
+    error_log("FILES data: " . print_r($_FILES, true));
+    
     $parent_submission_id = isset($_POST['parent_submission_id']) ? (int)$_POST['parent_submission_id'] : 0;
+    error_log("Parent submission ID: " . $parent_submission_id);
     
     if ($parent_submission_id <= 0) {
+        error_log("ERROR: Invalid parent submission ID");
         http_response_code(400);
         echo json_encode(['success' => false, 'error' => 'Invalid parent submission ID.']);
         exit;
@@ -178,23 +185,31 @@ if ($action === 'upload_revision' && isset($_FILES['pdf_file'])) {
     
     if ($parent_result->num_rows === 0) {
         $parent_check->close();
+        error_log("ERROR: Unauthorized access - parent submission not found or doesn't belong to student");
         http_response_code(403);
         echo json_encode(['success' => false, 'error' => 'Unauthorized access to parent submission.']);
         exit;
     }
     
     $parent_check->close();
+    error_log("Parent submission verified successfully");
     
     // Upload and validate file
+    error_log("Starting file upload...");
     $upload_result = upload_pdf_file($_FILES['pdf_file'], $student_id);
+    error_log("Upload result: " . print_r($upload_result, true));
     
     if (!$upload_result['success']) {
+        error_log("ERROR: File upload failed - " . print_r($upload_result['errors'], true));
         http_response_code(400);
         echo json_encode(['success' => false, 'errors' => $upload_result['errors']]);
         exit;
     }
     
+    error_log("File uploaded successfully to: " . $upload_result['file_path']);
+    
     // Create revision submission
+    error_log("Creating revision submission in database...");
     $revision_result = create_revision_submission(
         $conn,
         $student_id,
@@ -205,14 +220,18 @@ if ($action === 'upload_revision' && isset($_FILES['pdf_file'])) {
         $upload_result['file_size'],
         $upload_result['mime_type']
     );
+    error_log("Revision result: " . print_r($revision_result, true));
     
     if (!$revision_result['success']) {
         // Delete uploaded file if database insert fails
+        error_log("ERROR: Database insert failed - " . $revision_result['error']);
         delete_pdf_file($upload_result['file_path']);
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => $revision_result['error']]);
         exit;
     }
+    
+    error_log("Revision submission created successfully with ID: " . $revision_result['submission_id']);
     
     $submission_id = $revision_result['submission_id'];
     
@@ -229,6 +248,7 @@ if ($action === 'upload_revision' && isset($_FILES['pdf_file'])) {
     $notification_message = "{$student_name} submitted a revised PDF (Version {$revision_result['version']}).";
     $notification_link = "adviser.php?action=review_pdf&submission_id={$submission_id}";
     
+    error_log("Sending notification to adviser ID: " . $adviser_id);
     notify_user(
         $conn,
         $adviser_id,
@@ -236,8 +256,12 @@ if ($action === 'upload_revision' && isset($_FILES['pdf_file'])) {
         $notification_message,
         $notification_link
     );
+    error_log("Notification sent successfully");
     
-    // Return success response
+    // Return JSON response instead of redirect for AJAX compatibility
+    error_log("Returning success JSON response");
+    error_log("=== REVISION UPLOAD DEBUG END ===");
+    
     http_response_code(200);
     echo json_encode([
         'success' => true,

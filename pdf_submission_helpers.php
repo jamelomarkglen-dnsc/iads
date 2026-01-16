@@ -355,7 +355,7 @@ function create_revision_submission(mysqli $conn, $student_id, $adviser_id, $par
         return ['success' => false, 'error' => 'Database error: ' . $conn->error];
     }
     
-    $stmt->bind_param('iisssiiii', $student_id, $adviser_id, $file_path, $original_filename, $file_size, $mime_type, $new_version, $parent_submission_id);
+    $stmt->bind_param('iisssiii', $student_id, $adviser_id, $file_path, $original_filename, $file_size, $mime_type, $new_version, $parent_submission_id);
     
     if (!$stmt->execute()) {
         $stmt->close();
@@ -459,6 +459,122 @@ function get_submission_statistics(mysqli $conn, $submission_id) {
     $stmt->close();
     
     return $stats ?: null;
+}
+
+// =====================================================
+// FUNCTION: Get version chain information
+// =====================================================
+function get_version_chain_info(mysqli $conn, $submission_id) {
+    $current = fetch_pdf_submission($conn, $submission_id);
+    if (!$current) {
+        return null;
+    }
+    
+    // Get previous version ID
+    $previous_id = $current['parent_submission_id'];
+    
+    // Get next version ID
+    $next_id = null;
+    $next_sql = "SELECT submission_id FROM pdf_submissions WHERE parent_submission_id = ? LIMIT 1";
+    $next_stmt = $conn->prepare($next_sql);
+    if ($next_stmt) {
+        $next_stmt->bind_param('i', $submission_id);
+        $next_stmt->execute();
+        $next_result = $next_stmt->get_result();
+        if ($next_row = $next_result->fetch_assoc()) {
+            $next_id = $next_row['submission_id'];
+        }
+        $next_stmt->close();
+    }
+    
+    // Get latest version in chain
+    $latest_id = $submission_id;
+    $temp_id = $submission_id;
+    while (true) {
+        $check_sql = "SELECT submission_id FROM pdf_submissions WHERE parent_submission_id = ? LIMIT 1";
+        $check_stmt = $conn->prepare($check_sql);
+        if (!$check_stmt) break;
+        
+        $check_stmt->bind_param('i', $temp_id);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+        
+        if ($check_row = $check_result->fetch_assoc()) {
+            $latest_id = $check_row['submission_id'];
+            $temp_id = $latest_id;
+        } else {
+            break;
+        }
+        $check_stmt->close();
+    }
+    
+    // Count total versions in chain
+    $total_versions = 1;
+    $count_id = $submission_id;
+    
+    // Count backwards
+    while ($count_id) {
+        $parent_sql = "SELECT parent_submission_id FROM pdf_submissions WHERE submission_id = ?";
+        $parent_stmt = $conn->prepare($parent_sql);
+        if (!$parent_stmt) break;
+        
+        $parent_stmt->bind_param('i', $count_id);
+        $parent_stmt->execute();
+        $parent_result = $parent_stmt->get_result();
+        
+        if ($parent_row = $parent_result->fetch_assoc()) {
+            if ($parent_row['parent_submission_id']) {
+                $total_versions++;
+                $count_id = $parent_row['parent_submission_id'];
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+        $parent_stmt->close();
+    }
+    
+    // Count forwards from current
+    $forward_id = $submission_id;
+    while (true) {
+        $child_sql = "SELECT submission_id FROM pdf_submissions WHERE parent_submission_id = ? LIMIT 1";
+        $child_stmt = $conn->prepare($child_sql);
+        if (!$child_stmt) break;
+        
+        $child_stmt->bind_param('i', $forward_id);
+        $child_stmt->execute();
+        $child_result = $child_stmt->get_result();
+        
+        if ($child_row = $child_result->fetch_assoc()) {
+            $total_versions++;
+            $forward_id = $child_row['submission_id'];
+        } else {
+            break;
+        }
+        $child_stmt->close();
+    }
+    
+    $is_latest = ($latest_id == $submission_id);
+    
+    return [
+        'current_version' => $current['version_number'],
+        'total_versions' => $total_versions,
+        'previous_id' => $previous_id,
+        'next_id' => $next_id,
+        'latest_id' => $latest_id,
+        'is_latest' => $is_latest,
+        'has_previous' => !is_null($previous_id),
+        'has_next' => !is_null($next_id)
+    ];
+}
+
+// =====================================================
+// FUNCTION: Get latest version in submission chain
+// =====================================================
+function get_latest_version_id(mysqli $conn, $submission_id) {
+    $info = get_version_chain_info($conn, $submission_id);
+    return $info ? $info['latest_id'] : $submission_id;
 }
 
 // Initialize directories on include

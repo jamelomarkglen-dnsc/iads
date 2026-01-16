@@ -166,7 +166,7 @@ if ($panelStmt) {
     $panelStmt->close();
 }
 
-// Fetch PDF submissions for this adviser
+// Fetch PDF submissions for this adviser (only latest versions)
 $pdfSubmissions = [];
 $pdfSubmissionsSql = "
     SELECT
@@ -177,11 +177,16 @@ $pdfSubmissionsSql = "
         ps.submission_status,
         ps.submission_timestamp,
         ps.version_number,
+        ps.parent_submission_id,
         CONCAT(u.firstname, ' ', u.lastname) AS student_name,
         u.email AS student_email
     FROM pdf_submissions ps
     JOIN users u ON u.id = ps.student_id
     WHERE ps.adviser_id = ?
+    AND NOT EXISTS (
+        SELECT 1 FROM pdf_submissions child
+        WHERE child.parent_submission_id = ps.submission_id
+    )
     ORDER BY ps.submission_timestamp DESC
 ";
 $pdfSubmissionsStmt = $conn->prepare($pdfSubmissionsSql);

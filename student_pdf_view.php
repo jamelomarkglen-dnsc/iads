@@ -58,6 +58,9 @@ if ($submission['student_id'] != $_SESSION['user_id']) {
 // =====================================================
 $annotations = fetch_submission_annotations($conn, $submission_id);
 $stats = get_annotation_statistics($conn, $submission_id);
+
+// Get version chain information
+$version_info = get_version_chain_info($conn, $submission_id);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -207,6 +210,74 @@ $stats = get_annotation_statistics($conn, $submission_id);
                 padding: 10px;
             }
         }
+        
+        /* Version Navigation Styles */
+        .version-navigation {
+            background: linear-gradient(135deg, #16562c 0%, #0c331a 100%);
+            border-radius: 12px;
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            flex-wrap: wrap;
+            box-shadow: 0 4px 12px rgba(22, 86, 44, 0.15);
+        }
+        
+        .version-navigation .version-info {
+            color: white;
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .version-navigation .badge {
+            font-size: 0.85rem;
+            padding: 4px 10px;
+        }
+        
+        .version-navigation .btn {
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .version-navigation .btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+        }
+        
+        .version-navigation .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        
+        .version-navigation .btn-success {
+            background: #28a745;
+            border-color: #28a745;
+        }
+        
+        .version-navigation .btn-success:hover {
+            background: #218838;
+            border-color: #1e7e34;
+        }
+        
+        @media (max-width: 768px) {
+            .version-navigation {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .version-navigation .version-info {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
@@ -233,6 +304,45 @@ $stats = get_annotation_statistics($conn, $submission_id);
                     </div>
                 </div>
             </div>
+
+            <!-- Version Navigation -->
+            <?php if ($version_info && $version_info['total_versions'] > 1): ?>
+            <div class="version-navigation">
+                <a href="<?php echo $version_info['has_previous'] ? 'student_pdf_view.php?submission_id=' . $version_info['previous_id'] : '#'; ?>"
+                   class="btn <?php echo $version_info['has_previous'] ? '' : 'disabled'; ?>"
+                   <?php echo $version_info['has_previous'] ? '' : 'onclick="return false;"'; ?>>
+                    <i class="bi bi-arrow-left"></i> Previous Version
+                </a>
+                
+                <div class="version-info">
+                    <span>Version <?php echo $version_info['current_version']; ?> of <?php echo $version_info['total_versions']; ?></span>
+                    <?php if (!$version_info['is_latest']): ?>
+                        <span class="badge bg-warning text-dark">
+                            <i class="bi bi-exclamation-triangle"></i> Viewing Old Version
+                        </span>
+                    <?php else: ?>
+                        <span class="badge bg-success">
+                            <i class="bi bi-check-circle"></i> Latest Version
+                        </span>
+                    <?php endif; ?>
+                </div>
+                
+                <div class="d-flex gap-2">
+                    <a href="<?php echo $version_info['has_next'] ? 'student_pdf_view.php?submission_id=' . $version_info['next_id'] : '#'; ?>"
+                       class="btn <?php echo $version_info['has_next'] ? '' : 'disabled'; ?>"
+                       <?php echo $version_info['has_next'] ? '' : 'onclick="return false;"'; ?>>
+                        Next Version <i class="bi bi-arrow-right"></i>
+                    </a>
+                    
+                    <?php if (!$version_info['is_latest']): ?>
+                        <a href="student_pdf_view.php?submission_id=<?php echo $version_info['latest_id']; ?>"
+                           class="btn btn-success">
+                            <i class="bi bi-skip-end-fill"></i> Jump to Latest
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <!-- Submission Info Card -->
             <div class="card mb-4">
@@ -384,34 +494,92 @@ $stats = get_annotation_statistics($conn, $submission_id);
         document.getElementById('zoomOutBtn').addEventListener('click', () => pdfViewer.zoomOut());
         document.getElementById('resetZoomBtn').addEventListener('click', () => pdfViewer.resetZoom());
         
-        // Revision upload handler
+        // Revision upload handler with verbose logging
         document.getElementById('revisionUploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
+            console.log('=== REVISION UPLOAD DEBUG START ===');
+            
+            const fileInput = document.getElementById('revisionFile');
+            const file = fileInput.files[0];
+            
+            // Log file details
+            console.log('File selected:', {
+                name: file?.name,
+                size: file?.size,
+                type: file?.type
+            });
+            
             const formData = new FormData();
             formData.append('action', 'upload_revision');
-            formData.append('pdf_file', document.getElementById('revisionFile').files[0]);
+            formData.append('pdf_file', file);
             formData.append('parent_submission_id', <?php echo $submission_id; ?>);
             formData.append('adviser_id', <?php echo $submission['adviser_id']; ?>);
             
+            // Log FormData contents
+            console.log('FormData contents:');
+            for (let [key, value] of formData.entries()) {
+                if (value instanceof File) {
+                    console.log(`  ${key}:`, value.name, `(${value.size} bytes)`);
+                } else {
+                    console.log(`  ${key}:`, value);
+                }
+            }
+            
             try {
+                console.log('Sending request to pdf_upload_handler.php...');
+                
                 const response = await fetch('pdf_upload_handler.php', {
                     method: 'POST',
                     body: formData
                 });
                 
-                const result = await response.json();
+                console.log('Response received:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: {
+                        contentType: response.headers.get('content-type'),
+                        location: response.headers.get('location')
+                    },
+                    url: response.url,
+                    redirected: response.redirected
+                });
+                
+                // Get response text first to see what we actually received
+                const responseText = await response.text();
+                console.log('Response text:', responseText);
+                
+                // Try to parse as JSON
+                let result;
+                try {
+                    result = JSON.parse(responseText);
+                    console.log('Parsed JSON result:', result);
+                } catch (parseError) {
+                    console.error('JSON parse error:', parseError);
+                    console.log('Response was not valid JSON. Raw response:', responseText.substring(0, 500));
+                    alert('Error: Server returned invalid response. Check console for details.');
+                    console.log('=== REVISION UPLOAD DEBUG END ===');
+                    return;
+                }
                 
                 if (result.success) {
-                    alert('Revised PDF uploaded successfully!');
-                    location.reload();
+                    console.log('Upload successful!');
+                    console.log('New submission ID:', result.submission_id);
+                    console.log('New version:', result.version);
+                    alert('Revised PDF uploaded successfully! Redirecting to new version...');
+                    // Redirect to the NEW version instead of reloading current page
+                    window.location.href = 'student_pdf_view.php?submission_id=' + result.submission_id;
                 } else {
-                    alert('Error: ' + (result.error || 'Unknown error'));
+                    console.error('Upload failed:', result.error || result.errors);
+                    alert('Error: ' + (result.error || JSON.stringify(result.errors) || 'Unknown error'));
                 }
             } catch (error) {
-                console.error('Error:', error);
-                alert('Error uploading revised PDF');
+                console.error('Fetch error:', error);
+                console.error('Error stack:', error.stack);
+                alert('Error uploading revised PDF: ' + error.message + '\nCheck console for details.');
             }
+            
+            console.log('=== REVISION UPLOAD DEBUG END ===');
         });
     </script>
 </body>

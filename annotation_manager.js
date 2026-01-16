@@ -514,9 +514,14 @@ class AnnotationManager {
         // Header
         const header = document.createElement('div');
         header.className = 'comment-header';
+        
+        // Check if this annotation is by current user
+        const isOwnAnnotation = annotation.adviser_id === this.userId;
+        const youBadge = isOwnAnnotation ? '<span class="you-badge">You</span>' : '';
+        
         header.innerHTML = `
             <div>
-                <div class="comment-author">${annotation.adviser_name}</div>
+                <div class="comment-author">${annotation.adviser_name} ${youBadge}</div>
                 <div class="comment-time">${this.formatTime(annotation.creation_timestamp)}</div>
             </div>
             <div class="comment-type-badge ${annotation.annotation_type}">${this.getTypeLabel(annotation.annotation_type)}</div>
@@ -544,9 +549,30 @@ class AnnotationManager {
             
             annotation.replies.forEach(reply => {
                 const replyItem = document.createElement('div');
-                replyItem.className = 'reply-item';
+                
+                // Determine if this reply is from current user
+                const isOwnReply = reply.user_id === this.userId;
+                
+                // Determine reply role and add appropriate classes
+                const replyRole = reply.reply_user_role || 'student';
+                const isAdviserReply = replyRole === 'adviser';
+                
+                // Add classes based on ownership and role
+                let replyClasses = 'reply-item';
+                if (isOwnReply) {
+                    replyClasses += ' reply-own';
+                } else {
+                    replyClasses += ' reply-other';
+                }
+                replyClasses += isAdviserReply ? ' reply-adviser' : ' reply-student';
+                
+                replyItem.className = replyClasses;
+                
+                // Add "You" badge for own replies
+                const youBadge = isOwnReply ? '<span class="you-badge-small">You</span>' : '';
+                
                 replyItem.innerHTML = `
-                    <div class="reply-author">${reply.user_name}</div>
+                    <div class="reply-author">${reply.user_name} ${youBadge}</div>
                     <div class="reply-content">${reply.reply_content}</div>
                     <div class="reply-time">${this.formatTime(reply.reply_timestamp)}</div>
                 `;
@@ -598,13 +624,64 @@ class AnnotationManager {
     }
     
     /**
-     * Show reply dialog
+     * Show inline reply form
      */
     showReplyDialog(annotationId) {
-        const replyContent = prompt('Enter your reply:');
-        if (replyContent) {
-            this.addReply(annotationId, replyContent);
+        // Find the comment item
+        const commentItem = document.querySelector(`.comment-item[data-annotation-id="${annotationId}"]`);
+        if (!commentItem) return;
+        
+        // Check if reply form already exists
+        if (commentItem.querySelector('.reply-form')) {
+            return; // Already showing reply form
         }
+        
+        // Create reply form
+        const replyForm = document.createElement('div');
+        replyForm.className = 'reply-form';
+        replyForm.innerHTML = `
+            <textarea class="reply-textarea" placeholder="Write your reply..." rows="3"></textarea>
+            <div class="reply-form-actions">
+                <button class="reply-submit-btn">Submit</button>
+                <button class="reply-cancel-btn">Cancel</button>
+            </div>
+        `;
+        
+        // Insert before actions div
+        const actionsDiv = commentItem.querySelector('.comment-actions');
+        if (actionsDiv) {
+            actionsDiv.parentNode.insertBefore(replyForm, actionsDiv);
+        } else {
+            commentItem.appendChild(replyForm);
+        }
+        
+        // Focus textarea
+        const textarea = replyForm.querySelector('.reply-textarea');
+        textarea.focus();
+        
+        // Handle submit
+        replyForm.querySelector('.reply-submit-btn').addEventListener('click', () => {
+            const replyContent = textarea.value.trim();
+            if (replyContent) {
+                this.addReply(annotationId, replyContent);
+                replyForm.remove();
+            } else {
+                textarea.focus();
+            }
+        });
+        
+        // Handle cancel
+        replyForm.querySelector('.reply-cancel-btn').addEventListener('click', () => {
+            replyForm.remove();
+        });
+        
+        // Handle Enter key (Ctrl+Enter to submit)
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                e.preventDefault();
+                replyForm.querySelector('.reply-submit-btn').click();
+            }
+        });
     }
     
     /**
