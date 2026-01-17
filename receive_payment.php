@@ -186,6 +186,11 @@ foreach ($payments as $payment) {
                                     </td>
                                     <td><?= date('M d, Y h:i A', strtotime($payment['created_at'])); ?></td>
                                     <td>
+                                        <?php
+                                            $statusActionClass = $payment['status'] === 'payment_declined'
+                                                ? 'btn-danger'
+                                                : ($payment['status'] === 'payment_accepted' ? 'btn-success' : 'btn-warning text-dark');
+                                        ?>
                                         <form method="post" class="d-flex flex-column flex-lg-row gap-2 align-items-start">
                                             <input type="hidden" name="payment_id" value="<?= $payment['id']; ?>">
                                             <select name="status" class="form-select form-select-sm">
@@ -194,7 +199,7 @@ foreach ($payments as $payment) {
                                                 <option value="payment_declined" <?= $payment['status']==='payment_declined' ? 'selected' : ''; ?>>Declined</option>
                                             </select>
                                             <input type="text" name="remarks" class="form-control form-control-sm" placeholder="Remarks" value="<?= htmlspecialchars($payment['notes']); ?>">
-                                            <button type="submit" class="btn btn-primary btn-sm">Update</button>
+                                            <button type="submit" class="btn btn-sm <?= $statusActionClass; ?>">Update</button>
                                         </form>
                                     </td>
                                 </tr>
@@ -208,5 +213,26 @@ foreach ($payments as $payment) {
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.querySelectorAll('form select[name="status"]').forEach((select) => {
+        const form = select.closest('form');
+        const button = form ? form.querySelector('button[type="submit"]') : null;
+        if (!button) {
+            return;
+        }
+        const updateClass = () => {
+            button.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'text-dark');
+            if (select.value === 'payment_accepted') {
+                button.classList.add('btn-success');
+            } else if (select.value === 'payment_declined') {
+                button.classList.add('btn-danger');
+            } else {
+                button.classList.add('btn-warning', 'text-dark');
+            }
+        };
+        select.addEventListener('change', updateClass);
+        updateClass();
+    });
+</script>
 </body>
 </html>
