@@ -4,7 +4,7 @@
  * Allows advisers to review student PDFs and add annotations
  * 
  * @package IAdS
- * @subpackage PDF Annotation System
+ * @subpackage PDF Annotation Systems
  */
 
 session_start();
