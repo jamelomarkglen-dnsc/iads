@@ -54,6 +54,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['payment_id'])) {
 $query = "
     SELECT p.*, u.email AS student_email
     FROM payment_proofs p
+    JOIN (
+        SELECT user_id, MAX(id) AS latest_id
+        FROM payment_proofs
+        GROUP BY user_id
+    ) latest ON latest.latest_id = p.id
     JOIN users u ON p.user_id = u.id
     ORDER BY p.created_at DESC
 ";

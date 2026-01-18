@@ -36,10 +36,42 @@ if ($role === 'student' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILE
         $target = $uploadDir . $filename;
 
         if (move_uploaded_file($file['tmp_name'], $target)) {
-            $stmt = $conn->prepare("INSERT INTO payment_proofs (user_id, user_email, file_path, reference_number, status, created_at) VALUES (?, ?, ?, ?, 'pending', NOW())");
-            $stmt->bind_param('isss', $userId, $userEmail, $target, $reference);
+            $existingId = null;
+            $existingStmt = $conn->prepare("SELECT id FROM payment_proofs WHERE user_id = ? ORDER BY id DESC LIMIT 1");
+            if ($existingStmt) {
+                $existingStmt->bind_param('i', $userId);
+                $existingStmt->execute();
+                $existingRow = $existingStmt->get_result()->fetch_assoc();
+                $existingStmt->close();
+                $existingId = $existingRow ? (int)$existingRow['id'] : null;
+            }
 
-            if ($stmt->execute()) {
+            if ($existingId) {
+                $stmt = $conn->prepare("
+                    UPDATE payment_proofs
+                    SET user_email = ?,
+                        file_path = ?,
+                        reference_number = ?,
+                        status = 'pending',
+                        notes = NULL,
+                        created_at = NOW(),
+                        updated_at = NOW()
+                    WHERE id = ?
+                ");
+                if ($stmt) {
+                    $stmt->bind_param('sssi', $userEmail, $target, $reference, $existingId);
+                }
+            } else {
+                $stmt = $conn->prepare("
+                    INSERT INTO payment_proofs (user_id, user_email, file_path, reference_number, status, created_at)
+                    VALUES (?, ?, ?, ?, 'pending', NOW())
+                ");
+                if ($stmt) {
+                    $stmt->bind_param('isss', $userId, $userEmail, $target, $reference);
+                }
+            }
+
+            if ($stmt && $stmt->execute()) {
                 $success = 'Payment proof uploaded successfully.';
                 notify_roles(
                     $conn,
@@ -51,7 +83,9 @@ if ($role === 'student' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILE
             } else {
                 $error = 'Failed to save payment info.';
             }
-            $stmt->close();
+            if ($stmt) {
+                $stmt->close();
+            }
         } else {
             $error = 'Failed to move uploaded file.';
         }
@@ -107,10 +141,20 @@ if ($role === 'program_chairperson' && $_SERVER['REQUEST_METHOD'] === 'POST' && 
 // Fetch data
 // ------------------------------------------------------------------
 if ($role === 'student') {
-    $stmt = $conn->prepare("SELECT * FROM payment_proofs WHERE user_id = ? ORDER BY created_at DESC");
+    $stmt = $conn->prepare("SELECT * FROM payment_proofs WHERE user_id = ? ORDER BY id DESC LIMIT 1");
     $stmt->bind_param('i', $userId);
 } else {
-    $stmt = $conn->prepare("SELECT p.*, u.email AS student_email FROM payment_proofs p JOIN users u ON p.user_id = u.id ORDER BY p.created_at DESC");
+    $stmt = $conn->prepare("
+        SELECT p.*, u.email AS student_email
+        FROM payment_proofs p
+        JOIN (
+            SELECT user_id, MAX(id) AS latest_id
+            FROM payment_proofs
+            GROUP BY user_id
+        ) latest ON latest.latest_id = p.id
+        JOIN users u ON p.user_id = u.id
+        ORDER BY p.created_at DESC
+    ");
 }
 $stmt->execute();
 $result = $stmt->get_result();
