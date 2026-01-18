@@ -141,7 +141,7 @@ if ($role === 'program_chairperson' && $_SERVER['REQUEST_METHOD'] === 'POST' && 
 // Fetch data
 // ------------------------------------------------------------------
 if ($role === 'student') {
-    $stmt = $conn->prepare("SELECT * FROM payment_proofs WHERE user_id = ? ORDER BY id DESC LIMIT 1");
+    $stmt = $conn->prepare("SELECT * FROM payment_proofs WHERE user_id = ? ORDER BY updated_at DESC, id DESC LIMIT 1");
     $stmt->bind_param('i', $userId);
 } else {
     $stmt = $conn->prepare("
