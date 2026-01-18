@@ -161,10 +161,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_overall_route_sl
                 $reviewSuccess = 'Overall route slip decision saved successfully.';
                 $submission = fetchFinalPaperSubmission($conn, $submissionId);
 
+                if ($overallDecision === 'Approved') {
+                    $statusStmt = $conn->prepare("
+                        UPDATE final_paper_submissions
+                        SET status = 'Approved'
+                        WHERE id = ?
+                    ");
+                    if ($statusStmt) {
+                        $statusStmt->bind_param('i', $submissionId);
+                        $statusStmt->execute();
+                        $statusStmt->close();
+                        $submission['status'] = 'Approved';
+                    }
+                }
+
                 $studentId = (int)($submission['student_id'] ?? 0);
                 $studentName = $submission['student_name'] ?? 'Student';
                 $chairName = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? ''));
                 $chairName = $chairName !== '' ? $chairName : 'Committee Chairperson';
+                $programChairId = 0;
+                $programChairStmt = $conn->prepare("
+                    SELECT u.id
+                    FROM users u
+                    JOIN users s ON s.program = u.program
+                    WHERE s.id = ? AND u.role = 'program_chairperson'
+                    LIMIT 1
+                ");
+                if ($programChairStmt) {
+                    $programChairStmt->bind_param('i', $studentId);
+                    $programChairStmt->execute();
+                    $chairResult = $programChairStmt->get_result();
+                    $chairRow = $chairResult ? $chairResult->fetch_assoc() : null;
+                    if ($chairResult) {
+                        $chairResult->free();
+                    }
+                    $programChairStmt->close();
+                    $programChairId = (int)($chairRow['id'] ?? 0);
+                }
 
                 // Notify student
                 notify_user(
@@ -197,25 +230,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_overall_route_sl
                     }
                     
                     if (!$noticeExists) {
-                        // Get program chairperson for this student's program
-                        $programChairStmt = $conn->prepare("
-                            SELECT u.id, u.program
-                            FROM users u
-                            JOIN users s ON s.program = u.program
-                            WHERE s.id = ? AND u.role = 'program_chairperson'
-                            LIMIT 1
-                        ");
-                        $programChairId = 0;
-                        if ($programChairStmt) {
-                            $programChairStmt->bind_param('i', $studentId);
-                            $programChairStmt->execute();
-                            $chairResult = $programChairStmt->get_result();
-                            $chairRow = $chairResult ? $chairResult->fetch_assoc() : null;
-                            if ($chairResult) $chairResult->free();
-                            $programChairStmt->close();
-                            $programChairId = (int)($chairRow['id'] ?? 0);
-                        }
-                        
                         if ($programChairId > 0) {
                             $noticeDate = date('Y-m-d');
                             $startDate = date('Y-m-d');
@@ -262,19 +276,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_overall_route_sl
                 }
 
                 // Notify program chairperson
-                $noticeLink = $overallDecision === 'Approved' ? 'notice_to_commence.php' : 'submit_final_paper.php';
+                $noticeLink = $overallDecision === 'Approved'
+                    ? "notice_to_commence.php?submission_id={$submissionId}"
+                    : 'submit_final_paper.php';
                 $noticeMsg = $overallDecision === 'Approved'
                     ? "Committee Chairperson has approved the route slip for {$studentName}. A Notice to Commence has been prepared for your review and submission to the Dean."
                     : "Committee Chairperson has made the overall route slip decision for {$studentName}. Decision: {$overallDecision}.";
-                
-                notify_role(
-                    $conn,
-                    'program_chairperson',
-                    'Route slip overall decision made',
-                    $noticeMsg,
-                    $noticeLink,
-                    false
-                );
+
+                if ($programChairId > 0) {
+                    notify_user(
+                        $conn,
+                        $programChairId,
+                        'Route slip overall decision made',
+                        $noticeMsg,
+                        $noticeLink,
+                        false
+                    );
+                } else {
+                    notify_role(
+                        $conn,
+                        'program_chairperson',
+                        'Route slip overall decision made',
+                        $noticeMsg,
+                        $noticeLink,
+                        false
+                    );
+                }
 
                 // Notify dean
                 notify_role(

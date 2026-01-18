@@ -20,6 +20,7 @@ $scope = get_program_chair_scope($conn, $chairId);
 [$scopeClause, $scopeTypes, $scopeParams] = build_scope_condition($scope, 'u');
 
 $alert = null;
+$prefillSubmissionId = (int)($_GET['submission_id'] ?? 0);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_notice_commence'])) {
     $submissionId = (int)($_POST['submission_id'] ?? 0);
@@ -263,10 +264,12 @@ include 'sidebar.php';
                                         $disabled = $status !== '' ? 'disabled' : '';
                                         $suffix = $status !== '' ? " ({$status})" : '';
                                         $studentName = trim(($submission['firstname'] ?? '') . ' ' . ($submission['lastname'] ?? ''));
+                                        $selected = $prefillSubmissionId > 0 && $submissionId === $prefillSubmissionId ? 'selected' : '';
                                         ?>
                                         <option
                                             value="<?= $submissionId; ?>"
                                             <?= $disabled; ?>
+                                            <?= $selected; ?>
                                             data-student-id="<?= (int)($submission['student_id'] ?? 0); ?>"
                                             data-student-name="<?= htmlspecialchars($studentName, ENT_QUOTES); ?>"
                                             data-program="<?= htmlspecialchars($submission['program'] ?? '', ENT_QUOTES); ?>"
