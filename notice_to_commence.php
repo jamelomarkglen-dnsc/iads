@@ -17,7 +17,7 @@ ensureFinalPaperTables($conn);
 ensureNoticeCommenceTable($conn);
 
 $scope = get_program_chair_scope($conn, $chairId);
-[$scopeClause, $scopeTypes, $scopeParams] = build_scope_condition($scope, 'u');
+[$scopeClause, $scopeTypes, $scopeParams] = build_scope_condition_any($scope, 'u');
 
 $alert = null;
 $prefillSubmissionId = (int)($_GET['submission_id'] ?? 0);
@@ -58,7 +58,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_notice_commenc
             $submission = $lookupResult ? $lookupResult->fetch_assoc() : null;
             $lookupStmt->close();
         }
-        if (!$submission || ($submission['status'] ?? '') !== 'Approved') {
+        $submissionStatus = trim((string)($submission['status'] ?? ''));
+        $routeSlipDecision = trim((string)($submission['route_slip_overall_decision'] ?? ''));
+        if (
+            !$submission
+            || ($submissionStatus !== 'Approved' && $routeSlipDecision !== 'Approved')
+        ) {
             $errors[] = 'Only approved outline defense submissions can be issued a notice to commence.';
         }
     }
@@ -161,7 +166,7 @@ $submissionSql = "
            u.firstname, u.lastname, u.program
     FROM final_paper_submissions fps
     JOIN users u ON u.id = fps.student_id
-    WHERE fps.status = 'Approved'
+    WHERE (fps.status = 'Approved' OR fps.route_slip_overall_decision = 'Approved')
 ";
 if ($scopeClause !== '') {
     $submissionSql .= " AND {$scopeClause}";
