@@ -309,14 +309,14 @@ if ($role === 'adviser' || $role === 'faculty') {
 $reviewerDashboardSlug = basename($reviewerDashboardLink);
 $reviewerInboxAllowed = in_array($role, ['committee_chair', 'committee_chairperson'], true);
 
-$facultyMenuPages = ['create_faculty.php', 'assign_adviser.php', 'reviewer_pipeline.php', 'assign_panel.php', 'faculty_reviewer_feedback.php', 'defense_committee.php'];
+$facultyMenuPages = ['create_faculty.php', 'assign_adviser.php', 'reviewer_pipeline.php', 'assign_panel.php', 'faculty_reviewer_feedback.php', 'defense_committee.php', 'program_chair_final_endorsement.php'];
 $studentMenuPages = ['create_student.php', 'student_directory.php', 'submissions.php', 'status_logs.php', 'notice_to_commence.php'];
 $recordsMenuPages = ['archive_manager.php', 'receive_payment.php'];
 $facultySectionOpen = in_array($currentPage, $facultyMenuPages, true);
 $studentSectionOpen = in_array($currentPage, $studentMenuPages, true);
 $recordsSectionOpen = in_array($currentPage, $recordsMenuPages, true);
 $adviserStudentPages = ['adviser_directory.php', 'advisory.php', 'final_paper_inbox.php'];
-$adviserDefensePages = ['my_assigned_defense.php', 'adviser_route_slip.php', 'route_slip_inbox.php'];
+$adviserDefensePages = ['my_assigned_defense.php', 'adviser_route_slip.php', 'route_slip_inbox.php', 'adviser_final_endorsement.php'];
 $adviserStudentOpen = in_array($currentPage, $adviserStudentPages, true);
 $adviserDefenseOpen = in_array($currentPage, $adviserDefensePages, true);
 $rolesWithWorkspaceLinks = ['program_chairperson', 'student', 'dean', 'adviser', 'committee_chair', 'committee_chairperson', 'panel'];
@@ -426,6 +426,9 @@ if ($userLastLogin !== '') {
                             </a>
                             <a href="faculty_reviewer_feedback.php" class="nav-sub-link <?php echo ($currentPage == 'faculty_reviewer_feedback.php') ? 'active' : ''; ?>">
                                 Reviewer Feedback
+                            </a>
+                            <a href="program_chair_final_endorsement.php" class="nav-sub-link <?php echo ($currentPage == 'program_chair_final_endorsement.php') ? 'active' : ''; ?>">
+                                Final Defense Endorsements
                             </a>
                             <a href="assign_panel.php" class="nav-sub-link <?php echo ($currentPage == 'assign_panel.php') ? 'active' : ''; ?>">
                                 Panel Assignment
@@ -541,6 +544,9 @@ if ($userLastLogin !== '') {
                             </a>
                             <a href="adviser_route_slip.php" class="nav-sub-link <?php echo ($currentPage == 'adviser_route_slip.php') ? 'active' : ''; ?>">
                                 Route Slip Issuance
+                            </a>
+                            <a href="adviser_final_endorsement.php" class="nav-sub-link <?php echo ($currentPage == 'adviser_final_endorsement.php') ? 'active' : ''; ?>">
+                                Final Defense Endorsement
                             </a>
                         </div>
                     </div>
@@ -1450,4 +1456,3 @@ if ($userLastLogin !== '') {
         });
     });
 </script>
-
