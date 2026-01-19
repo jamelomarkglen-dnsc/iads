@@ -19,6 +19,17 @@ $oldInput = [
     'username' => '',
     'specialization' => '',
 ];
+$programOptions = [
+    'PHDEM' => 'Doctor of Philosophy in Educational Management (PHDEM)',
+    'MAEM' => 'Master of Arts in Educational Management (MAEM)',
+    'MAED-ELST' => 'Master of Education Major in English Language Studies and Teaching (MAED-ELST)',
+    'MST-GENSCI' => 'Master in Science Teaching Major in General Science (MST-GENSCI)',
+    'MST-MATH' => 'Master in Science Teaching Major in Mathematics (MST-MATH)',
+    'MFM-AT' => 'Master in Fisheries Management Major in Aquaculture Technology (MFM-AT)',
+    'MFM-FP' => 'Master in Fisheries Management Major in Fish Processing (MFM-FP)',
+    'MSMB' => 'Master of Science in Marine Biodiversity (MSMB)',
+    'MIT' => 'Master in Information Technology (MIT)',
+];
 
 function split_name($name)
 {
@@ -53,6 +64,8 @@ if (isset($_POST['create'])) {
         $message = "<div class='alert alert-danger'>Contact number should contain 10-15 digits.</div>";
     } elseif (!filter_var($oldInput['email'], FILTER_VALIDATE_EMAIL)) {
         $message = "<div class='alert alert-danger'>Please enter a valid email address.</div>";
+    } elseif ($oldInput['department'] === '') {
+        $message = "<div class='alert alert-danger'>Please select a program.</div>";
     } else {
         $email = $oldInput['email'];
         $username = $oldInput['username'];
@@ -253,9 +266,14 @@ if ($countResult) {
                 </div>
                 <div class="mt-4">
                     <label class="form-label floating-label">Program</label>
-                    <input type="text" name="department" class="form-control"
-                           placeholder="e.g., BS Computer Science"
-                           value="<?php echo htmlspecialchars($oldInput['department'], ENT_QUOTES); ?>" required>
+                    <select name="department" class="form-select" required>
+                        <option value="" disabled <?php echo $oldInput['department'] === '' ? 'selected' : ''; ?>>Select Program</option>
+                        <?php foreach ($programOptions as $code => $label): ?>
+                            <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['department'] === $code ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($label); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
                 <div class="mt-4">
                     <label class="form-label floating-label">Institute</label>

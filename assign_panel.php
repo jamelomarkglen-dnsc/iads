@@ -23,7 +23,9 @@ if (!isset($_SESSION['user_id']) || $sessionRole !== 'program_chairperson') {
 
 $programChairId = (int)($_SESSION['user_id'] ?? 0);
 $chairScope = get_program_chair_scope($conn, $programChairId);
-[$studentScopeClause, $studentScopeTypes, $studentScopeParams] = build_scope_condition($chairScope, 'u');
+$studentScopeClause = '';
+$studentScopeTypes = '';
+$studentScopeParams = [];
 
 function respond_json(string $message): void
 {
@@ -329,9 +331,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'commi
     if ($studentId <= 0) {
         respond_json_payload(['found' => false, 'message' => 'No student selected.']);
     }
-    if (!student_matches_scope($conn, $studentId, $chairScope)) {
-        respond_json_payload(['found' => false, 'message' => 'Student not in scope.']);
-    }
 
     $tableCheck = $conn->query("SHOW TABLES LIKE 'defense_committee_requests'");
     $hasTable = $tableCheck && $tableCheck->num_rows > 0;
@@ -354,7 +353,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'commi
             CONCAT(COALESCE(panel_one.firstname, ''), ' ', COALESCE(panel_one.lastname, '')) AS panel_member_one_name,
             CONCAT(COALESCE(panel_two.firstname, ''), ' ', COALESCE(panel_two.lastname, '')) AS panel_member_two_name
         FROM defense_committee_requests r
-        JOIN defense_schedules ds ON ds.id = r.defense_id
+        LEFT JOIN defense_schedules ds ON ds.id = r.defense_id
         LEFT JOIN users adviser ON adviser.id = r.adviser_id
         LEFT JOIN users chair ON chair.id = r.chair_id
         LEFT JOIN users panel_one ON panel_one.id = r.panel_member_one_id

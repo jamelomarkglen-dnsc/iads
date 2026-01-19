@@ -97,6 +97,11 @@ $hasProgramColumn = ensureColumn($conn, 'users', 'program', 'VARCHAR(255) DEFAUL
 $hasDepartmentColumn = ensureColumn($conn, 'users', 'department', 'VARCHAR(255) DEFAULT NULL');
 $hasCollegeColumn = ensureColumn($conn, 'users', 'college', 'VARCHAR(255) DEFAULT NULL');
 $hasYearLevelColumn = ensureColumn($conn, 'users', 'year_level', "VARCHAR(50) DEFAULT NULL");
+$chairScopeDefaults = get_program_chair_scope($conn, (int)($_SESSION['user_id'] ?? 0));
+$scopedProgramDefault = $hasProgramColumn ? trim((string)($chairScopeDefaults['program'] ?? '')) : '';
+$scopedDepartmentDefault = $hasDepartmentColumn ? trim((string)($chairScopeDefaults['department'] ?? '')) : '';
+$scopedCollegeDefault = $hasCollegeColumn ? trim((string)($chairScopeDefaults['college'] ?? '')) : '';
+$programRequired = $hasProgramColumn && ($scopedProgramDefault !== '' || ($scopedDepartmentDefault === '' && $scopedCollegeDefault === ''));
 
 if (isset($_POST['create_student'])) {
     foreach ($oldInput as $key => $value) {
@@ -106,9 +111,8 @@ if (isset($_POST['create_student'])) {
     $passwordPlain = trim($_POST['password'] ?? '');
     $confirmPassword = trim($_POST['confirm_password'] ?? '');
     $role = 'student';
-    $chairScope = get_program_chair_scope($conn, (int)$_SESSION['user_id']);
-    $scopedDepartment = $hasDepartmentColumn ? trim((string)($chairScope['department'] ?? '')) : '';
-    $scopedCollege = $hasCollegeColumn ? trim((string)($chairScope['college'] ?? '')) : '';
+    $scopedDepartment = $scopedDepartmentDefault;
+    $scopedCollege = $scopedCollegeDefault;
 
     if ($passwordPlain !== $confirmPassword) {
         $error = "Passwords do not match.";
@@ -118,7 +122,7 @@ if (isset($_POST['create_student'])) {
         $error = "Please provide a valid email address.";
     } elseif ($hasStudentIdColumn && !preg_match('/^[0-9]{2,}$/', $oldInput['student_id'])) {
         $error = "Student ID should contain digits only.";
-    } elseif ($hasProgramColumn && $oldInput['program'] === '') {
+    } elseif ($programRequired && $oldInput['program'] === '') {
         $error = "Please select a program.";
     } elseif ($hasYearLevelColumn && $oldInput['year_level'] === '') {
         $error = "Please select a year level.";
@@ -252,9 +256,15 @@ if ($hasProgramColumn) {
 }
 
 $programOptions = $hasProgramColumn ? [
+    'PHDEM' => 'Doctor of Philosophy in Educational Management (PHDEM)',
+    'MAEM' => 'Master of Arts in Educational Management (MAEM)',
+    'MAED-ELST' => 'Master of Education Major in English Language Studies and Teaching (MAED-ELST)',
+    'MST-GENSCI' => 'Master in Science Teaching Major in General Science (MST-GENSCI)',
+    'MST-MATH' => 'Master in Science Teaching Major in Mathematics (MST-MATH)',
+    'MFM-AT' => 'Master in Fisheries Management Major in Aquaculture Technology (MFM-AT)',
+    'MFM-FP' => 'Master in Fisheries Management Major in Fish Processing (MFM-FP)',
+    'MSMB' => 'Master of Science in Marine Biodiversity (MSMB)',
     'MIT' => 'Master in Information Technology (MIT)',
-    'MAEd-ELST' => 'Master of Arts in Education - English Language Studies Teaching (MAEd-ELST)',
-    'MST-BIOLOGY' => 'Master of Science Teaching - Biology (MST-BIOLOGY)',
 ] : [];
 
 $yearOptions = $hasYearLevelColumn ? [
@@ -487,7 +497,7 @@ $yearOptions = $hasYearLevelColumn ? [
                         <?php if ($hasProgramColumn): ?>
                             <div class="<?php echo $hasYearLevelColumn ? 'col-md-6' : 'col-12'; ?>">
                                 <div class="form-floating">
-                                    <select name="program" id="program" class="form-select" required>
+                                    <select name="program" id="program" class="form-select" <?php echo $programRequired ? 'required' : ''; ?>>
                                         <option value="" disabled <?php echo $oldInput['program'] === '' ? 'selected' : ''; ?>>Select Program</option>
                                         <?php foreach ($programOptions as $code => $label): ?>
                                             <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['program'] === $code ? 'selected' : ''; ?>>
