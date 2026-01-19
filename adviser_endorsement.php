@@ -16,6 +16,85 @@ $advisorName = trim(
 
 ensureEndorsementRequestsTable($conn);
 
+function resolve_adviser_signature_path(int $userId): string
+{
+    if ($userId <= 0) {
+        return '';
+    }
+
+    $base = 'uploads/signatures/user_' . $userId;
+    foreach (['png', 'jpg', 'jpeg'] as $ext) {
+        $path = $base . '.' . $ext;
+        if (is_file($path)) {
+            return $path;
+        }
+    }
+
+    return '';
+}
+
+function save_adviser_signature_upload(array $file, int $userId, ?string &$error = null): string
+{
+    $error = '';
+    if ($userId <= 0) {
+        $error = 'Invalid user for signature upload.';
+        return '';
+    }
+
+    $uploadError = $file['error'] ?? UPLOAD_ERR_NO_FILE;
+    if ($uploadError === UPLOAD_ERR_NO_FILE) {
+        return '';
+    }
+    if ($uploadError !== UPLOAD_ERR_OK) {
+        $error = 'Signature upload failed.';
+        return '';
+    }
+
+    $tmpName = $file['tmp_name'] ?? '';
+    if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+        $error = 'Invalid signature upload.';
+        return '';
+    }
+
+    $imageInfo = getimagesize($tmpName);
+    if (!$imageInfo || empty($imageInfo['mime'])) {
+        $error = 'Signature must be a PNG or JPG image.';
+        return '';
+    }
+
+    $mime = $imageInfo['mime'];
+    $extMap = [
+        'image/png' => 'png',
+        'image/jpeg' => 'jpg',
+    ];
+    if (!isset($extMap[$mime])) {
+        $error = 'Signature must be a PNG or JPG image.';
+        return '';
+    }
+
+    $dir = 'uploads/signatures/';
+    if (!is_dir($dir) && !mkdir($dir, 0777, true) && !is_dir($dir)) {
+        $error = 'Unable to create signature folder.';
+        return '';
+    }
+
+    $base = $dir . 'user_' . $userId . '.';
+    foreach (['png', 'jpg', 'jpeg'] as $oldExt) {
+        $oldPath = $base . $oldExt;
+        if (is_file($oldPath) && $oldExt !== $extMap[$mime]) {
+            unlink($oldPath);
+        }
+    }
+
+    $path = $base . $extMap[$mime];
+    if (!move_uploaded_file($tmpName, $path)) {
+        $error = 'Unable to save signature image.';
+        return '';
+    }
+
+    return $path;
+}
+
 function adviserUsersColumnExists(mysqli $conn, string $column): bool
 {
     $column = $conn->real_escape_string($column);
@@ -131,6 +210,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_endorsement'])
     $endorsementBody = strip_tags($endorsementBody, '<u><br>');
 
     $errors = [];
+    $signatureError = '';
+    $uploadedSignaturePath = '';
+    if (isset($_FILES['adviser_signature'])) {
+        $uploadedSignaturePath = save_adviser_signature_upload($_FILES['adviser_signature'], $advisorId, $signatureError);
+        if ($signatureError !== '') {
+            $errors[] = $signatureError;
+        }
+    }
     if ($studentId <= 0) {
         $errors[] = 'Please select a student.';
     }
@@ -169,6 +256,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_endorsement'])
         }
     }
 
+    if (!$errors && $uploadedSignaturePath !== '') {
+        $safeSignaturePath = htmlspecialchars($uploadedSignaturePath, ENT_QUOTES);
+        $signatureBlock = '<br><u style="display:inline-block;width:200px;height:60px;'
+            . 'border-bottom:1px solid #1d3522;'
+            . 'background:url(\'' . $safeSignaturePath . '\') center/contain no-repeat;">&nbsp;</u><br>';
+        $marker = 'Adviser:';
+        $pos = stripos($endorsementBody, $marker);
+        if ($pos !== false) {
+            $endorsementBody = substr_replace($endorsementBody, $signatureBlock, $pos, 0);
+        } else {
+            $endorsementBody .= $signatureBlock;
+        }
+    }
+
     if ($errors) {
         $alert = ['type' => 'danger', 'message' => implode(' ', $errors)];
     } else {
@@ -201,6 +302,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_endorsement'])
     }
 }
 
+$signaturePath = resolve_adviser_signature_path($advisorId);
 $endorsements = [];
 $endorsementStmt = $conn->prepare("
     SELECT er.id, er.title, er.status, er.created_at, er.verified_at,
@@ -266,7 +368,7 @@ include 'sidebar.php';
                     <div class="card-body">
                         <h5 class="mb-2">Send Endorsement</h5>
                         <p class="text-muted small mb-3">Select an advisee and confirm the auto-generated endorsement letter.</p>
-                        <form method="POST" id="endorsementForm">
+                        <form method="POST" id="endorsementForm" enctype="multipart/form-data">
                             <input type="hidden" name="submit_endorsement" value="1">
                             <div class="mb-3">
                                 <label class="form-label text-muted small">Student</label>
@@ -317,6 +419,15 @@ include 'sidebar.php';
                                 ></div>
                                 <input type="hidden" name="endorsement_body" id="endorsementBodyInput">
                                 <div class="form-text">Text with underline will appear exactly as shown here.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label text-muted small">Adviser E-Signature (PNG or JPG)</label>
+                                <input type="file" name="adviser_signature" class="form-control" accept="image/png,image/jpeg">
+                                <div class="form-text">Upload to include your signature in this endorsement.</div>
+                                <?php if ($signaturePath !== ''): ?>
+                                    <div class="form-text">Signature on file:</div>
+                                    <img src="<?php echo htmlspecialchars($signaturePath); ?>" alt="Adviser e-signature" class="mt-2" style="max-height: 70px; max-width: 180px; object-fit: contain;">
+                                <?php endif; ?>
                             </div>
                             <button type="submit" class="btn btn-success" id="endorsementSubmitBtn">
                                 <i class="bi bi-send me-1"></i> Send Endorsement

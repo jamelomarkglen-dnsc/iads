@@ -1234,8 +1234,24 @@ if ($endorsementStmt) {
                                         <?php endif; ?>
                                         <details class="mt-2">
                                             <summary class="small text-decoration-underline">View endorsement letter</summary>
-                                            <?php $endorsementBody = strip_tags((string)($endorsement['body'] ?? ''), '<u><br>'); ?>
-                                            <div class="mt-2 small"><?php echo str_replace(["\r\n", "\n"], "<br>", $endorsementBody); ?></div>
+                                            <?php
+                                                $endorsementBody = strip_tags((string)($endorsement['body'] ?? ''), '<u><br>');
+                                                $signaturePattern = '/<u(?=[^>]*width\\s*:\\s*200px)(?=[^>]*height\\s*:\\s*60px)(?=[^>]*border-bottom)[^>]*>(?:&nbsp;|\\s)*<\\/u>/i';
+                                                if (preg_match('/<u[^>]*background[^>]*>(?:&nbsp;|\\s)*<\\/u>/i', $endorsementBody)) {
+                                                    $kept = false;
+                                                    $endorsementBody = preg_replace_callback($signaturePattern, function ($match) use (&$kept) {
+                                                        $tag = $match[0];
+                                                        $hasBackground = stripos($tag, 'background') !== false;
+                                                        if ($hasBackground && !$kept) {
+                                                            $kept = true;
+                                                            return $tag;
+                                                        }
+                                                        return '';
+                                                    }, $endorsementBody);
+                                                }
+                                                $endorsementHtml = str_replace(["\r\n", "\n"], "<br>", $endorsementBody);
+                                            ?>
+                                            <div class="mt-2 small"><?php echo $endorsementHtml; ?></div>
                                         </details>
                                         <?php if ($endorsementStatus !== 'Verified'): ?>
                                             <form method="POST" class="mt-3">
