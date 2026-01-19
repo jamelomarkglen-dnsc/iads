@@ -70,6 +70,23 @@ function notice_status_badge(string $status): string
         'Pending' => 'bg-warning-subtle text-warning',
     ][$status] ?? 'bg-secondary-subtle text-secondary';
 }
+
+function resolve_notice_signature_path(?int $userId): string
+{
+    if (!$userId) {
+        return '';
+    }
+
+    $base = 'uploads/signatures/user_' . $userId;
+    foreach (['png', 'jpg', 'jpeg'] as $ext) {
+        $path = $base . '.' . $ext;
+        if (is_file($path)) {
+            return $path;
+        }
+    }
+
+    return '';
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -87,7 +104,12 @@ function notice_status_badge(string $status): string
             #sidebar.collapsed ~ .content { margin-left: 0; }
         }
         .notice-card { border-radius: 18px; border: 1px solid rgba(22, 86, 44, 0.12); box-shadow: 0 18px 40px rgba(15, 61, 31, 0.08); }
-        .notice-body { white-space: pre-wrap; }
+        .notice-body { white-space: pre-wrap; text-align: center; }
+        .signature-grid { margin-top: 24px; }
+        .signature-block { text-align: center; }
+        .signature-image { max-height: 70px; max-width: 180px; object-fit: contain; }
+        .signature-line { width: 220px; margin: 8px auto 6px; border-top: 1px solid #1f2d22; }
+        .signature-placeholder { color: #6c757d; font-size: 0.85rem; min-height: 22px; }
     </style>
 </head>
 <body>
@@ -131,6 +153,10 @@ function notice_status_badge(string $status): string
             $deanApproved = $status === 'Approved';
             $deanName = $notice['dean_name'] ?? 'Dean, Institute of Advanced Studies';
             $deanDisplay = $deanApproved ? $deanName : 'Pending approval';
+            $chairSignaturePath = resolve_notice_signature_path((int)($notice['program_chair_id'] ?? 0));
+            $deanSignaturePath = $deanApproved
+                ? resolve_notice_signature_path((int)($notice['dean_id'] ?? 0))
+                : '';
             ?>
             <div class="card notice-card">
                 <div class="card-body">
@@ -161,16 +187,32 @@ function notice_status_badge(string $status): string
 
                     <div class="notice-body mb-4"><?= nl2br(htmlspecialchars($body)); ?></div>
 
-                    <div class="row">
+                    <div class="row signature-grid">
                         <div class="col-md-6">
                             <div class="text-muted small">Recommending approval:</div>
-                            <div class="fw-semibold mt-2"><?= htmlspecialchars($chairName); ?></div>
-                            <div class="text-muted small"><?= htmlspecialchars($chairTitle); ?></div>
+                            <div class="signature-block mt-2">
+                                <?php if ($chairSignaturePath !== ''): ?>
+                                    <img src="<?= htmlspecialchars($chairSignaturePath); ?>" alt="Program chairperson e-signature" class="signature-image">
+                                <?php else: ?>
+                                    <div class="signature-placeholder">E-Signature on file</div>
+                                <?php endif; ?>
+                                <div class="signature-line"></div>
+                                <div class="fw-semibold"><?= htmlspecialchars($chairName); ?></div>
+                                <div class="text-muted small"><?= htmlspecialchars($chairTitle); ?></div>
+                            </div>
                         </div>
                         <div class="col-md-6">
                             <div class="text-muted small">Approved:</div>
-                            <div class="fw-semibold mt-2"><?= htmlspecialchars($deanDisplay); ?></div>
-                            <div class="text-muted small">Dean, Institute of Advanced Studies</div>
+                            <div class="signature-block mt-2">
+                                <?php if ($deanSignaturePath !== ''): ?>
+                                    <img src="<?= htmlspecialchars($deanSignaturePath); ?>" alt="Dean e-signature" class="signature-image">
+                                <?php else: ?>
+                                    <div class="signature-placeholder"><?= htmlspecialchars($deanApproved ? 'E-Signature on file' : 'Pending approval'); ?></div>
+                                <?php endif; ?>
+                                <div class="signature-line"></div>
+                                <div class="fw-semibold"><?= htmlspecialchars($deanDisplay); ?></div>
+                                <div class="text-muted small">Dean, Institute of Advanced Studies</div>
+                            </div>
                         </div>
                     </div>
                 </div>

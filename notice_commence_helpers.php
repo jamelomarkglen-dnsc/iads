@@ -83,6 +83,70 @@ if (!function_exists('ensureNoticeCommenceTable')) {
     }
 }
 
+if (!function_exists('save_notice_signature_upload')) {
+    function save_notice_signature_upload(array $file, int $userId, ?string &$error = null): string
+    {
+        $error = '';
+        if ($userId <= 0) {
+            $error = 'Invalid user for signature upload.';
+            return '';
+        }
+
+        $uploadError = $file['error'] ?? UPLOAD_ERR_NO_FILE;
+        if ($uploadError === UPLOAD_ERR_NO_FILE) {
+            return '';
+        }
+        if ($uploadError !== UPLOAD_ERR_OK) {
+            $error = 'Signature upload failed.';
+            return '';
+        }
+
+        $tmpName = $file['tmp_name'] ?? '';
+        if ($tmpName === '' || !is_uploaded_file($tmpName)) {
+            $error = 'Invalid signature upload.';
+            return '';
+        }
+
+        $imageInfo = getimagesize($tmpName);
+        if (!$imageInfo || empty($imageInfo['mime'])) {
+            $error = 'Signature must be a PNG or JPG image.';
+            return '';
+        }
+
+        $mime = $imageInfo['mime'];
+        $extMap = [
+            'image/png' => 'png',
+            'image/jpeg' => 'jpg',
+        ];
+        if (!isset($extMap[$mime])) {
+            $error = 'Signature must be a PNG or JPG image.';
+            return '';
+        }
+
+        $dir = 'uploads/signatures/';
+        if (!is_dir($dir) && !mkdir($dir, 0777, true) && !is_dir($dir)) {
+            $error = 'Unable to create signature folder.';
+            return '';
+        }
+
+        $base = $dir . 'user_' . $userId . '.';
+        foreach (['png', 'jpg', 'jpeg'] as $oldExt) {
+            $oldPath = $base . $oldExt;
+            if (is_file($oldPath) && $oldExt !== $extMap[$mime]) {
+                unlink($oldPath);
+            }
+        }
+
+        $path = $base . $extMap[$mime];
+        if (!move_uploaded_file($tmpName, $path)) {
+            $error = 'Unable to save signature image.';
+            return '';
+        }
+
+        return $path;
+    }
+}
+
 if (!function_exists('notice_commence_format_date')) {
     function notice_commence_format_date(?string $date): string
     {

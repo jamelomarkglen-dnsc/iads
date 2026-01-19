@@ -31,6 +31,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_notice_commenc
     $body = trim((string)($_POST['notice_body'] ?? ''));
 
     $errors = [];
+    $signatureError = '';
+    if (isset($_FILES['chair_signature'])) {
+        save_notice_signature_upload($_FILES['chair_signature'], $chairId, $signatureError);
+        if ($signatureError !== '') {
+            $errors[] = $signatureError;
+        }
+    }
     if ($submissionId <= 0 || $studentId <= 0) {
         $errors[] = 'Please select an approved submission.';
     }
@@ -252,7 +259,7 @@ include 'sidebar.php';
                     <?php if (empty($eligibleSubmissions)): ?>
                         <p class="text-muted">No approved outline defense submissions available yet.</p>
                     <?php endif; ?>
-                    <form method="post" id="noticeForm">
+                    <form method="post" id="noticeForm" enctype="multipart/form-data">
                         <input type="hidden" name="submit_notice_commence" value="1">
                         <input type="hidden" name="student_id" id="studentId">
                         <div class="mb-3">
@@ -333,6 +340,12 @@ include 'sidebar.php';
                                 );
                             ?></textarea>
                             <div class="small-muted mt-1">You can adjust the message before sending to the dean.</div>
+                        </div>
+
+                        <div class="mt-3">
+                            <label class="form-label">Program Chairperson E-Signature (PNG or JPG)</label>
+                            <input type="file" name="chair_signature" class="form-control" accept="image/png,image/jpeg">
+                            <div class="small-muted mt-1">Upload once; it will appear on the printed notice.</div>
                         </div>
 
                         <div class="d-flex justify-content-end mt-4">

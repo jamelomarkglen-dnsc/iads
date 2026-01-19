@@ -21,8 +21,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_notice_commenc
     $noticeId = (int)($_POST['notice_id'] ?? 0);
     $decision = trim((string)($_POST['decision'] ?? ''));
     $deanNotes = trim((string)($_POST['dean_notes'] ?? ''));
+    $signatureError = '';
+    if (isset($_FILES['dean_signature'])) {
+        save_notice_signature_upload($_FILES['dean_signature'], $deanId, $signatureError);
+    }
 
-    if ($noticeId <= 0 || !in_array($decision, ['Approved', 'Rejected'], true)) {
+    if ($signatureError !== '') {
+        $alert = ['type' => 'danger', 'message' => $signatureError];
+    } elseif ($noticeId <= 0 || !in_array($decision, ['Approved', 'Rejected'], true)) {
         $alert = ['type' => 'danger', 'message' => 'Please select a valid decision.'];
     } else {
         $notice = null;
@@ -198,10 +204,12 @@ include 'sidebar.php';
                                 <a href="notice_commence_view.php?notice_id=<?= $noticeId; ?>" target="_blank" class="text-success text-decoration-none">
                                     <i class="bi bi-file-earmark-text me-1"></i>View full notice
                                 </a>
-                                <form method="post" class="d-flex flex-column gap-2">
+                                <form method="post" class="d-flex flex-column gap-2" enctype="multipart/form-data">
                                     <input type="hidden" name="review_notice_commence" value="1">
                                     <input type="hidden" name="notice_id" value="<?= $noticeId; ?>">
                                     <textarea name="dean_notes" class="form-control form-control-sm" rows="2" placeholder="Optional notes for the program chair..."></textarea>
+                                    <label class="small text-muted">Dean E-Signature (PNG or JPG)</label>
+                                    <input type="file" name="dean_signature" class="form-control form-control-sm" accept="image/png,image/jpeg">
                                     <div class="d-flex gap-2 justify-content-end">
                                         <button type="submit" name="decision" value="Rejected" class="btn btn-outline-danger btn-sm">
                                             Reject
