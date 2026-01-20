@@ -18,6 +18,23 @@ $chairId = (int)($_SESSION['user_id'] ?? 0);
 $message = '';
 $messageType = 'success';
 
+function backfill_final_defense_archive_ready(mysqli $conn): void
+{
+    if (!function_exists('final_defense_submission_column_exists')) {
+        return;
+    }
+    if (!final_defense_submission_column_exists($conn, 'archive_ready_at')) {
+        return;
+    }
+    $conn->query("
+        UPDATE final_defense_submissions
+        SET archive_ready_at = COALESCE(reviewed_at, submitted_at, NOW())
+        WHERE status = 'Passed' AND archive_ready_at IS NULL
+    ");
+}
+
+backfill_final_defense_archive_ready($conn);
+
 function fetchEligibleSubmissions(mysqli $conn): array
 {
     $finalStatuses = ['approved', 'completed', 'published', 'accepted'];
