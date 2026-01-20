@@ -316,7 +316,7 @@ $facultySectionOpen = in_array($currentPage, $facultyMenuPages, true);
 $studentSectionOpen = in_array($currentPage, $studentMenuPages, true);
 $recordsSectionOpen = in_array($currentPage, $recordsMenuPages, true);
 $adviserStudentPages = ['adviser_directory.php', 'advisory.php', 'final_paper_inbox.php'];
-$adviserDefensePages = ['my_assigned_defense.php', 'adviser_route_slip.php', 'route_slip_inbox.php', 'adviser_final_endorsement.php'];
+$adviserDefensePages = ['my_assigned_defense.php', 'adviser_route_slip.php', 'route_slip_inbox.php', 'adviser_final_endorsement.php', 'final_defense_inbox.php'];
 $adviserStudentOpen = in_array($currentPage, $adviserStudentPages, true);
 $adviserDefenseOpen = in_array($currentPage, $adviserDefensePages, true);
 $rolesWithWorkspaceLinks = ['program_chairperson', 'student', 'dean', 'adviser', 'committee_chair', 'committee_chairperson', 'panel'];
@@ -488,6 +488,9 @@ if ($userLastLogin !== '') {
                     <a href="submit_final_paper.php" class="nav-link <?php echo ($currentPage == 'submit_final_paper.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-text"></i> <span class="link-text">Outline Defense Submission</span>
                     </a>
+                    <a href="submit_final_defense.php" class="nav-link <?php echo ($currentPage == 'submit_final_defense.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-upload"></i> <span class="link-text">Final Defense Submission</span>
+                    </a>
 
                     <a href="student_defense_outcome.php" class="nav-link <?php echo ($currentPage == 'student_defense_outcome.php') ? 'active' : ''; ?>">
                         <i class="bi bi-mortarboard"></i> <span class="link-text">Defense Outcome</span>
@@ -548,6 +551,9 @@ if ($userLastLogin !== '') {
                             <a href="adviser_final_endorsement.php" class="nav-sub-link <?php echo ($currentPage == 'adviser_final_endorsement.php') ? 'active' : ''; ?>">
                                 Final Defense Endorsement
                             </a>
+                            <a href="final_defense_inbox.php" class="nav-sub-link <?php echo ($currentPage == 'final_defense_inbox.php') ? 'active' : ''; ?>">
+                                Final Defense Inbox
+                            </a>
                         </div>
                     </div>
                 <?php endif; ?>
@@ -562,6 +568,9 @@ if ($userLastLogin !== '') {
                     <a href="route_slip_inbox.php" class="nav-link <?php echo ($currentPage == 'route_slip_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Route Slip Inbox</span>
                     </a>
+                    <a href="final_defense_inbox.php" class="nav-link <?php echo ($currentPage == 'final_defense_inbox.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-check2-square"></i> <span class="link-text">Final Defense Inbox</span>
+                    </a>
                 <?php endif; ?>
 
                 <?php if ($role === 'committee_chairperson'): ?>
@@ -574,6 +583,9 @@ if ($userLastLogin !== '') {
                     <a href="route_slip_inbox.php" class="nav-link <?php echo ($currentPage == 'route_slip_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Route Slip Inbox</span>
                     </a>
+                    <a href="final_defense_inbox.php" class="nav-link <?php echo ($currentPage == 'final_defense_inbox.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-check2-square"></i> <span class="link-text">Final Defense Inbox</span>
+                    </a>
                 <?php endif; ?>
 
                 <?php if ($role === 'panel'): ?>
@@ -585,6 +597,9 @@ if ($userLastLogin !== '') {
                     </a>
                     <a href="route_slip_inbox.php" class="nav-link <?php echo ($currentPage == 'route_slip_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Route Slip Inbox</span>
+                    </a>
+                    <a href="final_defense_inbox.php" class="nav-link <?php echo ($currentPage == 'final_defense_inbox.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-check2-square"></i> <span class="link-text">Final Defense Inbox</span>
                     </a>
                 <?php endif; ?>
             </div>

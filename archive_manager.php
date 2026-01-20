@@ -3,6 +3,7 @@ session_start();
 require_once 'db.php';
 require_once 'concept_review_helpers.php';
 require_once 'notifications_helper.php';
+require_once 'final_defense_submission_helpers.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'program_chairperson') {
     header('Location: login.php');
@@ -11,6 +12,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'program_chair
 
 ensureConceptReviewTables($conn);
 ensureResearchArchiveSupport($conn);
+ensureFinalDefenseSubmissionTable($conn);
 
 $chairId = (int)($_SESSION['user_id'] ?? 0);
 $message = '';
@@ -28,6 +30,10 @@ function fetchEligibleSubmissions(mysqli $conn): array
         FROM submissions s
         LEFT JOIN users u ON s.student_id = u.id
         WHERE LOWER(s.status) IN ($placeholders)
+          AND EXISTS (
+            SELECT 1 FROM final_defense_submissions fds
+            WHERE fds.submission_id = s.id AND fds.status = 'Passed'
+          )
           AND NOT EXISTS (
             SELECT 1 FROM research_archive ra WHERE ra.submission_id = s.id
           )
