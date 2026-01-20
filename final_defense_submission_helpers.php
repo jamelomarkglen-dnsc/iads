@@ -53,6 +53,7 @@ if (!function_exists('ensureFinalDefenseSubmissionTable')) {
                     reviewed_at TIMESTAMP NULL DEFAULT NULL,
                     reviewed_by INT NULL,
                     review_notes TEXT NULL,
+                    archive_ready_at TIMESTAMP NULL DEFAULT NULL,
                     updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
                     INDEX idx_final_defense_submission (submission_id),
                     INDEX idx_final_defense_student (student_id),
@@ -85,6 +86,7 @@ if (!function_exists('ensureFinalDefenseSubmissionTable')) {
             'reviewed_at' => "ALTER TABLE final_defense_submissions ADD COLUMN reviewed_at TIMESTAMP NULL DEFAULT NULL AFTER submitted_at",
             'reviewed_by' => "ALTER TABLE final_defense_submissions ADD COLUMN reviewed_by INT NULL AFTER reviewed_at",
             'review_notes' => "ALTER TABLE final_defense_submissions ADD COLUMN review_notes TEXT NULL AFTER reviewed_by",
+            'archive_ready_at' => "ALTER TABLE final_defense_submissions ADD COLUMN archive_ready_at TIMESTAMP NULL DEFAULT NULL AFTER review_notes",
         ];
         foreach ($columns as $column => $sql) {
             if (!final_defense_submission_column_exists($conn, $column)) {

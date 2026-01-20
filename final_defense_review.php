@@ -74,11 +74,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_review']) && $is
     if (!in_array($decision, ['Passed', 'Failed'], true)) {
         $alert = ['type' => 'danger', 'message' => 'Please select a valid decision.'];
     } else {
-        $updateStmt = $conn->prepare("
-            UPDATE final_defense_submissions
-            SET status = ?, reviewed_by = ?, reviewed_at = NOW(), review_notes = ?
-            WHERE id = ?
-        ");
+        $updateSql = $decision === 'Passed'
+            ? "UPDATE final_defense_submissions
+               SET status = ?, reviewed_by = ?, reviewed_at = NOW(), review_notes = ?, archive_ready_at = NOW()
+               WHERE id = ?"
+            : "UPDATE final_defense_submissions
+               SET status = ?, reviewed_by = ?, reviewed_at = NOW(), review_notes = ?, archive_ready_at = NULL
+               WHERE id = ?";
+        $updateStmt = $conn->prepare($updateSql);
         if ($updateStmt) {
             $updateStmt->bind_param('sisi', $decision, $userId, $reviewNotes, $submissionId);
             if ($updateStmt->execute()) {
@@ -132,6 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_review']) && $is
                 }
 
                 $chairs = getProgramChairsForStudent($conn, $studentId);
+                $programChairLink = $decision === 'Passed' ? 'archive_manager.php' : 'program_chairperson.php';
                 if (!empty($chairs)) {
                     foreach ($chairs as $chairId) {
                         notify_user(
@@ -139,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_review']) && $is
                             $chairId,
                             'Final defense decision',
                             "Final defense result for {$studentName} is {$decision}.{$archivingNote}",
-                            'final_defense_inbox.php',
+                            $programChairLink,
                             false
                         );
                     }
@@ -149,7 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_review']) && $is
                         'program_chairperson',
                         'Final defense decision',
                         "Final defense result for {$studentName} is {$decision}.{$archivingNote}",
-                        'final_defense_inbox.php',
+                        $programChairLink,
                         false
                     );
                 }

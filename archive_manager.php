@@ -32,7 +32,9 @@ function fetchEligibleSubmissions(mysqli $conn): array
         WHERE LOWER(s.status) IN ($placeholders)
           AND EXISTS (
             SELECT 1 FROM final_defense_submissions fds
-            WHERE fds.submission_id = s.id AND fds.status = 'Passed'
+            WHERE fds.submission_id = s.id
+              AND fds.status = 'Passed'
+              AND fds.archive_ready_at IS NOT NULL
           )
           AND NOT EXISTS (
             SELECT 1 FROM research_archive ra WHERE ra.submission_id = s.id

@@ -53,11 +53,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['final_decision'])) {
         } elseif ((int)($submission['chair_id'] ?? 0) !== $userId) {
             $alert = ['type' => 'danger', 'message' => 'Only the committee chairperson can submit the final decision.'];
         } else {
-            $updateStmt = $conn->prepare("
-                UPDATE final_defense_submissions
-                SET status = ?, reviewed_by = ?, reviewed_at = NOW(), review_notes = ?
-                WHERE id = ?
-            ");
+            $updateSql = $decision === 'Passed'
+                ? "UPDATE final_defense_submissions
+                   SET status = ?, reviewed_by = ?, reviewed_at = NOW(), review_notes = ?, archive_ready_at = NOW()
+                   WHERE id = ?"
+                : "UPDATE final_defense_submissions
+                   SET status = ?, reviewed_by = ?, reviewed_at = NOW(), review_notes = ?, archive_ready_at = NULL
+                   WHERE id = ?";
+            $updateStmt = $conn->prepare($updateSql);
             if ($updateStmt) {
                 $updateStmt->bind_param('sisi', $decision, $userId, $reviewNotes, $submissionId);
                 if ($updateStmt->execute()) {
@@ -107,6 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['final_decision'])) {
                     }
 
                     $chairs = getProgramChairsForStudent($conn, $studentId);
+                    $programChairLink = $decision === 'Passed' ? 'archive_manager.php' : 'program_chairperson.php';
                     if (!empty($chairs)) {
                         foreach ($chairs as $chairId) {
                             notify_user(
@@ -114,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['final_decision'])) {
                                 $chairId,
                                 'Final defense decision',
                                 "Final defense result for {$studentName} is {$decision}.{$archivingNote}",
-                                'final_defense_inbox.php',
+                                $programChairLink,
                                 false
                             );
                         }
@@ -124,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['final_decision'])) {
                             'program_chairperson',
                             'Final defense decision',
                             "Final defense result for {$studentName} is {$decision}.{$archivingNote}",
-                            'final_defense_inbox.php',
+                            $programChairLink,
                             false
                         );
                     }
