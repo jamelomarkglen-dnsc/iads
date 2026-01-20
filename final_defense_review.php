@@ -49,7 +49,7 @@ if ($submissionId > 0) {
 }
 
 if (!$submission) {
-    header('Location: final_defense_inbox.php');
+    header('Location: final_defense_committee_dashboard.php');
     exit;
 }
 
@@ -60,7 +60,7 @@ $isAssigned = in_array($userId, [
     (int)($submission['panel_member_two_id'] ?? 0),
 ], true);
 if (!$isAssigned) {
-    header('Location: final_defense_inbox.php');
+    header('Location: final_defense_committee_dashboard.php');
     exit;
 }
 
@@ -89,6 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_review']) && $is
                 $studentId = (int)($submission['student_id'] ?? 0);
                 $studentName = $submission['student_name'] ?? 'the student';
                 $title = $submission['submission_title'] ?? 'the submission';
+                $archivingNote = $decision === 'Passed' ? ' Ready for archiving.' : '';
 
                 if ($studentId > 0) {
                     notify_user(
@@ -107,10 +108,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_review']) && $is
                         $conn,
                         $adviserId,
                         'Final defense result',
-                        "Final defense result for {$studentName} is {$decision}.",
-                        'final_defense_inbox.php',
+                        "Final defense result for {$studentName} is {$decision}.{$archivingNote}",
+                        'final_defense_committee_dashboard.php',
                         false
                     );
+                }
+
+                if ($decision === 'Passed') {
+                    $panelIds = array_unique(array_filter([
+                        (int)($submission['panel_member_one_id'] ?? 0),
+                        (int)($submission['panel_member_two_id'] ?? 0),
+                    ]));
+                    foreach ($panelIds as $panelId) {
+                        notify_user(
+                            $conn,
+                            $panelId,
+                            'Final defense result',
+                            "Final defense result for {$studentName} is {$decision}.{$archivingNote}",
+                            'final_defense_committee_dashboard.php',
+                            false
+                        );
+                    }
                 }
 
                 $chairs = getProgramChairsForStudent($conn, $studentId);
@@ -120,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_review']) && $is
                             $conn,
                             $chairId,
                             'Final defense decision',
-                            "Final defense result for {$studentName} is {$decision}.",
+                            "Final defense result for {$studentName} is {$decision}.{$archivingNote}",
                             'final_defense_inbox.php',
                             false
                         );
@@ -130,7 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_review']) && $is
                         $conn,
                         'program_chairperson',
                         'Final defense decision',
-                        "Final defense result for {$studentName} is {$decision}.",
+                        "Final defense result for {$studentName} is {$decision}.{$archivingNote}",
                         'final_defense_inbox.php',
                         false
                     );
@@ -174,8 +192,8 @@ include 'sidebar.php';
                 <h3 class="fw-bold text-success mb-1">Final Defense Review</h3>
                 <p class="text-muted mb-0"><?= htmlspecialchars($submission['student_name'] ?? 'Student'); ?></p>
             </div>
-            <a href="final_defense_inbox.php" class="btn btn-outline-secondary">
-                <i class="bi bi-arrow-left"></i> Back to Inbox
+            <a href="final_defense_committee_dashboard.php" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
             </a>
         </div>
 

@@ -5,11 +5,13 @@ require_once 'role_helpers.php';
 require_once 'notifications_helper.php';
 require_once 'defense_committee_helpers.php';
 require_once 'final_defense_submission_helpers.php';
+require_once 'final_defense_endorsement_helpers.php';
 
 enforce_role_access(['student']);
 
 ensureDefenseCommitteeRequestsTable($conn);
 ensureFinalDefenseSubmissionTable($conn);
+ensureFinalDefenseEndorsementTable($conn);
 
 $studentId = (int)($_SESSION['user_id'] ?? 0);
 $studentName = trim(
@@ -67,23 +69,41 @@ function fetch_latest_approved_committee(mysqli $conn, int $studentId): ?array
     return $row ?: null;
 }
 
-$eligibleStatuses = ['Approved', 'Completed', 'Published', 'Accepted'];
-$statusPlaceholders = implode(',', array_fill(0, count($eligibleStatuses), '?'));
-$statusTypes = str_repeat('s', count($eligibleStatuses));
+function fetch_latest_verified_final_endorsement(mysqli $conn, int $studentId): ?array
+{
+    $stmt = $conn->prepare("
+        SELECT id, reviewed_at, submitted_at
+        FROM final_defense_endorsements
+        WHERE student_id = ? AND status = 'Verified'
+        ORDER BY reviewed_at DESC, submitted_at DESC, id DESC
+        LIMIT 1
+    ");
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param('i', $studentId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : null;
+    if ($result) {
+        $result->free();
+    }
+    $stmt->close();
+    return $row ?: null;
+}
+
 $orderColumn = submission_column_exists($conn, 'submissions', 'created_at') ? 'created_at' : 'id';
 
 $eligibleSubmissions = [];
 $eligSql = "
     SELECT id, title, status
     FROM submissions
-    WHERE student_id = ? AND status IN ({$statusPlaceholders})
+    WHERE student_id = ?
     ORDER BY {$orderColumn} DESC, id DESC
 ";
 $eligStmt = $conn->prepare($eligSql);
 if ($eligStmt) {
-    $types = 'i' . $statusTypes;
-    $params = array_merge([$studentId], $eligibleStatuses);
-    $eligStmt->bind_param($types, ...$params);
+    $eligStmt->bind_param('i', $studentId);
     $eligStmt->execute();
     $result = $eligStmt->get_result();
     if ($result) {
@@ -94,7 +114,15 @@ if ($eligStmt) {
 }
 
 $committee = fetch_latest_approved_committee($conn, $studentId);
+$verifiedEndorsement = fetch_latest_verified_final_endorsement($conn, $studentId);
 $alert = null;
+$verifiedAt = '';
+if ($verifiedEndorsement) {
+    $verifiedAtRaw = $verifiedEndorsement['reviewed_at'] ?? $verifiedEndorsement['submitted_at'] ?? '';
+    if ($verifiedAtRaw) {
+        $verifiedAt = date('M d, Y g:i A', strtotime($verifiedAtRaw));
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_final_defense'])) {
     $submissionId = (int)($_POST['submission_id'] ?? 0);
@@ -103,6 +131,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_final_defense'
 
     if ($submissionId <= 0) {
         $errors[] = 'Please select an eligible submission.';
+    }
+    if (!$verifiedEndorsement) {
+        $errors[] = 'Final defense endorsement has not been verified yet.';
     }
     if (!$committee) {
         $errors[] = 'No approved defense committee request is available yet.';
@@ -113,21 +144,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_final_defense'
         $checkSql = "
             SELECT id, title
             FROM submissions
-            WHERE id = ? AND student_id = ? AND status IN ({$statusPlaceholders})
+            WHERE id = ? AND student_id = ?
             LIMIT 1
         ";
         $checkStmt = $conn->prepare($checkSql);
         if ($checkStmt) {
-            $types = 'ii' . $statusTypes;
-            $params = array_merge([$submissionId, $studentId], $eligibleStatuses);
-            $checkStmt->bind_param($types, ...$params);
+            $checkStmt->bind_param('ii', $submissionId, $studentId);
             $checkStmt->execute();
             $checkResult = $checkStmt->get_result();
             $submissionRow = $checkResult ? $checkResult->fetch_assoc() : null;
             $checkStmt->close();
         }
         if (!$submissionRow) {
-            $errors[] = 'Selected submission is not eligible for final defense.';
+            $errors[] = 'Selected submission is not available for final defense.';
         }
     }
 
@@ -184,7 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_final_defense'
             if ($insertStmt->execute()) {
                 $submissionTitle = $submissionRow['title'] ?? 'the submission';
                 $message = "{$studentName} submitted a final defense file for \"{$submissionTitle}\".";
-                $link = 'final_defense_inbox.php';
+                $link = 'final_defense_committee_dashboard.php';
                 $notifyIds = array_unique(array_filter([
                     (int)$committee['adviser_id'],
                     (int)$committee['chair_id'],
@@ -264,19 +293,32 @@ include 'sidebar.php';
             <div class="col-lg-7">
                 <div class="card card-shell p-4">
                     <h5 class="fw-semibold text-success mb-3">Submit Final Defense File</h5>
-                    <?php if (!$committee): ?>
+                    <?php if ($verifiedEndorsement): ?>
+                        <div class="border rounded-3 p-3 mb-3 bg-light">
+                            <div class="fw-semibold text-success">Final defense endorsement verified</div>
+                            <div class="small text-muted">Student: <?= htmlspecialchars($studentName); ?></div>
+                            <?php if ($verifiedAt !== ''): ?>
+                                <div class="small text-muted">Verified: <?= htmlspecialchars($verifiedAt); ?></div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!$verifiedEndorsement): ?>
+                        <div class="alert alert-warning">
+                            Your final defense endorsement is not yet verified by the program chairperson.
+                        </div>
+                    <?php elseif (!$committee): ?>
                         <div class="alert alert-warning">
                             No approved defense committee request is available yet. Please wait for committee approval.
                         </div>
                     <?php elseif (empty($eligibleSubmissions)): ?>
                         <div class="alert alert-info">
-                            No eligible submissions found. Your submission must be approved before final defense.
+                            No submissions found yet. Please create a submission first.
                         </div>
                     <?php else: ?>
                         <form method="post" enctype="multipart/form-data">
                             <input type="hidden" name="submit_final_defense" value="1">
                             <div class="mb-3">
-                                <label class="form-label fw-semibold text-success">Select Approved Submission</label>
+                                <label class="form-label fw-semibold text-success">Select Submission</label>
                                 <select name="submission_id" class="form-select" required>
                                     <option value="">Choose...</option>
                                     <?php foreach ($eligibleSubmissions as $submission): ?>
