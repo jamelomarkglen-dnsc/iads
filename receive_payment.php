@@ -13,9 +13,17 @@ $message = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['payment_id'])) {
     $paymentId = (int)$_POST['payment_id'];
     $status = $_POST['status'] ?? 'pending';
-    $remarks = trim($_POST['remarks']);
+    $remarks = trim((string)($_POST['remarks'] ?? ''));
+    $isResubmit = isset($_POST['resubmit_payment']);
 
     $valid = ['pending', 'payment_accepted', 'payment_declined'];
+    if ($isResubmit) {
+        $status = 'pending';
+        $remarks = '';
+    }
+    if ($status !== 'payment_declined') {
+        $remarks = '';
+    }
     if (in_array($status, $valid, true)) {
         $ownerStmt = $conn->prepare("SELECT user_id FROM payment_proofs WHERE id = ? LIMIT 1");
         $ownerStmt->bind_param('i', $paymentId);
@@ -30,9 +38,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['payment_id'])) {
                 $message = 'Payment updated successfully!';
 
                 $statusLabel = ucwords(str_replace('_', ' ', $status));
-                $note = "Your payment submission #{$paymentId} is now {$statusLabel}.";
-                if ($remarks !== '') {
-                    $note .= " Remarks: {$remarks}.";
+                if ($isResubmit) {
+                    $note = "Your payment submission #{$paymentId} was reset to Pending. Please resubmit your proof of payment.";
+                } else {
+                    $note = "Your payment submission #{$paymentId} is now {$statusLabel}.";
+                    if ($remarks !== '') {
+                        $note .= " Remarks: {$remarks}.";
+                    }
                 }
                 notify_user(
                     $conn,
@@ -55,12 +67,16 @@ $query = "
     SELECT p.*, u.email AS student_email
     FROM payment_proofs p
     JOIN (
-        SELECT user_id, MAX(id) AS latest_id
+        SELECT
+            user_id,
+            MAX(CONCAT(LPAD(UNIX_TIMESTAMP(updated_at), 10, '0'), LPAD(id, 10, '0'))) AS sort_key
         FROM payment_proofs
         GROUP BY user_id
-    ) latest ON latest.latest_id = p.id
+    ) latest
+        ON latest.user_id = p.user_id
+       AND CONCAT(LPAD(UNIX_TIMESTAMP(p.updated_at), 10, '0'), LPAD(p.id, 10, '0')) = latest.sort_key
     JOIN users u ON p.user_id = u.id
-    ORDER BY p.created_at DESC
+    ORDER BY p.updated_at DESC, p.id DESC
 ";
 $stmt = $conn->prepare($query);
 $stmt->execute();
@@ -191,11 +207,6 @@ foreach ($payments as $payment) {
                                     </td>
                                     <td><?= date('M d, Y h:i A', strtotime($payment['created_at'])); ?></td>
                                     <td>
-                                        <?php
-                                            $statusActionClass = $payment['status'] === 'payment_declined'
-                                                ? 'btn-danger'
-                                                : ($payment['status'] === 'payment_accepted' ? 'btn-success' : 'btn-warning text-dark');
-                                        ?>
                                         <form method="post" class="d-flex flex-column flex-lg-row gap-2 align-items-start">
                                             <input type="hidden" name="payment_id" value="<?= $payment['id']; ?>">
                                             <select name="status" class="form-select form-select-sm">
@@ -203,8 +214,10 @@ foreach ($payments as $payment) {
                                                 <option value="payment_accepted" <?= $payment['status']==='payment_accepted' ? 'selected' : ''; ?>>Accepted</option>
                                                 <option value="payment_declined" <?= $payment['status']==='payment_declined' ? 'selected' : ''; ?>>Declined</option>
                                             </select>
-                                            <input type="text" name="remarks" class="form-control form-control-sm" placeholder="Remarks" value="<?= htmlspecialchars($payment['notes']); ?>">
-                                            <button type="submit" class="btn btn-sm <?= $statusActionClass; ?>">Update</button>
+                                            <div class="remarks-wrapper">
+                                                <input type="text" name="remarks" class="form-control form-control-sm" placeholder="Remarks" value="<?= htmlspecialchars($payment['notes']); ?>">
+                                            </div>
+                                            <button type="submit" class="btn btn-sm btn-success">Update</button>
                                         </form>
                                     </td>
                                 </tr>
@@ -221,22 +234,29 @@ foreach ($payments as $payment) {
 <script>
     document.querySelectorAll('form select[name="status"]').forEach((select) => {
         const form = select.closest('form');
-        const button = form ? form.querySelector('button[type="submit"]') : null;
-        if (!button) {
+        const remarksWrapper = form ? form.querySelector('.remarks-wrapper') : null;
+        const remarksInput = form ? form.querySelector('input[name="remarks"]') : null;
+        const resubmitBtn = form ? form.querySelector('button[name="resubmit_payment"]') : null;
+        if (!form) {
             return;
         }
-        const updateClass = () => {
-            button.classList.remove('btn-success', 'btn-danger', 'btn-warning', 'text-dark');
-            if (select.value === 'payment_accepted') {
-                button.classList.add('btn-success');
-            } else if (select.value === 'payment_declined') {
-                button.classList.add('btn-danger');
-            } else {
-                button.classList.add('btn-warning', 'text-dark');
+        const updateVisibility = () => {
+            const isDeclined = select.value === 'payment_declined';
+            if (remarksWrapper) {
+                remarksWrapper.classList.toggle('d-none', !isDeclined);
+            }
+            if (remarksInput) {
+                remarksInput.disabled = !isDeclined;
+                if (!isDeclined) {
+                    remarksInput.value = '';
+                }
+            }
+            if (resubmitBtn) {
+                resubmitBtn.classList.toggle('d-none', select.value !== 'payment_declined');
             }
         };
-        select.addEventListener('change', updateClass);
-        updateClass();
+        select.addEventListener('change', updateVisibility);
+        updateVisibility();
     });
 </script>
 </body>

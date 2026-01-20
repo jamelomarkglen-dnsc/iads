@@ -66,10 +66,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_notice_commenc
             $lookupStmt->close();
         }
         $submissionStatus = trim((string)($submission['status'] ?? ''));
-        $routeSlipDecision = trim((string)($submission['route_slip_overall_decision'] ?? ''));
+        $routeSlipDecision = strtolower(trim((string)($submission['route_slip_overall_decision'] ?? '')));
+        $allowedRouteSlipDecisions = [
+            'approved',
+            'passed with minor revision',
+            'passed with major revision',
+        ];
         if (
             !$submission
-            || ($submissionStatus !== 'Approved' && $routeSlipDecision !== 'Approved')
+            || ($submissionStatus !== 'Approved' && !in_array($routeSlipDecision, $allowedRouteSlipDecisions, true))
         ) {
             $errors[] = 'Only approved outline defense submissions can be issued a notice to commence.';
         }
@@ -173,7 +178,14 @@ $submissionSql = "
            u.firstname, u.lastname, u.program
     FROM final_paper_submissions fps
     JOIN users u ON u.id = fps.student_id
-    WHERE (fps.status = 'Approved' OR fps.route_slip_overall_decision = 'Approved')
+    WHERE (
+        fps.status = 'Approved'
+        OR LOWER(TRIM(fps.route_slip_overall_decision)) IN (
+            'approved',
+            'passed with minor revision',
+            'passed with major revision'
+        )
+    )
 ";
 if ($scopeClause !== '') {
     $submissionSql .= " AND {$scopeClause}";

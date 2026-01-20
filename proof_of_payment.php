@@ -21,6 +21,7 @@ $success = '';
 if ($role === 'student' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['payment_proof'])) {
     $allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
     $reference = trim($_POST['reference_number'] ?? '');
+    $resubmitId = (int)($_POST['resubmit_proof_id'] ?? 0);
     $file = $_FILES['payment_proof'];
 
     if ($reference === '' || !preg_match('/^\d+$/', $reference)) {
@@ -37,13 +38,25 @@ if ($role === 'student' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILE
 
         if (move_uploaded_file($file['tmp_name'], $target)) {
             $existingId = null;
-            $existingStmt = $conn->prepare("SELECT id FROM payment_proofs WHERE user_id = ? ORDER BY id DESC LIMIT 1");
-            if ($existingStmt) {
-                $existingStmt->bind_param('i', $userId);
-                $existingStmt->execute();
-                $existingRow = $existingStmt->get_result()->fetch_assoc();
-                $existingStmt->close();
-                $existingId = $existingRow ? (int)$existingRow['id'] : null;
+            if ($resubmitId > 0) {
+                $resubmitStmt = $conn->prepare("SELECT id FROM payment_proofs WHERE id = ? AND user_id = ? LIMIT 1");
+                if ($resubmitStmt) {
+                    $resubmitStmt->bind_param('ii', $resubmitId, $userId);
+                    $resubmitStmt->execute();
+                    $resubmitRow = $resubmitStmt->get_result()->fetch_assoc();
+                    $resubmitStmt->close();
+                    $existingId = $resubmitRow ? (int)$resubmitRow['id'] : null;
+                }
+            }
+            if (!$existingId) {
+                $existingStmt = $conn->prepare("SELECT id FROM payment_proofs WHERE user_id = ? ORDER BY id DESC LIMIT 1");
+                if ($existingStmt) {
+                    $existingStmt->bind_param('i', $userId);
+                    $existingStmt->execute();
+                    $existingRow = $existingStmt->get_result()->fetch_assoc();
+                    $existingStmt->close();
+                    $existingId = $existingRow ? (int)$existingRow['id'] : null;
+                }
             }
 
             if ($existingId) {
@@ -98,9 +111,14 @@ if ($role === 'student' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILE
 if ($role === 'program_chairperson' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_proof_id'])) {
     $proofId = (int)$_POST['update_proof_id'];
     $newStatus = $_POST['status'] ?? 'pending';
-    $remarks = trim($_POST['remarks']);
+    $remarks = trim((string)($_POST['remarks'] ?? ''));
+    $isResubmit = isset($_POST['resubmit_payment']);
 
     $validStatuses = ['pending', 'payment_declined', 'payment_accepted'];
+    if ($isResubmit) {
+        $newStatus = 'pending';
+        $remarks = '';
+    }
     if (in_array($newStatus, $validStatuses, true)) {
         $ownerStmt = $conn->prepare("SELECT user_id FROM payment_proofs WHERE id = ? LIMIT 1");
         $ownerStmt->bind_param('i', $proofId);
@@ -115,9 +133,13 @@ if ($role === 'program_chairperson' && $_SERVER['REQUEST_METHOD'] === 'POST' && 
                 $success = 'Payment proof updated successfully.';
 
                 $statusLabel = ucwords(str_replace('_', ' ', $newStatus));
-                $message = "Your payment proof status is now {$statusLabel}.";
-                if ($remarks !== '') {
-                    $message .= " Remarks: {$remarks}.";
+                if ($isResubmit) {
+                    $message = "Your payment proof was reset to Pending. Please resubmit your receipt.";
+                } else {
+                    $message = "Your payment proof status is now {$statusLabel}.";
+                    if ($remarks !== '') {
+                        $message .= " Remarks: {$remarks}.";
+                    }
                 }
 
                 notify_user(
@@ -257,14 +279,14 @@ foreach ($proofs as $proof) {
     </div>
 
     <?php if ($role === 'student'): ?>
-        <div class="card mb-4">
+        <div class="card mb-4" id="paymentUpload">
             <div class="card-body">
                 <h5 class="card-title text-success mb-3">Upload Your Payment Receipt</h5>
                 <form method="POST" enctype="multipart/form-data">
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Receipt (JPG/PNG)</label>
-                            <input type="file" name="payment_proof" class="form-control" accept=".jpg,.jpeg,.png" required>
+                            <input type="file" name="payment_proof" id="paymentProofInput" class="form-control" accept=".jpg,.jpeg,.png" required>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Reference Number</label>
@@ -323,6 +345,8 @@ foreach ($proofs as $proof) {
                             <th>Uploaded At</th>
                             <?php if ($role === 'program_chairperson'): ?>
                                 <th>Action</th>
+                            <?php elseif ($role === 'student'): ?>
+                                <th>Action</th>
                             <?php endif; ?>
                         </tr>
                     </thead>
@@ -368,7 +392,25 @@ foreach ($proofs as $proof) {
                                                 </select>
                                                 <input type="text" name="remarks" class="form-control form-control-sm" placeholder="Remarks" value="<?= htmlspecialchars($proof['notes'] ?? ''); ?>">
                                                 <button type="submit" class="btn btn-sm <?= $statusActionClass; ?>">Update</button>
+                                                <?php if ($proof['status'] === 'payment_declined'): ?>
+                                                    <button type="submit" name="resubmit_payment" value="1" class="btn btn-sm btn-outline-secondary ms-lg-auto">Resubmit</button>
+                                                <?php endif; ?>
                                             </form>
+                                        </td>
+                                    <?php elseif ($role === 'student'): ?>
+                                        <td>
+                                            <?php if (($proof['status'] ?? '') === 'payment_declined'): ?>
+                                                <button type="button"
+                                                    class="btn btn-sm btn-outline-secondary resubmit-payment"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#resubmitModal"
+                                                    data-proof-id="<?= (int)($proof['id'] ?? 0); ?>"
+                                                    data-reference="<?= htmlspecialchars($proof['reference_number'] ?? '', ENT_QUOTES); ?>">
+                                                    Resubmit
+                                                </button>
+                                            <?php else: ?>
+                                                <span class="text-muted">-</span>
+                                            <?php endif; ?>
                                         </td>
                                     <?php endif; ?>
                                 </tr>
@@ -381,11 +423,43 @@ foreach ($proofs as $proof) {
     </div>
 </div>
 
+<?php if ($role === 'student'): ?>
+<div class="modal fade" id="resubmitModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-md">
+        <div class="modal-content">
+            <form method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="resubmit_proof_id" id="resubmitProofId" value="">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">Resubmit Payment Proof</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Receipt (JPG/PNG)</label>
+                        <input type="file" name="payment_proof" class="form-control" accept=".jpg,.jpeg,.png" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Reference Number</label>
+                        <input type="text" name="reference_number" class="form-control" placeholder="Digits only" inputmode="numeric" pattern="\d+" maxlength="20" required>
+                        <small class="text-muted">Use the numeric reference from your bank/receipt.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Upload Resubmission</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
     document.querySelectorAll('form select[name="status"]').forEach((select) => {
         const form = select.closest('form');
         const button = form ? form.querySelector('button[type="submit"]') : null;
+        const resubmitBtn = form ? form.querySelector('button[name="resubmit_payment"]') : null;
         if (!button) {
             return;
         }
@@ -398,9 +472,36 @@ foreach ($proofs as $proof) {
             } else {
                 button.classList.add('btn-warning', 'text-dark');
             }
+            if (resubmitBtn) {
+                resubmitBtn.classList.toggle('d-none', select.value !== 'payment_declined');
+            }
         };
         select.addEventListener('change', updateClass);
         updateClass();
+    });
+    const resubmitModal = document.getElementById('resubmitModal');
+    const resubmitIdInput = resubmitModal
+        ? resubmitModal.querySelector('#resubmitProofId')
+        : null;
+    const resubmitReferenceInput = resubmitModal
+        ? resubmitModal.querySelector('input[name="reference_number"]')
+        : null;
+    const resubmitFileInput = resubmitModal
+        ? resubmitModal.querySelector('input[name="payment_proof"]')
+        : null;
+
+    document.querySelectorAll('.resubmit-payment').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (resubmitIdInput) {
+                resubmitIdInput.value = button.dataset.proofId || '';
+            }
+            if (resubmitReferenceInput) {
+                resubmitReferenceInput.value = button.dataset.reference || '';
+            }
+            if (resubmitFileInput) {
+                resubmitFileInput.value = '';
+            }
+        });
     });
 </script>
 </body>
