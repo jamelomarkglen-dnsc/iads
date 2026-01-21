@@ -50,6 +50,40 @@ $decisionMadeAt = $submission['final_decision_at'] ?? null;
 
 $success = '';
 $error = '';
+$gateSuccess = '';
+$gateError = '';
+$gateStatusOptions = [
+    'Passed' => 'Passed',
+    'Passed with Minor Revision' => 'Passed with minor revisions',
+    'Passed with Major Revision' => 'Passed with major revisions',
+    'Redefense' => 'Redefense',
+    'Failed' => 'Failed',
+];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['set_review_gate'])) {
+    $gateStatus = trim($_POST['review_gate_status'] ?? '');
+    if (!array_key_exists($gateStatus, $gateStatusOptions)) {
+        $gateError = 'Please select a valid review status.';
+    } else {
+        $updateGate = $conn->prepare("
+            UPDATE final_paper_submissions
+            SET review_gate_status = ?
+            WHERE id = ?
+        ");
+        if (!$updateGate) {
+            $gateError = 'Unable to save the review gate status. Please try again.';
+        } else {
+            $updateGate->bind_param('si', $gateStatus, $submissionId);
+            if ($updateGate->execute()) {
+                $gateSuccess = 'Review access status confirmed successfully.';
+                $submission['review_gate_status'] = $gateStatus;
+            } else {
+                $gateError = 'Unable to save the review gate status. Please try again.';
+            }
+            $updateGate->close();
+        }
+    }
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_decision'])) {
     $finalStatus = trim($_POST['final_status'] ?? '');
@@ -114,6 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_decision'])) {
 
 $chairName = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? ''));
 $chairName = $chairName !== '' ? $chairName : 'Committee Chairperson';
+$reviewGateStatus = trim((string)($submission['review_gate_status'] ?? ''));
 
 include 'header.php';
 include 'sidebar.php';
@@ -146,6 +181,18 @@ include 'sidebar.php';
             <p class="mb-0 text-white-50">Review all committee feedback and make the final decision on the outline defense manuscript.</p>
         </div>
 
+        <?php if ($gateSuccess): ?>
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <?= htmlspecialchars($gateSuccess); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        <?php elseif ($gateError): ?>
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <?= htmlspecialchars($gateError); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        <?php endif; ?>
+
         <?php if ($success): ?>
             <div class="alert alert-success alert-dismissible fade show" role="alert">
                 <?= htmlspecialchars($success); ?>
@@ -157,6 +204,26 @@ include 'sidebar.php';
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         <?php endif; ?>
+
+        <div class="card info-card mb-4">
+            <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div>
+                    <h5 class="fw-bold text-success mb-1">Review Access Confirmation</h5>
+                    <p class="text-muted mb-0">Confirm the review status before faculty can open the manuscript review.</p>
+                    <div class="mt-2 small">
+                        Current status:
+                        <?php if ($reviewGateStatus !== ''): ?>
+                            <span class="badge bg-success-subtle text-success"><?= htmlspecialchars($reviewGateStatus); ?></span>
+                        <?php else: ?>
+                            <span class="badge bg-secondary-subtle text-secondary">Not confirmed</span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#reviewGateModal">
+                    Confirm Status
+                </button>
+            </div>
+        </div>
 
         <div class="row g-4">
             <!-- Student & Submission Info -->
@@ -302,6 +369,37 @@ include 'sidebar.php';
                     <?php endif; ?>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="reviewGateModal" tabindex="-1" aria-labelledby="reviewGateLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <h5 class="modal-title" id="reviewGateLabel">Confirm Review Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post">
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Select the status to confirm review access for faculty.
+                    </p>
+                    <label class="form-label fw-semibold">Status</label>
+                    <select name="review_gate_status" class="form-select" required>
+                        <option value="">Select status</option>
+                        <?php foreach ($gateStatusOptions as $value => $label): ?>
+                            <option value="<?= htmlspecialchars($value); ?>" <?= $reviewGateStatus === $value ? 'selected' : ''; ?>>
+                                <?= htmlspecialchars($label); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" name="set_review_gate" value="1" class="btn btn-success">Confirm</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

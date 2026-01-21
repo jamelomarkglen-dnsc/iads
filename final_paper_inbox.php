@@ -49,6 +49,7 @@ $sql = "
         s.status AS final_status,
         s.submitted_at,
         s.version,
+        s.review_gate_status,
         r.status AS review_status,
         r.reviewer_role,
         CONCAT(stu.firstname, ' ', stu.lastname) AS student_name
@@ -70,6 +71,20 @@ if ($stmt) {
         }
     }
     $stmt->close();
+}
+
+$promptSubmissionAllowed = false;
+$promptSubmissionBlocked = false;
+if ($promptSubmissionId > 0) {
+    foreach ($rows as $row) {
+        if ((int)($row['id'] ?? 0) !== $promptSubmissionId) {
+            continue;
+        }
+        $gateStatus = trim((string)($row['review_gate_status'] ?? ''));
+        $promptSubmissionAllowed = $gateStatus !== '' || in_array($role, ['committee_chairperson', 'committee_chair'], true);
+        $promptSubmissionBlocked = !$promptSubmissionAllowed;
+        break;
+    }
 }
 
 include 'header.php';
@@ -140,6 +155,11 @@ include 'sidebar.php';
                 No outline defense manuscripts assigned to you yet.
             </div>
         <?php else: ?>
+            <?php if ($promptSubmissionBlocked): ?>
+                <div class="alert alert-warning border-0 shadow-sm">
+                    The committee chairperson has not confirmed the review status yet.
+                </div>
+            <?php endif; ?>
             <div class="card shadow-sm border-0">
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -159,6 +179,8 @@ include 'sidebar.php';
                                     <?php
                                         $reviewStatus = $row['review_status'] ?? 'Pending';
                                         $finalStatus = $row['final_status'] ?? 'Submitted';
+                                        $gateStatus = trim((string)($row['review_gate_status'] ?? ''));
+                                        $canReview = $gateStatus !== '' || in_array($role, ['committee_chairperson', 'committee_chair'], true);
                                     ?>
                                     <tr>
                                         <td class="fw-semibold text-success"><?= htmlspecialchars($row['student_name'] ?? ''); ?></td>
@@ -170,9 +192,15 @@ include 'sidebar.php';
                                         <td><span class="badge <?= finalPaperReviewStatusClass($reviewStatus); ?>"><?= htmlspecialchars(finalPaperStatusLabel($reviewStatus)); ?></span></td>
                                         <td><span class="badge <?= finalPaperStatusClass($finalStatus); ?>"><?= htmlspecialchars(finalPaperStatusLabel($finalStatus)); ?></span></td>
                                         <td class="text-end">
-                                            <a href="final_paper_review.php?submission_id=<?= (int)$row['id']; ?>" class="btn btn-sm btn-outline-success review-manuscript-btn" data-submission-id="<?= (int)$row['id']; ?>">
-                                                Review Manuscript
-                                            </a>
+                                            <?php if ($canReview): ?>
+                                                <a href="final_paper_review.php?submission_id=<?= (int)$row['id']; ?>" class="btn btn-sm btn-outline-success review-manuscript-btn" data-submission-id="<?= (int)$row['id']; ?>">
+                                                    Review Manuscript
+                                                </a>
+                                            <?php else: ?>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" disabled>
+                                                    Awaiting chair confirmation
+                                                </button>
+                                            <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -278,7 +306,8 @@ include 'sidebar.php';
         });
 
         const promptSubmissionId = <?php echo (int)$promptSubmissionId; ?>;
-        if (promptSubmissionId > 0) {
+        const promptSubmissionAllowed = <?php echo $promptSubmissionAllowed ? 'true' : 'false'; ?>;
+        if (promptSubmissionId > 0 && promptSubmissionAllowed) {
             openModal(promptSubmissionId);
         }
     })();

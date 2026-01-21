@@ -66,6 +66,12 @@ if (!$reviewRow) {
     exit;
 }
 
+$reviewGateStatus = trim((string)($submission['review_gate_status'] ?? ''));
+if (!in_array($role, ['committee_chairperson', 'committee_chair'], true) && $reviewGateStatus === '') {
+    header('Location: final_paper_inbox.php?review_submission_id=' . $submissionId);
+    exit;
+}
+
 $reviews = fetchFinalPaperReviews($conn, $submissionId);
 $canFinalize = in_array($role, ['committee_chairperson', 'committee_chair'], true);
 

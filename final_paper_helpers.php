@@ -88,6 +88,7 @@ if (!function_exists('ensureFinalPaperTables')) {
                     committee_reviews_completed_at TIMESTAMP NULL DEFAULT NULL,
                     outline_defense_verdict VARCHAR(50) NULL,
                     outline_defense_verdict_at TIMESTAMP NULL DEFAULT NULL,
+                    review_gate_status VARCHAR(50) NULL,
                     CONSTRAINT fk_final_paper_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
                     CONSTRAINT fk_final_paper_decider FOREIGN KEY (final_decision_by) REFERENCES users(id) ON DELETE SET NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
@@ -110,6 +111,7 @@ if (!function_exists('ensureFinalPaperTables')) {
             'committee_reviews_completed_at' => "ALTER TABLE final_paper_submissions ADD COLUMN committee_reviews_completed_at TIMESTAMP NULL DEFAULT NULL AFTER final_decision_at",
             'outline_defense_verdict' => "ALTER TABLE final_paper_submissions ADD COLUMN outline_defense_verdict VARCHAR(50) NULL AFTER committee_reviews_completed_at",
             'outline_defense_verdict_at' => "ALTER TABLE final_paper_submissions ADD COLUMN outline_defense_verdict_at TIMESTAMP NULL DEFAULT NULL AFTER outline_defense_verdict",
+            'review_gate_status' => "ALTER TABLE final_paper_submissions ADD COLUMN review_gate_status VARCHAR(50) NULL AFTER outline_defense_verdict_at",
             'route_slip_overall_decision' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_overall_decision VARCHAR(50) NULL AFTER outline_defense_verdict_at",
             'route_slip_decision_notes' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_decision_notes TEXT NULL AFTER route_slip_overall_decision",
             'route_slip_decision_by' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_decision_by INT NULL AFTER route_slip_decision_notes",
