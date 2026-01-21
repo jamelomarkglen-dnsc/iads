@@ -59,6 +59,31 @@ $gateStatusOptions = [
     'Redefense' => 'Redefense',
     'Failed' => 'Failed',
 ];
+$currentGateStatus = trim((string)($submission['review_gate_status'] ?? ''));
+
+$notifyReviewGate = function (string $gateStatus) use ($conn, $submissionId, $reviews, $studentName): void {
+    if ($gateStatus === '') {
+        return;
+    }
+    $link = 'final_paper_inbox.php?review_submission_id=' . $submissionId;
+    $message = "{$studentName}'s outline defense manuscript is ready for review. Status: {$gateStatus}.";
+    foreach ($reviews as $review) {
+        $reviewerId = (int)($review['reviewer_id'] ?? 0);
+        $reviewerRole = trim((string)($review['reviewer_role'] ?? ''));
+        if ($reviewerId <= 0 || $reviewerRole === 'committee_chairperson') {
+            continue;
+        }
+        notify_user_for_role(
+            $conn,
+            $reviewerId,
+            $reviewerRole,
+            'Outline defense review unlocked',
+            $message,
+            $link,
+            true
+        );
+    }
+};
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['set_review_gate'])) {
     $gateStatus = trim($_POST['review_gate_status'] ?? '');
@@ -77,6 +102,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['set_review_gate'])) {
             if ($updateGate->execute()) {
                 $gateSuccess = 'Review access status confirmed successfully.';
                 $submission['review_gate_status'] = $gateStatus;
+                if ($gateStatus !== $currentGateStatus) {
+                    $notifyReviewGate($gateStatus);
+                    $currentGateStatus = $gateStatus;
+                }
             } else {
                 $gateError = 'Unable to save the review gate status. Please try again.';
             }
@@ -98,25 +127,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_decision'])) {
     } elseif (!in_array($verdict, $validVerdicts, true)) {
         $error = 'Invalid outline defense verdict selected.';
     } else {
+        $autoGateStatus = $currentGateStatus;
+        if ($autoGateStatus === '') {
+            $autoGateStatus = match ($finalStatus) {
+                'Approved' => 'Passed',
+                'Minor Revision', 'Needs Revision' => 'Passed with Minor Revision',
+                'Major Revision' => 'Passed with Major Revision',
+                'Rejected' => 'Failed',
+                default => '',
+            };
+            if ($autoGateStatus === '' && $verdict === 'Passed') {
+                $autoGateStatus = 'Passed';
+            } elseif ($autoGateStatus === '' && $verdict === 'Passed with Revision') {
+                $autoGateStatus = 'Passed with Minor Revision';
+            } elseif ($autoGateStatus === '' && $verdict === 'Failed') {
+                $autoGateStatus = 'Failed';
+            }
+        }
+        if ($autoGateStatus === '') {
+            $autoGateStatus = null;
+        }
         $updateStmt = $conn->prepare("
             UPDATE final_paper_submissions
             SET status = ?,
                 final_decision_by = ?,
                 final_decision_notes = ?,
                 final_decision_at = NOW(),
-                committee_reviews_completed_at = NOW()
+                committee_reviews_completed_at = NOW(),
+                review_gate_status = COALESCE(review_gate_status, ?)
             WHERE id = ?
         ");
         if (!$updateStmt) {
             $error = 'Unable to save the final decision. Please try again.';
         } else {
-            $updateStmt->bind_param('sisi', $finalStatus, $chairId, $decisionNotes, $submissionId);
+            $updateStmt->bind_param('sissi', $finalStatus, $chairId, $decisionNotes, $autoGateStatus, $submissionId);
             if ($updateStmt->execute()) {
                 setOutlineDefenseVerdict($conn, $submissionId, $verdict);
 
                 $currentDecision = $decisionNotes;
                 $currentStatus = $finalStatus;
                 $decisionMadeAt = date('Y-m-d H:i:s');
+                if ($currentGateStatus === '' && $autoGateStatus !== '') {
+                    $submission['review_gate_status'] = $autoGateStatus;
+                    $notifyReviewGate($autoGateStatus);
+                    $currentGateStatus = $autoGateStatus;
+                }
 
                 $chairName = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? ''));
                 $chairName = $chairName !== '' ? $chairName : 'Committee Chairperson';
@@ -148,7 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_decision'])) {
 
 $chairName = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? ''));
 $chairName = $chairName !== '' ? $chairName : 'Committee Chairperson';
-$reviewGateStatus = trim((string)($submission['review_gate_status'] ?? ''));
+$reviewGateStatus = $currentGateStatus;
 
 include 'header.php';
 include 'sidebar.php';

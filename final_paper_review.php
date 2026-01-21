@@ -157,25 +157,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_review'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['final_decision']) && $canFinalize) {
     $decision = trim($_POST['final_status'] ?? '');
     $notes = trim($_POST['final_notes'] ?? '');
+    $currentGateStatus = trim((string)($submission['review_gate_status'] ?? ''));
     if (!in_array($decision, ['Approved', 'Rejected', 'Minor Revision', 'Major Revision'], true)) {
         $reviewError = 'Please choose a valid final decision.';
     } else {
+        $autoGateStatus = $currentGateStatus;
+        if ($autoGateStatus === '') {
+            $autoGateStatus = match ($decision) {
+                'Approved' => 'Passed',
+                'Minor Revision' => 'Passed with Minor Revision',
+                'Major Revision' => 'Passed with Major Revision',
+                'Rejected' => 'Failed',
+                default => '',
+            };
+        }
+        if ($autoGateStatus === '') {
+            $autoGateStatus = null;
+        }
         $stmt = $conn->prepare("
             UPDATE final_paper_submissions
             SET status = ?,
                 final_decision_by = ?,
                 final_decision_notes = ?,
-                final_decision_at = NOW()
+                final_decision_at = NOW(),
+                review_gate_status = COALESCE(review_gate_status, ?)
             WHERE id = ?
         ");
         if ($stmt) {
-            $stmt->bind_param('sisi', $decision, $reviewerId, $notes, $submissionId);
+            $stmt->bind_param('sissi', $decision, $reviewerId, $notes, $autoGateStatus, $submissionId);
             if ($stmt->execute()) {
                 $reviewSuccess = 'Overall decision saved.';
                 $submission['status'] = $decision;
                 $submission['final_decision_by'] = $reviewerId;
                 $submission['final_decision_notes'] = $notes;
                 $submission['final_decision_at'] = date('Y-m-d H:i:s');
+                if ($currentGateStatus === '' && $autoGateStatus) {
+                    $submission['review_gate_status'] = $autoGateStatus;
+                    $link = 'final_paper_inbox.php?review_submission_id=' . $submissionId;
+                    $message = ($submission['student_name'] ?? 'The student') . "'s outline defense manuscript is ready for review. Status: {$autoGateStatus}.";
+                    foreach ($reviews as $review) {
+                        $reviewerRole = trim((string)($review['reviewer_role'] ?? ''));
+                        if (!in_array($reviewerRole, ['adviser', 'panel'], true)) {
+                            continue;
+                        }
+                        $targetId = (int)($review['reviewer_id'] ?? 0);
+                        if ($targetId <= 0) {
+                            continue;
+                        }
+                        notify_user_for_role(
+                            $conn,
+                            $targetId,
+                            $reviewerRole,
+                            'Outline defense review unlocked',
+                            $message,
+                            $link,
+                            true
+                        );
+                    }
+                }
 
                 notify_user_for_role(
                     $conn,
