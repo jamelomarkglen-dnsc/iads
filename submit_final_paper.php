@@ -368,7 +368,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_final_paper'])
                                 if ($reviewerId <= 0 || $reviewerRole === '') {
                                     continue;
                                 }
-                                $link = 'route_slip_review.php?submission_id=' . $submissionId;
+                                $link = 'final_paper_inbox.php?review_submission_id=' . $submissionId;
                                 notify_user_for_role(
                                     $conn,
                                     $reviewerId,

@@ -215,6 +215,12 @@ $selectedReviewStatus = $reviewRow['status'] ?? '';
 if ($selectedReviewStatus === 'Needs Revision') {
     $selectedReviewStatus = 'Minor Revision';
 }
+$prefillStatus = trim($_GET['prefill_status'] ?? '');
+$prefillAllowed = ['Approved', 'Minor Revision', 'Major Revision', 'Rejected'];
+if (($selectedReviewStatus === '' || $selectedReviewStatus === 'Pending')
+    && in_array($prefillStatus, $prefillAllowed, true)) {
+    $selectedReviewStatus = $prefillStatus;
+}
 $selectedFinalStatus = $submission['status'] ?? '';
 if ($selectedFinalStatus === 'Needs Revision') {
     $selectedFinalStatus = 'Minor Revision';

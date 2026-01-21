@@ -13,6 +13,7 @@ $reviewerId = (int)($_SESSION['user_id'] ?? 0);
 $role = $_SESSION['role'] ?? '';
 $roleMap = ['committee_chair' => 'committee_chairperson'];
 $reviewerRoleFilter = $roleMap[$role] ?? $role;
+$promptSubmissionId = (int)($_GET['review_submission_id'] ?? 0);
 
 $search = trim($_GET['search'] ?? '');
 $statusFilter = trim($_GET['status'] ?? '');
@@ -169,7 +170,7 @@ include 'sidebar.php';
                                         <td><span class="badge <?= finalPaperReviewStatusClass($reviewStatus); ?>"><?= htmlspecialchars(finalPaperStatusLabel($reviewStatus)); ?></span></td>
                                         <td><span class="badge <?= finalPaperStatusClass($finalStatus); ?>"><?= htmlspecialchars(finalPaperStatusLabel($finalStatus)); ?></span></td>
                                         <td class="text-end">
-                                            <a href="final_paper_review.php?submission_id=<?= (int)$row['id']; ?>" class="btn btn-sm btn-outline-success">
+                                            <a href="final_paper_review.php?submission_id=<?= (int)$row['id']; ?>" class="btn btn-sm btn-outline-success review-manuscript-btn" data-submission-id="<?= (int)$row['id']; ?>">
                                                 Review Manuscript
                                             </a>
                                         </td>
@@ -182,8 +183,105 @@ include 'sidebar.php';
             </div>
         <?php endif; ?>
     </div>
+    <div class="modal fade" id="reviewGateModal" tabindex="-1" aria-labelledby="reviewGateLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="reviewGateLabel">Confirm Review Status</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="reviewGateForm">
+                    <div class="modal-body">
+                        <p class="text-muted small mb-3">
+                            Select a status before opening the manuscript review. You can update this after reviewing.
+                        </p>
+                        <label class="form-label fw-semibold">Status</label>
+                        <select class="form-select" id="reviewGateStatus" required>
+                            <option value="">Select status</option>
+                            <option value="Approved">Passed</option>
+                            <option value="Minor Revision">Passed with minor revisions</option>
+                            <option value="Major Revision">Passed with major revisions</option>
+                            <option value="Redefense">Redefense</option>
+                            <option value="Rejected">Failed</option>
+                        </select>
+                        <div class="invalid-feedback">Please choose a status to continue.</div>
+                        <input type="hidden" id="reviewGateSubmissionId" value="">
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success">Continue</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    (function () {
+        const modalEl = document.getElementById('reviewGateModal');
+        const form = document.getElementById('reviewGateForm');
+        const statusSelect = document.getElementById('reviewGateStatus');
+        const submissionInput = document.getElementById('reviewGateSubmissionId');
+        const statusMap = {
+            'Approved': 'Approved',
+            'Minor Revision': 'Minor Revision',
+            'Major Revision': 'Major Revision',
+            'Redefense': 'Major Revision',
+            'Rejected': 'Rejected'
+        };
+        if (!modalEl || !form || !statusSelect || !submissionInput) {
+            return;
+        }
+
+        const modal = new bootstrap.Modal(modalEl);
+
+        const openModal = (submissionId) => {
+            submissionInput.value = submissionId || '';
+            statusSelect.value = '';
+            statusSelect.classList.remove('is-invalid');
+            modal.show();
+        };
+
+        document.querySelectorAll('.review-manuscript-btn').forEach((btn) => {
+            btn.addEventListener('click', (event) => {
+                event.preventDefault();
+                openModal(btn.dataset.submissionId || '');
+            });
+        });
+
+        form.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const submissionId = parseInt(submissionInput.value, 10);
+            const selected = statusSelect.value;
+            if (!submissionId) {
+                modal.hide();
+                return;
+            }
+            if (!selected) {
+                statusSelect.classList.add('is-invalid');
+                return;
+            }
+            const mappedStatus = statusMap[selected] || selected;
+            let target = `final_paper_review.php?submission_id=${encodeURIComponent(submissionId)}`;
+            if (mappedStatus) {
+                target += `&prefill_status=${encodeURIComponent(mappedStatus)}`;
+            }
+            window.location.href = target;
+        });
+
+        statusSelect.addEventListener('change', () => {
+            if (statusSelect.value) {
+                statusSelect.classList.remove('is-invalid');
+            }
+        });
+
+        const promptSubmissionId = <?php echo (int)$promptSubmissionId; ?>;
+        if (promptSubmissionId > 0) {
+            openModal(promptSubmissionId);
+        }
+    })();
+</script>
 </body>
 </html>
