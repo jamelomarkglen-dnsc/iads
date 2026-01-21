@@ -43,11 +43,31 @@ $studentScopeClause = '';
 $studentScopeTypes = '';
 $studentScopeParams = [];
 [$studentScopeClause, $studentScopeTypes, $studentScopeParams] = build_scope_condition_any($chairScope, 'u');
+$requireAcceptedPayment = defense_committee_column_exists($conn, 'payment_proofs', 'status');
 $studentSql = "
     SELECT u.id, u.firstname, u.lastname, u.email, u.program
     FROM users u
-    WHERE u.role = 'student'
 ";
+if ($requireAcceptedPayment) {
+    $studentSql .= "
+        JOIN (
+            SELECT p.user_id, p.status
+            FROM payment_proofs p
+            JOIN (
+                SELECT
+                    user_id,
+                    MAX(CONCAT(LPAD(UNIX_TIMESTAMP(updated_at), 10, '0'), LPAD(id, 10, '0'))) AS sort_key
+                FROM payment_proofs
+                GROUP BY user_id
+            ) latest
+                ON latest.user_id = p.user_id
+               AND CONCAT(LPAD(UNIX_TIMESTAMP(p.updated_at), 10, '0'), LPAD(p.id, 10, '0')) = latest.sort_key
+        ) payment_latest
+            ON payment_latest.user_id = u.id
+           AND payment_latest.status = 'payment_accepted'
+    ";
+}
+$studentSql .= " WHERE u.role = 'student'";
 if ($studentScopeClause !== '') {
     $studentSql .= " AND {$studentScopeClause}";
 }
@@ -420,6 +440,9 @@ foreach ($requests as $row) {
                             <input type="hidden" name="create_committee_request" value="1">
                             <div class="mb-3">
                                 <label class="form-label text-muted small">Student</label>
+                                <?php if ($requireAcceptedPayment): ?>
+                                    <div class="text-muted small mb-1">Only students with accepted proof of payment appear.</div>
+                                <?php endif; ?>
                                 <select name="student_id" class="form-select" required>
                                     <option value="">Select student</option>
                                     <?php foreach ($studentOptions as $student): ?>
