@@ -130,9 +130,61 @@ function formatMemoDate(?string $date): string
             .content { margin-left: 0; }
             #sidebar.collapsed ~ .content { margin-left: 0; }
         }
-        .memo-card { border-radius: 18px; border: 1px solid rgba(22, 86, 44, 0.12); box-shadow: 0 18px 40px rgba(15, 61, 31, 0.08); }
-        .memo-header { letter-spacing: 0.06em; }
-        .memo-body { white-space: pre-wrap; }
+        .memo-card {
+            border-radius: 18px;
+            border: 1px solid rgba(22, 86, 44, 0.12);
+            box-shadow: 0 18px 40px rgba(15, 61, 31, 0.08);
+            overflow: hidden;
+            background: #fff;
+            max-width: 820px;
+            margin: 0 auto;
+        }
+        .memo-header { letter-spacing: 0.06em; font-size: 0.98rem; }
+        .memo-body {
+            white-space: pre-line;
+            font-size: 0.96rem;
+            line-height: 1.5;
+            text-align: justify;
+            text-justify: inter-word;
+        }
+        .letter-head,
+        .letter-foot {
+            background-image: url('memopic.jpg');
+            background-repeat: no-repeat;
+            background-size: 100% auto;
+            width: 100%;
+        }
+        .letter-head {
+            height: 180px;
+            background-position: top center;
+            border-bottom: 1px solid #d9e2d6;
+        }
+        .letter-foot {
+            height: 120px;
+            background-position: bottom center;
+            border-top: 1px solid #d9e2d6;
+        }
+        .letter-body { padding: 24px 44px; }
+        @media (max-width: 768px) {
+            .letter-body { padding: 20px 24px; }
+        }
+        @media print {
+            @page { size: letter; margin: 0.5in; }
+            body { background: #fff; }
+            nav.navbar,
+            #sidebar,
+            .btn {
+                display: none !important;
+            }
+            .content { margin: 0 !important; }
+            .memo-card { border: none; box-shadow: none; max-width: 100%; margin: 0; }
+            .letter-head { height: 170px; }
+            .letter-foot { height: 110px; }
+            .letter-body { padding: 18px 28px; }
+            .memo-header { font-size: 11pt; letter-spacing: 0.08em; }
+            .memo-body { font-size: 10.5pt; line-height: 1.5; text-align: justify; text-justify: inter-word; }
+            .memo-card .text-muted.small { font-size: 9.5pt; }
+        }
     </style>
 </head>
 <body>
@@ -157,7 +209,8 @@ function formatMemoDate(?string $date): string
             </div>
         <?php else: ?>
             <div class="card memo-card">
-                <div class="card-body">
+                <div class="letter-head" aria-hidden="true"></div>
+                <div class="card-body letter-body">
                     <div class="text-center fw-semibold memo-header">OFFICE OF THE DEAN</div>
                     <div class="text-center text-muted small mb-3">
                         Memorandum No. <?php echo htmlspecialchars($memo['memo_number'] ?? ''); ?> &middot;
@@ -171,8 +224,9 @@ function formatMemoDate(?string $date): string
                             <strong>Subject:</strong> <?php echo htmlspecialchars($memo['memo_subject'] ?? ''); ?>
                         </div>
                     </div>
-                    <div class="memo-body"><?php echo nl2br(htmlspecialchars($memo['memo_body'] ?? '')); ?></div>
+                    <div class="memo-body"><?php echo htmlspecialchars($memo['memo_body'] ?? ''); ?></div>
                 </div>
+                <div class="letter-foot" aria-hidden="true"></div>
             </div>
         <?php endif; ?>
     </div>
