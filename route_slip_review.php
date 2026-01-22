@@ -20,7 +20,8 @@ $reviewerRoleFilter = $roleMap[$role] ?? $role;
 $submission = null;
 if ($submissionId > 0) {
     $stmt = $conn->prepare("
-        SELECT s.*, CONCAT(u.firstname, ' ', u.lastname) AS student_name, u.email AS student_email
+        SELECT s.*, u.firstname AS student_firstname, u.lastname AS student_lastname,
+               CONCAT(u.firstname, ' ', u.lastname) AS student_name, u.email AS student_email
         FROM final_paper_submissions s
         JOIN users u ON u.id = s.student_id
         WHERE s.id = ?
@@ -70,6 +71,29 @@ if (!$reviewRow) {
 $reviews = fetchFinalPaperReviews($conn, $submissionId);
 $canFinalize = in_array($role, ['committee_chairperson', 'committee_chair'], true);
 
+$isSummaryRequest = isset($_GET['summary']) && $_GET['summary'] === '1';
+if ($isSummaryRequest) {
+    $summaryRows = [];
+    foreach ($reviews as $review) {
+        $status = $review['route_slip_status'] ?? '';
+        if (strcasecmp($status, 'Needs Revision') === 0) {
+            $status = 'Minor Revision';
+        }
+        $statusLabel = $status !== '' ? $status : 'Pending';
+        $summaryRows[] = [
+            'reviewer_name' => $review['reviewer_name'] ?? '',
+            'reviewer_role' => $review['reviewer_role'] ?? '',
+            'status_label' => $statusLabel,
+            'status_class' => finalPaperReviewStatusClass($statusLabel),
+            'reviewed_at' => $review['route_slip_reviewed_at'] ?? '',
+            'signature_path' => $review['route_slip_signature_path'] ?? '',
+        ];
+    }
+    header('Content-Type: application/json');
+    echo json_encode(['reviews' => $summaryRows], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $reviewSuccess = '';
 $reviewError = '';
 
@@ -116,6 +140,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_route_slip_revie
                 $reviewSuccess = 'Route slip review saved successfully.';
                 $reviewRow = fetchFinalPaperReviewForUser($conn, $submissionId, $reviewerId);
                 $reviews = fetchFinalPaperReviews($conn, $submissionId);
+
+                $committeeTotal = 0;
+                $committeeSigned = 0;
+                foreach ($reviews as $review) {
+                    $roleValue = $review['reviewer_role'] ?? '';
+                    if ($roleValue === 'panel' || $roleValue === 'committee_chairperson') {
+                        $committeeTotal++;
+                        if (!empty($review['route_slip_signature_path'])) {
+                            $committeeSigned++;
+                        }
+                    }
+                }
+                if ($committeeTotal > 0 && $committeeSigned === $committeeTotal && empty($submission['route_slip_committee_signed_at'])) {
+                    $signedStmt = $conn->prepare("
+                        UPDATE final_paper_submissions
+                        SET route_slip_committee_signed_at = NOW()
+                        WHERE id = ?
+                    ");
+                    if ($signedStmt) {
+                        $signedStmt->bind_param('i', $submissionId);
+                        $signedStmt->execute();
+                        $signedStmt->close();
+                        $submission['route_slip_committee_signed_at'] = date('Y-m-d H:i:s');
+                    }
+
+                    $adviserId = 0;
+                    $adviserStmt = $conn->prepare("
+                        SELECT reviewer_id
+                        FROM final_paper_reviews
+                        WHERE submission_id = ? AND reviewer_role = 'adviser'
+                        LIMIT 1
+                    ");
+                    if ($adviserStmt) {
+                        $adviserStmt->bind_param('i', $submissionId);
+                        $adviserStmt->execute();
+                        $adviserResult = $adviserStmt->get_result();
+                        $adviserRow = $adviserResult ? $adviserResult->fetch_assoc() : null;
+                        if ($adviserResult) {
+                            $adviserResult->free();
+                        }
+                        $adviserStmt->close();
+                        $adviserId = (int)($adviserRow['reviewer_id'] ?? 0);
+                    }
+                    if ($adviserId > 0) {
+                        $studentName = $submission['student_name'] ?? 'the student';
+                        notify_user_for_role(
+                            $conn,
+                            $adviserId,
+                            'adviser',
+                            'Route slip signatures completed',
+                            "All committee signatures for {$studentName} are complete. Please add your final signature.",
+                            "adviser_route_slip.php?submission_id={$submissionId}",
+                            false
+                        );
+                    }
+                }
 
                 // Check if all route slip reviews are completed
                 $allRouteSlipReviewsComplete = true;
@@ -440,7 +520,12 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
                             <div class="form-text">Upload your e-signature for the route slip.</div>
                             <?php if (!empty($reviewRow['route_slip_signature_path'])): ?>
                                 <div class="mt-2">
-                                    <img src="<?= htmlspecialchars($reviewRow['route_slip_signature_path']); ?>" alt="Route slip signature" style="max-height: 70px; max-width: 200px; object-fit: contain;">
+                                    <?php
+                                        $currentSigPath = $reviewRow['route_slip_signature_path'];
+                                        $currentCacheBuster = is_file($currentSigPath) ? filemtime($currentSigPath) : time();
+                                        $currentSigSrc = $currentSigPath . '?v=' . $currentCacheBuster;
+                                    ?>
+                                    <img src="<?= htmlspecialchars($currentSigSrc); ?>" alt="Route slip signature" style="max-height: 70px; max-width: 200px; object-fit: contain;">
                                 </div>
                             <?php endif; ?>
                         </div>
@@ -496,7 +581,7 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
                             <th>Signature</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="routeSlipSummaryBody">
                         <?php foreach ($reviews as $review): ?>
                             <?php
                                 $status = $review['route_slip_status'] ?? '';
@@ -512,7 +597,12 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
                                 <td><?= htmlspecialchars($review['route_slip_reviewed_at'] ?? ''); ?></td>
                                 <td>
                                     <?php if (!empty($review['route_slip_signature_path'])): ?>
-                                        <img src="<?= htmlspecialchars($review['route_slip_signature_path']); ?>" alt="Signature" style="max-height: 40px; max-width: 120px; object-fit: contain;">
+                                        <?php
+                                            $sigPath = $review['route_slip_signature_path'];
+                                            $cacheBuster = is_file($sigPath) ? filemtime($sigPath) : time();
+                                            $sigSrc = $sigPath . '?v=' . $cacheBuster;
+                                        ?>
+                                        <img src="<?= htmlspecialchars($sigSrc); ?>" alt="Signature" style="max-height: 40px; max-width: 120px; object-fit: contain;">
                                     <?php else: ?>
                                         <span class="text-muted small">Not uploaded</span>
                                     <?php endif; ?>
@@ -527,5 +617,65 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const summaryBody = document.getElementById('routeSlipSummaryBody');
+const submissionId = <?php echo (int)$submissionId; ?>;
+
+function escapeHtml(value) {
+    if (value === null || value === undefined) {
+        return '';
+    }
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function renderSummaryRows(reviews) {
+    if (!summaryBody) {
+        return;
+    }
+    summaryBody.innerHTML = '';
+    if (!Array.isArray(reviews) || reviews.length === 0) {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td colspan="5" class="text-muted small">No route slip reviews yet.</td>';
+        summaryBody.appendChild(row);
+        return;
+    }
+    reviews.forEach((review) => {
+        const row = document.createElement('tr');
+        const signatureCell = review.signature_path
+            ? `<img src="${escapeHtml(review.signature_path)}" alt="Signature" style="max-height: 40px; max-width: 120px; object-fit: contain;">`
+            : '<span class="text-muted small">Not uploaded</span>';
+        row.innerHTML = `
+            <td>${escapeHtml(review.reviewer_name || '')}</td>
+            <td>${escapeHtml(review.reviewer_role || '')}</td>
+            <td><span class="badge ${escapeHtml(review.status_class || '')}">${escapeHtml(review.status_label || '')}</span></td>
+            <td>${escapeHtml(review.reviewed_at || '')}</td>
+            <td>${signatureCell}</td>
+        `;
+        summaryBody.appendChild(row);
+    });
+}
+
+function refreshSummary() {
+    if (!summaryBody || !submissionId) {
+        return;
+    }
+    fetch(`route_slip_review.php?submission_id=${submissionId}&summary=1`)
+        .then((res) => res.json())
+        .then((data) => {
+            renderSummaryRows(data.reviews || []);
+        })
+        .catch((err) => {
+            console.error('Failed to refresh route slip summary', err);
+        });
+}
+
+refreshSummary();
+setInterval(refreshSummary, 20000);
+</script>
 </body>
 </html>

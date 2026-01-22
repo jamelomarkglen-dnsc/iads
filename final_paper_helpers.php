@@ -116,6 +116,10 @@ if (!function_exists('ensureFinalPaperTables')) {
             'route_slip_decision_notes' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_decision_notes TEXT NULL AFTER route_slip_overall_decision",
             'route_slip_decision_by' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_decision_by INT NULL AFTER route_slip_decision_notes",
             'route_slip_decision_at' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_decision_at TIMESTAMP NULL DEFAULT NULL AFTER route_slip_decision_by",
+            'route_slip_committee_signed_at' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_committee_signed_at TIMESTAMP NULL DEFAULT NULL AFTER route_slip_decision_at",
+            'route_slip_signed_path' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_signed_path VARCHAR(255) NULL AFTER route_slip_committee_signed_at",
+            'route_slip_signed_name' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_signed_name VARCHAR(255) NULL AFTER route_slip_signed_path",
+            'route_slip_signed_at' => "ALTER TABLE final_paper_submissions ADD COLUMN route_slip_signed_at TIMESTAMP NULL DEFAULT NULL AFTER route_slip_signed_name",
         ];
         foreach ($columns as $column => $sql) {
             if (!final_paper_column_exists($conn, 'final_paper_submissions', $column)) {
