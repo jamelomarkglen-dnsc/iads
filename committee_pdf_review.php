@@ -191,6 +191,70 @@ $stats = get_committee_annotation_statistics($conn, $submission_id);
                         <span><?php echo (int)($stats['resolved_annotations'] ?? 0); ?></span>
                     </div>
                 </div>
+
+                <!-- Final Verdict Card (Committee Chairperson Only) -->
+                <?php if ($reviewer_role === 'committee_chairperson'): ?>
+                <div class="card p-3 shadow-sm mt-3">
+                    <h6 class="fw-semibold mb-3">
+                        <i class="bi bi-gavel text-warning me-2"></i>
+                        Submit Final Verdict
+                    </h6>
+                    
+                    <?php if (isset($_SESSION['verdict_success'])): ?>
+                        <div class="alert alert-success alert-dismissible fade show small" role="alert">
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                            <?php echo htmlspecialchars($_SESSION['verdict_success']); ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                        <?php unset($_SESSION['verdict_success']); ?>
+                    <?php endif; ?>
+                    
+                    <?php if (isset($_SESSION['verdict_error'])): ?>
+                        <div class="alert alert-danger alert-dismissible fade show small" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            <?php echo htmlspecialchars($_SESSION['verdict_error']); ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                        <?php unset($_SESSION['verdict_error']); ?>
+                    <?php endif; ?>
+                    
+                    <!-- Current Verdict Display (if already set) -->
+                    <?php if (!empty($submission['final_verdict']) && $submission['final_verdict'] !== 'pending'): ?>
+                        <div class="alert alert-info small mb-3">
+                            <strong>Current Verdict:</strong> 
+                            <?php echo htmlspecialchars(get_verdict_label($submission['final_verdict'])); ?>
+                            <br>
+                            <small>Set on: <?php echo $submission['final_verdict_at'] ? date('M d, Y g:i A', strtotime($submission['final_verdict_at'])) : 'N/A'; ?></small>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <form method="POST" action="committee_pdf_verdict_handler.php">
+                        <input type="hidden" name="submission_id" value="<?php echo (int)$submission_id; ?>">
+                        
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Verdict Decision</label>
+                            <select name="final_verdict" class="form-select form-select-sm" required>
+                                <option value="">-- Select Verdict --</option>
+                                <option value="passed">✅ Passed</option>
+                                <option value="passed_minor_revisions">✏️ Passed with Minor Revisions</option>
+                                <option value="passed_major_revisions">📝 Passed with Major Revisions</option>
+                                <option value="redefense">🔄 Redefense Required</option>
+                                <option value="failed">❌ Failed</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Comments/Recommendations</label>
+                            <textarea name="verdict_comments" class="form-control form-control-sm" rows="4" 
+                                      placeholder="Provide detailed feedback and recommendations..."></textarea>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-warning btn-sm w-100">
+                            <i class="bi bi-check-circle me-1"></i>Submit Final Verdict
+                        </button>
+                    </form>
+                </div>
+                <?php endif; ?>
             </div>
         </div>
     </div>

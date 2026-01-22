@@ -201,6 +201,69 @@ function ensureCommitteePdfTables(mysqli $conn): void
         $conn->query("ALTER TABLE committee_annotation_replies MODIFY COLUMN reply_user_role {$replyRoleEnum} NOT NULL");
     }
 
+    $verdict_columns = [
+        'final_verdict' => "ALTER TABLE committee_pdf_submissions
+            ADD COLUMN final_verdict ENUM(
+                'pending',
+                'passed',
+                'passed_minor_revisions',
+                'passed_major_revisions',
+                'redefense',
+                'failed'
+            ) DEFAULT 'pending' AFTER submission_status",
+        'final_verdict_comments' => "ALTER TABLE committee_pdf_submissions
+            ADD COLUMN final_verdict_comments TEXT NULL AFTER final_verdict",
+        'final_verdict_by' => "ALTER TABLE committee_pdf_submissions
+            ADD COLUMN final_verdict_by INT NULL AFTER final_verdict_comments",
+        'final_verdict_at' => "ALTER TABLE committee_pdf_submissions
+            ADD COLUMN final_verdict_at TIMESTAMP NULL AFTER final_verdict_by",
+    ];
+
+    foreach ($verdict_columns as $column => $alter_sql) {
+        $column_stmt = $conn->prepare("
+            SELECT 1
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'committee_pdf_submissions'
+              AND COLUMN_NAME = ?
+            LIMIT 1
+        ");
+        if ($column_stmt) {
+            $column_stmt->bind_param('s', $column);
+            $column_stmt->execute();
+            $column_result = $column_stmt->get_result();
+            $exists = $column_result && $column_result->num_rows > 0;
+            if ($column_result) {
+                $column_result->free();
+            }
+            $column_stmt->close();
+            if (!$exists) {
+                $conn->query($alter_sql);
+            }
+        }
+    }
+
+    $index_stmt = $conn->prepare("
+        SELECT 1
+        FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'committee_pdf_submissions'
+          AND INDEX_NAME = 'idx_final_verdict'
+        LIMIT 1
+    ");
+    if ($index_stmt) {
+        $index_stmt->execute();
+        $index_result = $index_stmt->get_result();
+        $index_exists = $index_result && $index_result->num_rows > 0;
+        if ($index_result) {
+            $index_result->free();
+        }
+        $index_stmt->close();
+        if (!$index_exists) {
+            $conn->query("CREATE INDEX idx_final_verdict ON committee_pdf_submissions (final_verdict)");
+        }
+    }
+
     $ensured = true;
 }
 
@@ -626,4 +689,108 @@ function get_committee_latest_version_id(mysqli $conn, int $submission_id): int
 {
     $info = get_committee_version_chain_info($conn, $submission_id);
     return $info ? (int)$info['latest_id'] : $submission_id;
+}
+
+/**
+ * Submit final verdict for a committee PDF submission
+ * Only committee chairperson can submit verdicts
+ */
+function submit_committee_final_verdict(
+    mysqli $conn,
+    int $submission_id,
+    string $verdict,
+    string $comments,
+    int $chairperson_id
+): array {
+    $allowed_verdicts = ['passed', 'passed_minor_revisions', 'passed_major_revisions', 'redefense', 'failed'];
+    
+    if (!in_array($verdict, $allowed_verdicts, true)) {
+        return ['success' => false, 'error' => 'Invalid verdict value.'];
+    }
+    
+    $stmt = $conn->prepare("
+        UPDATE committee_pdf_submissions
+        SET final_verdict = ?,
+            final_verdict_comments = ?,
+            final_verdict_by = ?,
+            final_verdict_at = NOW()
+        WHERE id = ?
+    ");
+    
+    if (!$stmt) {
+        return ['success' => false, 'error' => 'Database error: ' . $conn->error];
+    }
+    
+    $stmt->bind_param('ssii', $verdict, $comments, $chairperson_id, $submission_id);
+    
+    if (!$stmt->execute()) {
+        $stmt->close();
+        return ['success' => false, 'error' => 'Failed to submit verdict: ' . $stmt->error];
+    }
+    
+    $stmt->close();
+    return ['success' => true];
+}
+
+/**
+ * Get verdict display configuration
+ */
+function get_verdict_config(string $verdict): array
+{
+    $configs = [
+        'passed' => [
+            'class' => 'alert-success',
+            'icon' => 'bi-check-circle-fill',
+            'title' => 'PASSED',
+            'color' => 'success',
+            'description' => 'Congratulations! Your defense has been approved.'
+        ],
+        'passed_minor_revisions' => [
+            'class' => 'alert-info',
+            'icon' => 'bi-pencil-square',
+            'title' => 'PASSED WITH MINOR REVISIONS',
+            'color' => 'info',
+            'description' => 'Your defense passed, but minor revisions are required.'
+        ],
+        'passed_major_revisions' => [
+            'class' => 'alert-warning',
+            'icon' => 'bi-exclamation-triangle-fill',
+            'title' => 'PASSED WITH MAJOR REVISIONS',
+            'color' => 'warning',
+            'description' => 'Your defense passed, but significant revisions are required.'
+        ],
+        'redefense' => [
+            'class' => 'alert-warning',
+            'icon' => 'bi-arrow-repeat',
+            'title' => 'REDEFENSE REQUIRED',
+            'color' => 'warning',
+            'description' => 'You need to schedule and conduct another defense.'
+        ],
+        'failed' => [
+            'class' => 'alert-danger',
+            'icon' => 'bi-x-circle-fill',
+            'title' => 'FAILED',
+            'color' => 'danger',
+            'description' => 'Your defense did not meet the required standards.'
+        ]
+    ];
+    
+    return $configs[$verdict] ?? $configs['passed'];
+}
+
+/**
+ * Get verdict label for display
+ */
+function get_verdict_label(string $verdict): string
+{
+    $labels = [
+        'pending' => 'Pending Review',
+        'passed' => 'Passed',
+        'passed_minor_revisions' => 'Passed with Minor Revisions',
+        'passed_major_revisions' => 'Passed with Major Revisions',
+        'redefense' => 'Redefense Required',
+        'failed' => 'Failed'
+    ];
+    
+    return $labels[$verdict] ?? ucwords(str_replace('_', ' ', $verdict));
 }

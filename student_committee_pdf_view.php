@@ -275,6 +275,33 @@ $annotations = fetch_committee_submission_annotations($conn, $submission_id);
             ?>
         <?php endif; ?>
 
+        <!-- Final Verdict Display -->
+        <?php if (!empty($submission['final_verdict']) && $submission['final_verdict'] !== 'pending'): ?>
+            <?php
+                $verdict = $submission['final_verdict'];
+                $config = get_verdict_config($verdict);
+            ?>
+            <div class="alert <?php echo $config['class']; ?> border-0 shadow-sm" role="alert">
+                <h5 class="alert-heading fw-bold">
+                    <i class="bi <?php echo $config['icon']; ?> me-2"></i>
+                    Final Verdict: <?php echo $config['title']; ?>
+                </h5>
+                <p class="mb-2"><?php echo htmlspecialchars($config['description']); ?></p>
+                <?php if (!empty($submission['final_verdict_comments'])): ?>
+                    <hr>
+                    <h6 class="fw-semibold">Committee Chairperson's Comments:</h6>
+                    <p class="mb-2"><?php echo nl2br(htmlspecialchars($submission['final_verdict_comments'])); ?></p>
+                <?php endif; ?>
+                <hr>
+                <p class="mb-0 small">
+                    <i class="bi bi-person-badge me-1"></i>
+                    <strong>Committee Chairperson</strong> |
+                    <i class="bi bi-calendar-check ms-2 me-1"></i>
+                    <?php echo $submission['final_verdict_at'] ? date('F d, Y g:i A', strtotime($submission['final_verdict_at'])) : 'N/A'; ?>
+                </p>
+            </div>
+        <?php endif; ?>
+
         <!-- Upload New Version Card -->
         <div class="card mb-4 shadow-sm">
             <div class="card-body">
