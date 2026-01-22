@@ -76,17 +76,42 @@ $reviewError = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_route_slip_review'])) {
     $newStatus = trim($_POST['route_slip_status'] ?? '');
     $comments = trim($_POST['route_slip_comments'] ?? '');
+    $signatureError = '';
+    $signaturePath = '';
+    if (isset($_FILES['route_slip_signature'])) {
+        $signaturePath = save_notice_signature_upload($_FILES['route_slip_signature'], $reviewerId, $signatureError);
+        if ($signatureError !== '') {
+            $reviewError = $signatureError;
+        }
+    }
 
-    if (!in_array($newStatus, ['Approved', 'Minor Revision', 'Major Revision'], true)) {
+    if ($reviewError === '' && !in_array($newStatus, ['Approved', 'Minor Revision', 'Major Revision'], true)) {
         $reviewError = 'Please choose a valid route slip decision.';
-    } else {
-        $stmt = $conn->prepare("
-            UPDATE final_paper_reviews
-            SET route_slip_status = ?, route_slip_comments = ?, route_slip_reviewed_at = NOW()
-            WHERE submission_id = ? AND reviewer_id = ?
-        ");
+    } elseif ($reviewError === '') {
+        if ($signaturePath !== '') {
+            $stmt = $conn->prepare("
+                UPDATE final_paper_reviews
+                SET route_slip_status = ?,
+                    route_slip_comments = ?,
+                    route_slip_signature_path = ?,
+                    route_slip_reviewed_at = NOW()
+                WHERE submission_id = ? AND reviewer_id = ?
+            ");
+        } else {
+            $stmt = $conn->prepare("
+                UPDATE final_paper_reviews
+                SET route_slip_status = ?,
+                    route_slip_comments = ?,
+                    route_slip_reviewed_at = NOW()
+                WHERE submission_id = ? AND reviewer_id = ?
+            ");
+        }
         if ($stmt) {
-            $stmt->bind_param('ssii', $newStatus, $comments, $submissionId, $reviewerId);
+            if ($signaturePath !== '') {
+                $stmt->bind_param('sssii', $newStatus, $comments, $signaturePath, $submissionId, $reviewerId);
+            } else {
+                $stmt->bind_param('ssii', $newStatus, $comments, $submissionId, $reviewerId);
+            }
             if ($stmt->execute()) {
                 $reviewSuccess = 'Route slip review saved successfully.';
                 $reviewRow = fetchFinalPaperReviewForUser($conn, $submissionId, $reviewerId);
@@ -384,7 +409,7 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
             <div class="col-lg-5">
                 <div class="card review-card p-4">
                     <h5 class="fw-bold text-success mb-3">Route Slip Checklist</h5>
-                    <form method="post">
+                    <form method="post" enctype="multipart/form-data">
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-success">Decision</label>
                             <div class="border rounded-3 p-3">
@@ -408,6 +433,16 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-success">Comments</label>
                             <textarea name="route_slip_comments" class="form-control" rows="4"><?= htmlspecialchars($reviewRow['route_slip_comments'] ?? ''); ?></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-success">E-Signature (PNG or JPG)</label>
+                            <input type="file" name="route_slip_signature" class="form-control" accept="image/png,image/jpeg">
+                            <div class="form-text">Upload your e-signature for the route slip.</div>
+                            <?php if (!empty($reviewRow['route_slip_signature_path'])): ?>
+                                <div class="mt-2">
+                                    <img src="<?= htmlspecialchars($reviewRow['route_slip_signature_path']); ?>" alt="Route slip signature" style="max-height: 70px; max-width: 200px; object-fit: contain;">
+                                </div>
+                            <?php endif; ?>
                         </div>
                         <button type="submit" name="save_route_slip_review" class="btn btn-success">Save Route Slip Review</button>
                     </form>
@@ -458,6 +493,7 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
                             <th>Role</th>
                             <th>Status</th>
                             <th>Reviewed At</th>
+                            <th>Signature</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -474,6 +510,13 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
                                 <td><?= htmlspecialchars($review['reviewer_role'] ?? ''); ?></td>
                                 <td><span class="badge <?= finalPaperReviewStatusClass($statusLabel); ?>"><?= htmlspecialchars($statusLabel); ?></span></td>
                                 <td><?= htmlspecialchars($review['route_slip_reviewed_at'] ?? ''); ?></td>
+                                <td>
+                                    <?php if (!empty($review['route_slip_signature_path'])): ?>
+                                        <img src="<?= htmlspecialchars($review['route_slip_signature_path']); ?>" alt="Signature" style="max-height: 40px; max-width: 120px; object-fit: contain;">
+                                    <?php else: ?>
+                                        <span class="text-muted small">Not uploaded</span>
+                                    <?php endif; ?>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>

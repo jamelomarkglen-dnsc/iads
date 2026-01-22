@@ -422,6 +422,8 @@ include 'sidebar.php';
     </div>
 </div>
 
+<img src="memopic.jpg" id="routeSlipLetterheadSource" alt="" style="display:none;">
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script>
@@ -432,6 +434,7 @@ const slipDateInput = document.getElementById('slipDate');
 const signatureInput = document.getElementById('signatureImage');
 const routeSlipPdf = document.getElementById('routeSlipPdf');
 const routeSlipForm = document.getElementById('routeSlipForm');
+const letterheadSource = document.getElementById('routeSlipLetterheadSource');
 const adviserName = <?php echo json_encode($advisorName); ?>;
 
 function fillStudentDetails() {
@@ -452,6 +455,39 @@ function formatDateLabel(dateValue) {
     return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
+function sliceLetterheadImage(image, startY, sliceHeight) {
+    if (!image || !image.naturalWidth || !image.naturalHeight) {
+        return '';
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = sliceHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        return '';
+    }
+    ctx.drawImage(image, 0, startY, image.naturalWidth, sliceHeight, 0, 0, image.naturalWidth, sliceHeight);
+    return canvas.toDataURL('image/png');
+}
+
+function getRouteSlipLetterheadImages(headerHeight, footerHeight, pageWidth) {
+    if (!letterheadSource || !letterheadSource.naturalHeight || !letterheadSource.naturalWidth || !pageWidth) {
+        return { header: '', footer: '' };
+    }
+    const headerSlice = Math.min(
+        letterheadSource.naturalHeight,
+        Math.round((headerHeight / pageWidth) * letterheadSource.naturalWidth)
+    );
+    const footerSlice = Math.min(
+        letterheadSource.naturalHeight,
+        Math.round((footerHeight / pageWidth) * letterheadSource.naturalWidth)
+    );
+    const header = sliceLetterheadImage(letterheadSource, 0, headerSlice);
+    const footerStart = Math.max(0, letterheadSource.naturalHeight - footerSlice);
+    const footer = sliceLetterheadImage(letterheadSource, footerStart, footerSlice);
+    return { header, footer };
+}
+
 function buildRouteSlipPdf(signatureDataUrl) {
     const option = studentSelect.options[studentSelect.selectedIndex];
     const firstName = option ? (option.dataset.firstname || '') : '';
@@ -466,8 +502,20 @@ function buildRouteSlipPdf(signatureDataUrl) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'pt', format: 'letter' });
 
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const headerHeight = 230;
+    const footerHeight = 170;
+    const letterhead = getRouteSlipLetterheadImages(headerHeight, footerHeight, pageWidth);
+    if (letterhead.header) {
+        doc.addImage(letterhead.header, 'PNG', 0, 0, pageWidth, headerHeight);
+    }
+    if (letterhead.footer) {
+        doc.addImage(letterhead.footer, 'PNG', 0, pageHeight - footerHeight, pageWidth, footerHeight);
+    }
+
     const marginX = 48;
-    let y = 60;
+    let y = headerHeight + 12;
     doc.setFontSize(14);
     doc.text('THESIS/DISSERTATION ROUTE SLIP', 306, y, { align: 'center' });
     y += 30;
@@ -541,13 +589,27 @@ function buildRouteSlipPdf(signatureDataUrl) {
         y += 18;
     });
 
-    y += 40;
-    doc.line(marginX + 360, y, marginX + 520, y);
-    doc.text('Signature', marginX + 395, y + 12);
+    y += 36;
+    const lineWidth = 200;
+    const columnGap = 40;
+    const leftX = marginX + 20;
+    const rightX = leftX + lineWidth + columnGap;
+    const firstLineY = y;
+    doc.setFontSize(10);
+    doc.line(leftX, firstLineY, leftX + lineWidth, firstLineY);
+    doc.line(rightX, firstLineY, rightX + lineWidth, firstLineY);
+    doc.text('Panel Member 1', leftX, firstLineY + 12);
+    doc.text('Panel Member 2', rightX, firstLineY + 12);
+
+    const secondLineY = firstLineY + 50;
+    doc.line(leftX, secondLineY, leftX + lineWidth, secondLineY);
+    doc.line(rightX, secondLineY, rightX + lineWidth, secondLineY);
+    doc.text('Committee Chairperson', leftX, secondLineY + 12);
+    doc.text('Adviser', rightX, secondLineY + 12);
 
     if (signatureDataUrl) {
         const format = signatureDataUrl.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG';
-        doc.addImage(signatureDataUrl, format, marginX + 360, y - 45, 140, 40);
+        doc.addImage(signatureDataUrl, format, rightX + 10, secondLineY - 42, 140, 36);
     }
 
     return doc.output('datauristring');
@@ -569,19 +631,27 @@ if (routeSlipForm) {
             alert('Unable to load the PDF generator. Please refresh and try again.');
             return;
         }
-        const file = signatureInput.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = () => {
-                const pdfData = buildRouteSlipPdf(reader.result);
+        const proceed = () => {
+            const file = signatureInput.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const pdfData = buildRouteSlipPdf(reader.result);
+                    routeSlipPdf.value = pdfData;
+                    routeSlipForm.submit();
+                };
+                reader.readAsDataURL(file);
+            } else {
+                const pdfData = buildRouteSlipPdf('');
                 routeSlipPdf.value = pdfData;
                 routeSlipForm.submit();
-            };
-            reader.readAsDataURL(file);
+            }
+        };
+        if (letterheadSource && !letterheadSource.complete) {
+            letterheadSource.addEventListener('load', proceed, { once: true });
+            letterheadSource.addEventListener('error', proceed, { once: true });
         } else {
-            const pdfData = buildRouteSlipPdf('');
-            routeSlipPdf.value = pdfData;
-            routeSlipForm.submit();
+            proceed();
         }
     });
 }

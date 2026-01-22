@@ -139,6 +139,7 @@ if (!function_exists('ensureFinalPaperTables')) {
                     comments TEXT NULL,
                     route_slip_status ENUM('Pending','Approved','Rejected','Needs Revision','Minor Revision','Major Revision') DEFAULT 'Pending',
                     route_slip_comments TEXT NULL,
+                    route_slip_signature_path VARCHAR(255) NULL,
                     reviewed_at TIMESTAMP NULL DEFAULT NULL,
                     route_slip_reviewed_at TIMESTAMP NULL DEFAULT NULL,
                     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -153,6 +154,7 @@ if (!function_exists('ensureFinalPaperTables')) {
         $reviewColumns = [
             'route_slip_status' => "ALTER TABLE final_paper_reviews ADD COLUMN route_slip_status ENUM('Pending','Approved','Rejected','Needs Revision','Minor Revision','Major Revision') DEFAULT 'Pending' AFTER comments",
             'route_slip_comments' => "ALTER TABLE final_paper_reviews ADD COLUMN route_slip_comments TEXT NULL AFTER route_slip_status",
+            'route_slip_signature_path' => "ALTER TABLE final_paper_reviews ADD COLUMN route_slip_signature_path VARCHAR(255) NULL AFTER route_slip_comments",
             'route_slip_reviewed_at' => "ALTER TABLE final_paper_reviews ADD COLUMN route_slip_reviewed_at TIMESTAMP NULL DEFAULT NULL AFTER reviewed_at",
         ];
         foreach ($reviewColumns as $column => $sql) {
