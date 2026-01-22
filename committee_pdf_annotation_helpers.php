@@ -100,7 +100,10 @@ function fetch_committee_submission_annotations(mysqli $conn, int $submission_id
     $stmt = $conn->prepare("
         SELECT
             a.*,
-            CONCAT(u.firstname, ' ', u.lastname) AS reviewer_name
+            CONCAT(u.firstname, ' ', u.lastname) AS reviewer_name,
+            CONCAT(u.firstname, ' ', u.lastname) AS adviser_name,
+            a.reviewer_id AS adviser_id,
+            a.created_at AS creation_timestamp
         FROM committee_pdf_annotations a
         LEFT JOIN users u ON u.id = a.reviewer_id
         WHERE a.submission_id = ?
@@ -125,7 +128,10 @@ function fetch_committee_page_annotations(mysqli $conn, int $submission_id, int 
     $stmt = $conn->prepare("
         SELECT
             a.*,
-            CONCAT(u.firstname, ' ', u.lastname) AS reviewer_name
+            CONCAT(u.firstname, ' ', u.lastname) AS reviewer_name,
+            CONCAT(u.firstname, ' ', u.lastname) AS adviser_name,
+            a.reviewer_id AS adviser_id,
+            a.created_at AS creation_timestamp
         FROM committee_pdf_annotations a
         LEFT JOIN users u ON u.id = a.reviewer_id
         WHERE a.submission_id = ? AND a.page_number = ?
@@ -207,7 +213,7 @@ function delete_committee_annotation(mysqli $conn, int $annotation_id): array
 
 function add_committee_annotation_reply(mysqli $conn, int $annotation_id, int $user_id, string $reply_content, string $reply_user_role): array
 {
-    $valid_roles = ['student', 'adviser'];
+    $valid_roles = ['student', 'adviser', 'committee_chairperson', 'panel'];
     if (!in_array($reply_user_role, $valid_roles, true)) {
         return ['success' => false, 'error' => 'Invalid user role.'];
     }
@@ -293,4 +299,3 @@ function get_committee_annotation_statistics(mysqli $conn, int $submission_id): 
     $stmt->close();
     return $row ?: [];
 }
-

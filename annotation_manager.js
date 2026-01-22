@@ -21,6 +21,8 @@ class AnnotationManager {
         this.isDragging = false;
         this.dragStart = null;
         this.dragPreview = null;
+        this.selectedUserId = 'all'; // For user filter tabs
+        this.userTabsContainer = null;
         
         // Polling configuration
         this.pollingEnabled = options.enablePolling !== undefined ? options.enablePolling : false;
@@ -65,6 +67,9 @@ class AnnotationManager {
         
         // Comment panel
         this.commentPanel = document.querySelector('.comment-panel-content');
+        
+        // User tabs container
+        this.userTabsContainer = document.getElementById('annotationUserTabs');
         
         // Annotation dialog
         this.annotationDialog = document.querySelector('.annotation-dialog');
@@ -530,6 +535,9 @@ class AnnotationManager {
         // Store current scroll position
         const scrollTop = this.commentPanel.scrollTop;
         
+        // Store current selected user filter
+        const currentSelectedUser = this.selectedUserId;
+        
         // Get currently expanded/focused elements
         const openReplyForms = Array.from(document.querySelectorAll('.reply-form')).map(form => {
             const commentItem = form.closest('.comment-item');
@@ -643,10 +651,82 @@ class AnnotationManager {
     }
     
     /**
+     * Render user filter tabs
+     */
+    renderUserTabs() {
+        if (!this.userTabsContainer) return;
+        
+        console.log('renderUserTabs called with', this.annotations.length, 'annotations');
+        
+        // Get unique users from annotations
+        const usersMap = new Map();
+        usersMap.set('all', { name: 'All', count: this.annotations.length });
+        
+        this.annotations.forEach((annotation, index) => {
+            // Debug: Log first annotation to see structure
+            if (index === 0) {
+                console.log('First annotation structure:', annotation);
+                console.log('Available fields:', Object.keys(annotation));
+            }
+            
+            // For committee annotations: reviewer_id is the actual field, adviser_id is an alias
+            const userId = annotation.reviewer_id || annotation.adviser_id;
+            const userName = annotation.reviewer_name || annotation.adviser_name || 'Unknown';
+            
+            console.log(`Annotation ${index}: userId=${userId}, userName=${userName}`);
+            
+            if (!userId) {
+                console.warn('Annotation missing user ID:', annotation);
+                return;
+            }
+            
+            if (!usersMap.has(userId)) {
+                usersMap.set(userId, { name: userName, count: 0 });
+            }
+            usersMap.get(userId).count++;
+        });
+        
+        console.log('usersMap after processing:', Array.from(usersMap.entries()));
+        
+        // Clear existing tabs
+        this.userTabsContainer.innerHTML = '';
+        console.log('Cleared userTabsContainer, creating tabs...');
+        
+        // Create tabs
+        let tabCount = 0;
+        usersMap.forEach((userData, userId) => {
+            const tab = document.createElement('button');
+            tab.className = 'user-tab';
+            if (userId === this.selectedUserId) {
+                tab.classList.add('active');
+            }
+            tab.dataset.userId = userId;
+            tab.innerHTML = `${userData.name} <span class="user-tab-count">${userData.count}</span>`;
+            
+            console.log(`Creating tab ${tabCount}: userId=${userId}, name=${userData.name}, count=${userData.count}`);
+            
+            tab.addEventListener('click', () => {
+                this.selectedUserId = userId;
+                this.renderUserTabs();
+                this.renderCommentPanel();
+            });
+            
+            this.userTabsContainer.appendChild(tab);
+            tabCount++;
+        });
+        
+        console.log(`Total tabs created: ${tabCount}`);
+        console.log('userTabsContainer children:', this.userTabsContainer.children.length);
+    }
+    
+    /**
      * Render comment panel
      */
     renderCommentPanel() {
         if (!this.commentPanel) return;
+        
+        // Update user tabs
+        this.renderUserTabs();
         
         this.commentPanel.innerHTML = '';
         
@@ -655,12 +735,28 @@ class AnnotationManager {
             return;
         }
         
+        // Filter annotations by selected user
+        let filteredAnnotations = this.annotations;
+        if (this.selectedUserId !== 'all') {
+            filteredAnnotations = this.annotations.filter(annotation => {
+                // For committee annotations: reviewer_id is the actual field, adviser_id is an alias
+                const userId = annotation.reviewer_id || annotation.adviser_id;
+                return userId == this.selectedUserId;
+            });
+        }
+        
         // Sort annotations by creation timestamp (newest first)
-        const sortedAnnotations = [...this.annotations].sort((a, b) => {
+        const sortedAnnotations = [...filteredAnnotations].sort((a, b) => {
             const dateA = new Date(a.creation_timestamp);
             const dateB = new Date(b.creation_timestamp);
             return dateB - dateA; // Descending order (newest first)
         });
+        
+        // Show message if no annotations for selected user
+        if (sortedAnnotations.length === 0) {
+            this.commentPanel.innerHTML = '<p style="padding: 12px; color: #999; text-align: center;">No annotations from this user</p>';
+            return;
+        }
         
         // Render annotations in sorted order
         sortedAnnotations.forEach(annotation => {
@@ -693,7 +789,9 @@ class AnnotationManager {
         header.className = 'comment-header';
         
         // Check if this annotation is by current user
-        const isOwnAnnotation = annotation.adviser_id === this.userId;
+        // For committee annotations: reviewer_id is the actual field
+        const annotationUserId = annotation.reviewer_id || annotation.adviser_id;
+        const isOwnAnnotation = annotationUserId === this.userId;
         const youBadge = isOwnAnnotation ? '<span class="you-badge">You</span>' : '';
         
         header.innerHTML = `
@@ -711,14 +809,6 @@ class AnnotationManager {
         content.textContent = annotation.annotation_content;
         item.appendChild(content);
         
-        // Selected text
-        if (annotation.selected_text) {
-            const selectedText = document.createElement('div');
-            selectedText.className = 'comment-selected-text';
-            selectedText.textContent = `"${annotation.selected_text}"`;
-            item.appendChild(selectedText);
-        }
-        
         // Replies
         if (annotation.replies && annotation.replies.length > 0) {
             const repliesDiv = document.createElement('div');
@@ -732,7 +822,15 @@ class AnnotationManager {
                 
                 // Determine reply role and add appropriate classes
                 const replyRole = reply.reply_user_role || 'student';
-                const isAdviserReply = replyRole === 'adviser';
+                const isStudentReply = replyRole === 'student';
+                const isAdviserReply = !isStudentReply;
+                const roleLabels = {
+                    adviser: 'Adviser',
+                    committee_chairperson: 'Committee Chairperson',
+                    panel: 'Panel Member',
+                    student: 'Student'
+                };
+                const roleLabel = roleLabels[replyRole] || 'Reviewer';
                 
                 // Add classes based on ownership and role
                 let replyClasses = 'reply-item';
@@ -749,7 +847,7 @@ class AnnotationManager {
                 const youBadge = isOwnReply ? '<span class="you-badge-small">You</span>' : '';
                 
                 replyItem.innerHTML = `
-                    <div class="reply-author">${reply.user_name} ${youBadge}</div>
+                    <div class="reply-author">${reply.user_name} <span class="text-muted small">(${roleLabel})</span> ${youBadge}</div>
                     <div class="reply-content">${reply.reply_content}</div>
                     <div class="reply-time">${this.formatTime(reply.reply_timestamp)}</div>
                 `;
@@ -763,7 +861,7 @@ class AnnotationManager {
         const actions = document.createElement('div');
         actions.className = 'comment-actions';
         
-        if (this.userRole === 'student' || this.userRole === 'adviser') {
+        if (['student', 'adviser', 'committee_chairperson', 'committee_chair', 'panel'].includes(this.userRole)) {
             const replyBtn = document.createElement('button');
             replyBtn.className = 'comment-action-btn';
             replyBtn.textContent = 'Reply';
@@ -774,7 +872,9 @@ class AnnotationManager {
             actions.appendChild(replyBtn);
         }
         
-        if (this.userRole === 'adviser' && annotation.adviser_id === this.userId) {
+        // Check if current user owns this annotation (for resolve/delete permissions)
+        const annotationOwnerId = annotation.reviewer_id || annotation.adviser_id;
+        if (this.userRole === 'adviser' && annotationOwnerId === this.userId) {
             const resolveBtn = document.createElement('button');
             resolveBtn.className = 'comment-action-btn';
             resolveBtn.textContent = annotation.annotation_status === 'active' ? 'Resolve' : 'Unresolve';

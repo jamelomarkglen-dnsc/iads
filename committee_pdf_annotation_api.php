@@ -274,7 +274,15 @@ if ($action === 'add_reply') {
         exit;
     }
 
-    $reply_user_role = $user_role === 'student' ? 'student' : 'adviser';
+    if ($user_role === 'student') {
+        $reply_user_role = 'student';
+    } else {
+        $roleMap = ['committee_chair' => 'committee_chairperson'];
+        $reply_user_role = $roleMap[$user_role] ?? $user_role;
+        if (!in_array($reply_user_role, ['adviser', 'committee_chairperson', 'panel'], true)) {
+            $reply_user_role = 'adviser';
+        }
+    }
     $result = add_committee_annotation_reply($conn, $annotation_id, $user_id, $reply_content, $reply_user_role);
     if (!$result['success']) {
         http_response_code(400);

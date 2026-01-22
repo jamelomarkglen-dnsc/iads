@@ -212,8 +212,10 @@ class PDFViewer {
         // Render each annotation
         pageAnnotations.forEach(annotation => {
             const overlay = this.createAnnotationOverlay(annotation);
-            if (overlay) {
+            if (overlay && this.canvasWrapper) {
                 this.canvasWrapper.appendChild(overlay);
+            } else if (overlay && !this.canvasWrapper) {
+                console.warn('Canvas wrapper not ready, skipping annotation overlay');
             }
         });
     }

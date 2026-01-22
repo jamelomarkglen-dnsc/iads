@@ -50,6 +50,59 @@ $stats = get_committee_annotation_statistics($conn, $submission_id);
         .content { margin-left: var(--sidebar-width-expanded, 240px); transition: margin-left 0.3s ease; padding: 20px; min-height: 100vh; }
         #sidebar.collapsed ~ .content { margin-left: var(--sidebar-width-collapsed, 70px); }
         @media (max-width: 992px) { .content { margin-left: 0; padding: 15px; } }
+        
+        /* User Filter Tabs */
+        .annotation-user-tabs {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e0e0e0;
+            scrollbar-width: thin;
+        }
+        .annotation-user-tabs::-webkit-scrollbar {
+            height: 4px;
+        }
+        .annotation-user-tabs::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 2px;
+        }
+        .user-tab {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            background: #fff;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        .user-tab:hover {
+            background: #f8f9fa;
+            border-color: #198754;
+        }
+        .user-tab.active {
+            background: #198754;
+            color: white;
+            border-color: #198754;
+        }
+        .user-tab-count {
+            display: inline-block;
+            margin-left: 4px;
+            padding: 2px 6px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 10px;
+            font-size: 0.75rem;
+        }
+        .user-tab.active .user-tab-count {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        /* Hide selected text in comment list */
+        .comment-selected-text {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -99,7 +152,22 @@ $stats = get_committee_annotation_statistics($conn, $submission_id);
                 </div>
             </div>
             <div class="col-lg-4">
-                <div class="card p-3 shadow-sm mb-4">
+                <div class="card p-3 shadow-sm mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-semibold mb-0">Committee Annotations</h6>
+                        <span class="comment-count-badge" id="annotationCount"><?php echo count($annotations); ?></span>
+                    </div>
+                    
+                    <!-- User Filter Tabs -->
+                    <div class="annotation-user-tabs mb-2" id="annotationUserTabs">
+                        <button class="user-tab active" data-user-id="all">All</button>
+                    </div>
+                    
+                    <!-- Annotation List -->
+                    <div class="comment-panel-content" style="max-height: 400px; overflow-y: auto;"></div>
+                </div>
+
+                <div class="card p-3 shadow-sm mb-3">
                     <h6 class="fw-semibold mb-3">Submission Details</h6>
                     <div class="text-muted small mb-2"><strong>Filename:</strong> <?php echo htmlspecialchars($submission['original_filename'] ?? ''); ?></div>
                     <div class="text-muted small mb-2"><strong>Version:</strong> v<?php echo (int)($submission['version_number'] ?? 1); ?></div>
@@ -124,14 +192,6 @@ $stats = get_committee_annotation_statistics($conn, $submission_id);
                     </div>
                 </div>
             </div>
-        </div>
-
-        <div class="comment-panel mt-4">
-            <div class="comment-panel-header">
-                <span>Committee Annotations</span>
-                <span class="comment-count-badge" id="annotationCount"><?php echo count($annotations); ?></span>
-            </div>
-            <div class="comment-panel-content"></div>
         </div>
     </div>
 </div>
@@ -175,7 +235,7 @@ $stats = get_committee_annotation_statistics($conn, $submission_id);
     const annotationManager = new AnnotationManager({
         submissionId: <?php echo (int)$submission_id; ?>,
         userId: <?php echo (int)$_SESSION['user_id']; ?>,
-        userRole: '<?php echo htmlspecialchars($_SESSION['role'] ?? ''); ?>',
+        userRole: '<?php echo htmlspecialchars($reviewer_role); ?>',
         pdfViewer: pdfViewer,
         apiEndpoint: 'committee_pdf_annotation_api.php',
         enablePolling: true,

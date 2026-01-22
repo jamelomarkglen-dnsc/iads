@@ -316,7 +316,7 @@ $facultySectionOpen = in_array($currentPage, $facultyMenuPages, true);
 $studentSectionOpen = in_array($currentPage, $studentMenuPages, true);
 $recordsSectionOpen = in_array($currentPage, $recordsMenuPages, true);
 $adviserStudentPages = ['adviser_directory.php', 'advisory.php', 'final_paper_inbox.php'];
-$adviserDefensePages = ['my_assigned_defense.php', 'adviser_route_slip.php', 'route_slip_inbox.php', 'adviser_final_endorsement.php', 'final_defense_committee_dashboard.php'];
+$adviserDefensePages = ['my_assigned_defense.php', 'adviser_route_slip.php', 'route_slip_inbox.php', 'adviser_final_endorsement.php', 'final_defense_committee_dashboard.php', 'committee_pdf_inbox.php'];
 $adviserStudentOpen = in_array($currentPage, $adviserStudentPages, true);
 $adviserDefenseOpen = in_array($currentPage, $adviserDefensePages, true);
 $rolesWithWorkspaceLinks = ['program_chairperson', 'student', 'dean', 'adviser', 'committee_chair', 'committee_chairperson', 'panel'];
@@ -488,6 +488,9 @@ if ($userLastLogin !== '') {
                     <a href="submit_final_paper.php" class="nav-link <?php echo ($currentPage == 'submit_final_paper.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-text"></i> <span class="link-text">Outline Defense Submission</span>
                     </a>
+                    <a href="student_committee_pdf_submission.php" class="nav-link <?php echo ($currentPage == 'student_committee_pdf_submission.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-file-earmark-pdf"></i> <span class="link-text">Committee PDF Submission</span>
+                    </a>
                     <a href="submit_final_defense.php" class="nav-link <?php echo ($currentPage == 'submit_final_defense.php') ? 'active' : ''; ?>">
                         <i class="bi bi-upload"></i> <span class="link-text">Final Defense Submission</span>
                     </a>
@@ -542,6 +545,9 @@ if ($userLastLogin !== '') {
                             <a href="final_paper_inbox.php" class="nav-sub-link <?php echo ($currentPage == 'final_paper_inbox.php') ? 'active' : ''; ?>">
                                 Manuscript Inbox
                             </a>
+                            <a href="committee_pdf_inbox.php" class="nav-sub-link <?php echo ($currentPage == 'committee_pdf_inbox.php') ? 'active' : ''; ?>">
+                                Committee PDF Inbox
+                            </a>
                             <a href="route_slip_inbox.php" class="nav-sub-link <?php echo ($currentPage == 'route_slip_inbox.php') ? 'active' : ''; ?>">
                                 Route Slip Inbox
                             </a>
@@ -565,6 +571,9 @@ if ($userLastLogin !== '') {
                     <a href="final_paper_inbox.php" class="nav-link <?php echo ($currentPage == 'final_paper_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-inbox"></i> <span class="link-text">Manuscript Inbox</span>
                     </a>
+                    <a href="committee_pdf_inbox.php" class="nav-link <?php echo ($currentPage == 'committee_pdf_inbox.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-file-earmark-pdf"></i> <span class="link-text">Committee PDF Inbox</span>
+                    </a>
                     <a href="route_slip_inbox.php" class="nav-link <?php echo ($currentPage == 'route_slip_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Route Slip Inbox</span>
                     </a>
@@ -580,6 +589,9 @@ if ($userLastLogin !== '') {
                     <a href="final_paper_inbox.php" class="nav-link <?php echo ($currentPage == 'final_paper_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-inbox"></i> <span class="link-text">Manuscript Inbox</span>
                     </a>
+                    <a href="committee_pdf_inbox.php" class="nav-link <?php echo ($currentPage == 'committee_pdf_inbox.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-file-earmark-pdf"></i> <span class="link-text">Committee PDF Inbox</span>
+                    </a>
                     <a href="route_slip_inbox.php" class="nav-link <?php echo ($currentPage == 'route_slip_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Route Slip Inbox</span>
                     </a>
@@ -594,6 +606,9 @@ if ($userLastLogin !== '') {
                     </a>
                     <a href="final_paper_inbox.php" class="nav-link <?php echo ($currentPage == 'final_paper_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-inbox"></i> <span class="link-text">Manuscript Inbox</span>
+                    </a>
+                    <a href="committee_pdf_inbox.php" class="nav-link <?php echo ($currentPage == 'committee_pdf_inbox.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-file-earmark-pdf"></i> <span class="link-text">Committee PDF Inbox</span>
                     </a>
                     <a href="route_slip_inbox.php" class="nav-link <?php echo ($currentPage == 'route_slip_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Route Slip Inbox</span>

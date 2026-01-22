@@ -168,11 +168,38 @@ function ensureCommitteePdfTables(mysqli $conn): void
             annotation_id INT NOT NULL,
             user_id INT NOT NULL,
             reply_content TEXT NOT NULL,
-            reply_user_role ENUM('student','adviser') NOT NULL,
+            reply_user_role ENUM('student','adviser','committee_chairperson','panel') NOT NULL,
             reply_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_committee_annotation (annotation_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     ");
+
+    $replyRoleEnum = "ENUM('student','adviser','committee_chairperson','panel')";
+    $needsUpdate = false;
+    $stmt = $conn->prepare("
+        SELECT COLUMN_TYPE
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'committee_annotation_replies'
+          AND COLUMN_NAME = 'reply_user_role'
+        LIMIT 1
+    ");
+    if ($stmt) {
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result ? $result->fetch_assoc() : null;
+        if ($result) {
+            $result->free();
+        }
+        $stmt->close();
+        $columnType = $row['COLUMN_TYPE'] ?? '';
+        if ($columnType !== '' && (strpos($columnType, "'committee_chairperson'") === false || strpos($columnType, "'panel'") === false)) {
+            $needsUpdate = true;
+        }
+    }
+    if ($needsUpdate) {
+        $conn->query("ALTER TABLE committee_annotation_replies MODIFY COLUMN reply_user_role {$replyRoleEnum} NOT NULL");
+    }
 
     $ensured = true;
 }
@@ -328,14 +355,29 @@ function fetch_committee_pdf_submission(mysqli $conn, int $submission_id): ?arra
     return $row ?: null;
 }
 
-function fetch_committee_pdf_submissions_for_student(mysqli $conn, int $student_id): array
+function fetch_committee_pdf_submissions_for_student(mysqli $conn, int $student_id, bool $latest_only = true): array
 {
-    $stmt = $conn->prepare("
-        SELECT *
-        FROM committee_pdf_submissions
-        WHERE student_id = ?
-        ORDER BY submitted_at DESC, id DESC
-    ");
+    if ($latest_only) {
+        // Fetch only latest versions (submissions that don't have a child/newer version)
+        $stmt = $conn->prepare("
+            SELECT *
+            FROM committee_pdf_submissions
+            WHERE student_id = ?
+            AND NOT EXISTS (
+                SELECT 1 FROM committee_pdf_submissions child
+                WHERE child.parent_submission_id = committee_pdf_submissions.id
+            )
+            ORDER BY submitted_at DESC, id DESC
+        ");
+    } else {
+        // Fetch all versions
+        $stmt = $conn->prepare("
+            SELECT *
+            FROM committee_pdf_submissions
+            WHERE student_id = ?
+            ORDER BY submitted_at DESC, id DESC
+        ");
+    }
     if (!$stmt) {
         return [];
     }
@@ -448,3 +490,140 @@ function mark_committee_review_status(mysqli $conn, int $submission_id, int $rev
     $stmt->close();
 }
 
+/**
+ * Create a revision (new version) of an existing committee PDF submission
+ * Similar to create_revision_submission() in pdf_submission_helpers.php
+ */
+function create_committee_revision_submission(
+    mysqli $conn,
+    int $student_id,
+    int $defense_id,
+    int $parent_submission_id,
+    string $file_path,
+    string $original_filename,
+    int $file_size,
+    string $mime_type
+): array {
+    // Get parent submission to determine version number
+    $parent = fetch_committee_pdf_submission($conn, $parent_submission_id);
+    if (!$parent) {
+        return ['success' => false, 'error' => 'Parent submission not found.'];
+    }
+    
+    // Verify student owns the parent submission
+    if ((int)$parent['student_id'] !== $student_id) {
+        return ['success' => false, 'error' => 'You do not have permission to create a revision of this submission.'];
+    }
+    
+    $new_version = (int)($parent['version_number'] ?? 1) + 1;
+    
+    $stmt = $conn->prepare("
+        INSERT INTO committee_pdf_submissions
+            (student_id, defense_id, file_path, original_filename, file_size, mime_type, submission_status, version_number, parent_submission_id)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+    ");
+    if (!$stmt) {
+        return ['success' => false, 'error' => 'Database error: ' . $conn->error];
+    }
+    $stmt->bind_param('iissisii', $student_id, $defense_id, $file_path, $original_filename, $file_size, $mime_type, $new_version, $parent_submission_id);
+    if (!$stmt->execute()) {
+        $stmt->close();
+        return ['success' => false, 'error' => 'Failed to create revision: ' . $stmt->error];
+    }
+    $submission_id = (int)$stmt->insert_id;
+    $stmt->close();
+    
+    // Create review assignments for the new version (copy from parent)
+    $reviewers = fetch_committee_reviewers_for_student($conn, $student_id);
+    if (!empty($reviewers)) {
+        replace_committee_pdf_reviews($conn, $submission_id, $reviewers);
+    }
+    
+    return ['success' => true, 'submission_id' => $submission_id, 'version' => $new_version];
+}
+
+/**
+ * Get version chain information for a committee PDF submission
+ * Similar to get_version_chain_info() in pdf_submission_helpers.php
+ */
+function get_committee_version_chain_info(mysqli $conn, int $submission_id): ?array
+{
+    $current = fetch_committee_pdf_submission($conn, $submission_id);
+    if (!$current) {
+        return null;
+    }
+    
+    // Get previous version ID
+    $previous_id = $current['parent_submission_id'] ?? null;
+    
+    // Get next version ID (child submission)
+    $next_id = null;
+    $next_stmt = $conn->prepare("
+        SELECT id FROM committee_pdf_submissions 
+        WHERE parent_submission_id = ? 
+        LIMIT 1
+    ");
+    if ($next_stmt) {
+        $next_stmt->bind_param('i', $submission_id);
+        $next_stmt->execute();
+        $next_result = $next_stmt->get_result();
+        if ($next_row = $next_result->fetch_assoc()) {
+            $next_id = (int)$next_row['id'];
+        }
+        if ($next_result) {
+            $next_result->free();
+        }
+        $next_stmt->close();
+    }
+    
+    // Get latest version in chain
+    $latest_id = $submission_id;
+    $temp_id = $submission_id;
+    $safety_counter = 0;
+    while ($safety_counter < 100) {
+        $check_stmt = $conn->prepare("
+            SELECT id FROM committee_pdf_submissions 
+            WHERE parent_submission_id = ? 
+            LIMIT 1
+        ");
+        if (!$check_stmt) {
+            break;
+        }
+        $check_stmt->bind_param('i', $temp_id);
+        $check_stmt->execute();
+        $check_result = $check_stmt->get_result();
+        if ($check_row = $check_result->fetch_assoc()) {
+            $latest_id = (int)$check_row['id'];
+            $temp_id = $latest_id;
+        } else {
+            $check_stmt->close();
+            break;
+        }
+        if ($check_result) {
+            $check_result->free();
+        }
+        $check_stmt->close();
+        $safety_counter++;
+    }
+    
+    $is_latest = ($latest_id === $submission_id);
+    
+    return [
+        'current_version' => (int)($current['version_number'] ?? 1),
+        'previous_id' => $previous_id,
+        'next_id' => $next_id,
+        'latest_id' => $latest_id,
+        'is_latest' => $is_latest,
+        'has_previous' => !is_null($previous_id),
+        'has_next' => !is_null($next_id)
+    ];
+}
+
+/**
+ * Get the latest version ID in a submission chain
+ */
+function get_committee_latest_version_id(mysqli $conn, int $submission_id): int
+{
+    $info = get_committee_version_chain_info($conn, $submission_id);
+    return $info ? (int)$info['latest_id'] : $submission_id;
+}
