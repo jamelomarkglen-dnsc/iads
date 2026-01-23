@@ -71,6 +71,48 @@ if (!$reviewRow) {
 $reviews = fetchFinalPaperReviews($conn, $submissionId);
 $canFinalize = in_array($role, ['committee_chairperson', 'committee_chair'], true);
 
+$panelReviews = array_values(array_filter($reviews, function ($review) {
+    return ($review['reviewer_role'] ?? '') === 'panel';
+}));
+usort($panelReviews, function ($a, $b) {
+    return (int)($a['reviewer_id'] ?? 0) <=> (int)($b['reviewer_id'] ?? 0);
+});
+$panel1 = $panelReviews[0] ?? [];
+$panel2 = $panelReviews[1] ?? [];
+$chairReview = null;
+$adviserReview = null;
+foreach ($reviews as $review) {
+    $roleValue = $review['reviewer_role'] ?? '';
+    if ($roleValue === 'committee_chairperson' && $chairReview === null) {
+        $chairReview = $review;
+    }
+    if ($roleValue === 'adviser' && $adviserReview === null) {
+        $adviserReview = $review;
+    }
+}
+$signatureSlots = [
+    [
+        'label' => 'Panel Member 1',
+        'name' => $panel1['reviewer_name'] ?? '',
+        'path' => $panel1['route_slip_signature_path'] ?? '',
+    ],
+    [
+        'label' => 'Panel Member 2',
+        'name' => $panel2['reviewer_name'] ?? '',
+        'path' => $panel2['route_slip_signature_path'] ?? '',
+    ],
+    [
+        'label' => 'Committee Chairperson',
+        'name' => $chairReview['reviewer_name'] ?? '',
+        'path' => $chairReview['route_slip_signature_path'] ?? '',
+    ],
+    [
+        'label' => 'Adviser',
+        'name' => $adviserReview['reviewer_name'] ?? '',
+        'path' => $adviserReview['route_slip_signature_path'] ?? '',
+    ],
+];
+
 $isSummaryRequest = isset($_GET['summary']) && $_GET['summary'] === '1';
 if ($isSummaryRequest) {
     $summaryRows = [];
@@ -89,8 +131,49 @@ if ($isSummaryRequest) {
             'signature_path' => $review['route_slip_signature_path'] ?? '',
         ];
     }
+    $panelReviews = array_values(array_filter($reviews, function ($review) {
+        return ($review['reviewer_role'] ?? '') === 'panel';
+    }));
+    usort($panelReviews, function ($a, $b) {
+        return (int)($a['reviewer_id'] ?? 0) <=> (int)($b['reviewer_id'] ?? 0);
+    });
+    $panel1 = $panelReviews[0] ?? [];
+    $panel2 = $panelReviews[1] ?? [];
+    $chairReview = null;
+    $adviserReview = null;
+    foreach ($reviews as $review) {
+        $roleValue = $review['reviewer_role'] ?? '';
+        if ($roleValue === 'committee_chairperson' && $chairReview === null) {
+            $chairReview = $review;
+        }
+        if ($roleValue === 'adviser' && $adviserReview === null) {
+            $adviserReview = $review;
+        }
+    }
+    $signatureSlots = [
+        [
+            'label' => 'Panel Member 1',
+            'name' => $panel1['reviewer_name'] ?? '',
+            'path' => $panel1['route_slip_signature_path'] ?? '',
+        ],
+        [
+            'label' => 'Panel Member 2',
+            'name' => $panel2['reviewer_name'] ?? '',
+            'path' => $panel2['route_slip_signature_path'] ?? '',
+        ],
+        [
+            'label' => 'Committee Chairperson',
+            'name' => $chairReview['reviewer_name'] ?? '',
+            'path' => $chairReview['route_slip_signature_path'] ?? '',
+        ],
+        [
+            'label' => 'Adviser',
+            'name' => $adviserReview['reviewer_name'] ?? '',
+            'path' => $adviserReview['route_slip_signature_path'] ?? '',
+        ],
+    ];
     header('Content-Type: application/json');
-    echo json_encode(['reviews' => $summaryRows], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['reviews' => $summaryRows, 'signature_slots' => $signatureSlots], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -192,6 +275,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_route_slip_revie
                             'Route slip signatures completed',
                             "All committee signatures for {$studentName} are complete. Please add your final signature.",
                             "adviser_route_slip.php?submission_id={$submissionId}",
+                            false
+                        );
+                    }
+                    $studentId = (int)($submission['student_id'] ?? 0);
+                    if ($studentId > 0) {
+                        notify_user_for_role(
+                            $conn,
+                            $studentId,
+                            'student',
+                            'Committee signatures completed',
+                            'All defense committee signatures are complete. Waiting for the adviser to finalize the route slip.',
+                            "route_slip_review.php?submission_id={$submissionId}",
                             false
                         );
                     }
@@ -448,6 +543,11 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
         .review-card { border-radius: 18px; border: none; box-shadow: 0 18px 36px rgba(22, 86, 44, 0.12); }
         .preview-frame { width: 100%; height: 600px; border: 1px solid #d9e5da; border-radius: 12px; }
         .review-table thead th { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #556; }
+        .signature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+        .signature-block { text-align: center; padding: 0.5rem; border: 1px solid rgba(22, 86, 44, 0.12); border-radius: 12px; background: #fff; }
+        .signature-image { max-height: 60px; max-width: 180px; object-fit: contain; }
+        .signature-line { border-top: 1px solid #1f2d22; margin: 10px auto 6px; width: 200px; }
+        .signature-placeholder { color: #6c757d; font-size: 0.85rem; min-height: 22px; }
         @media (max-width: 992px) { .content { margin-left: 0; } }
     </style>
 </head>
@@ -613,12 +713,31 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
                 </table>
             </div>
         </div>
+
+        <div class="card review-card p-4 mt-4">
+            <h5 class="fw-bold text-success mb-3">Signature Preview (Current)</h5>
+            <div class="signature-grid" id="routeSlipSignaturePreview">
+                <?php foreach ($signatureSlots as $slot): ?>
+                    <div class="signature-block">
+                        <?php if (!empty($slot['path'])): ?>
+                            <img src="<?= htmlspecialchars($slot['path']); ?>" alt="Signature" class="signature-image">
+                        <?php else: ?>
+                            <div class="signature-placeholder">No signature yet</div>
+                        <?php endif; ?>
+                        <div class="signature-line"></div>
+                        <div class="fw-semibold small"><?= htmlspecialchars($slot['label']); ?></div>
+                        <div class="text-muted small"><?= htmlspecialchars($slot['name']); ?></div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
     </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 const summaryBody = document.getElementById('routeSlipSummaryBody');
+const signaturePreview = document.getElementById('routeSlipSignaturePreview');
 const submissionId = <?php echo (int)$submissionId; ?>;
 
 function escapeHtml(value) {
@@ -660,6 +779,32 @@ function renderSummaryRows(reviews) {
     });
 }
 
+function renderSignaturePreview(slots) {
+    if (!signaturePreview) {
+        return;
+    }
+    signaturePreview.innerHTML = '';
+    if (!Array.isArray(slots) || slots.length === 0) {
+        const fallback = document.createElement('div');
+        fallback.className = 'text-muted small';
+        fallback.textContent = 'No signature data available.';
+        signaturePreview.appendChild(fallback);
+        return;
+    }
+    slots.forEach((slot) => {
+        const block = document.createElement('div');
+        block.className = 'signature-block';
+        const path = slot.path || '';
+        block.innerHTML = `
+            ${path ? `<img src="${escapeHtml(path)}" alt="Signature" class="signature-image">` : '<div class="signature-placeholder">No signature yet</div>'}
+            <div class="signature-line"></div>
+            <div class="fw-semibold small">${escapeHtml(slot.label || '')}</div>
+            <div class="text-muted small">${escapeHtml(slot.name || '')}</div>
+        `;
+        signaturePreview.appendChild(block);
+    });
+}
+
 function refreshSummary() {
     if (!summaryBody || !submissionId) {
         return;
@@ -668,6 +813,7 @@ function refreshSummary() {
         .then((res) => res.json())
         .then((data) => {
             renderSummaryRows(data.reviews || []);
+            renderSignaturePreview(data.signature_slots || []);
         })
         .catch((err) => {
             console.error('Failed to refresh route slip summary', err);

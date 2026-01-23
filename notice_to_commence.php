@@ -247,6 +247,34 @@ include 'sidebar.php';
         .card-shell { border-radius: 18px; border: none; box-shadow: 0 18px 36px rgba(22, 86, 44, 0.12); }
         .form-label { font-weight: 600; color: #16562c; }
         .small-muted { color: #6c757d; font-size: 0.9rem; }
+        .notice-preview-card { border-radius: 18px; overflow: hidden; background: #fff; }
+        .notice-letter-head,
+        .notice-letter-foot {
+            background-image: url('memopic.jpg');
+            background-repeat: no-repeat;
+            background-size: 100% auto;
+            width: 100%;
+        }
+        .notice-letter-head {
+            height: 160px;
+            background-position: top center;
+            border-bottom: 1px solid #d9e2d6;
+        }
+        .notice-letter-foot {
+            height: 110px;
+            background-position: bottom center;
+            border-top: 1px solid #d9e2d6;
+        }
+        .notice-letter-body {
+            padding: 20px 36px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            text-align: justify;
+            text-justify: inter-word;
+            white-space: pre-line;
+        }
+        .notice-preview-title { letter-spacing: 0.08em; font-size: 0.9rem; }
+        .notice-signature-line { width: 220px; border-top: 1px solid #1f2d22; margin-top: 28px; }
         @media (max-width: 992px) { .content { margin-left: 0; } }
     </style>
 </head>
@@ -367,6 +395,23 @@ include 'sidebar.php';
                         </div>
                     </form>
                 </div>
+
+                <div class="card card-shell notice-preview-card p-0 mt-4">
+                    <div class="notice-letter-head" aria-hidden="true"></div>
+                    <div class="notice-letter-body">
+                        <div class="text-center fw-semibold notice-preview-title">NOTICE TO COMMENCE</div>
+                        <div class="d-flex justify-content-between flex-wrap text-muted small mb-3">
+                            <div>Date: <span id="previewNoticeDate">--</span></div>
+                            <div>Subject: <span id="previewSubject">--</span></div>
+                        </div>
+                        <div class="mb-2"><span class="fw-semibold">To:</span> <span id="previewStudentName">Student</span></div>
+                        <div class="text-muted small mb-3" id="previewProgram">Program: --</div>
+                        <div id="previewBody"></div>
+                        <div class="notice-signature-line"></div>
+                        <div class="text-muted small">Program Chairperson</div>
+                    </div>
+                    <div class="notice-letter-foot" aria-hidden="true"></div>
+                </div>
             </div>
 
             <div class="col-lg-5">
@@ -416,6 +461,11 @@ const startDateInput = document.getElementById('startDate');
 const subjectInput = document.getElementById('subjectInput');
 const bodyInput = document.getElementById('noticeBody');
 const sendToDeanBtn = document.getElementById('sendToDeanBtn');
+const previewNoticeDate = document.getElementById('previewNoticeDate');
+const previewSubject = document.getElementById('previewSubject');
+const previewStudentName = document.getElementById('previewStudentName');
+const previewProgram = document.getElementById('previewProgram');
+const previewBody = document.getElementById('previewBody');
 
 let bodyDirty = false;
 
@@ -450,6 +500,7 @@ function fillNoticeFields() {
         if (sendToDeanBtn) {
             sendToDeanBtn.disabled = true;
         }
+        updateNoticePreview();
         return;
     }
     studentIdInput.value = option.dataset.studentId || '';
@@ -464,6 +515,7 @@ function fillNoticeFields() {
     if (sendToDeanBtn) {
         sendToDeanBtn.disabled = false;
     }
+    updateNoticePreview();
 }
 
 if (submissionSelect) {
@@ -474,6 +526,7 @@ if (submissionSelect) {
 if (bodyInput) {
     bodyInput.addEventListener('input', () => {
         bodyDirty = true;
+        updateNoticePreview();
     });
 }
 
@@ -482,6 +535,7 @@ if (startDateInput && bodyInput) {
         if (!bodyDirty) {
             bodyInput.value = buildNoticeBody();
         }
+        updateNoticePreview();
     });
 }
 
@@ -490,8 +544,34 @@ if (noticeDateInput && bodyInput) {
         if (!bodyDirty) {
             bodyInput.value = buildNoticeBody();
         }
+        updateNoticePreview();
     });
 }
+
+if (subjectInput) {
+    subjectInput.addEventListener('input', updateNoticePreview);
+}
+
+function updateNoticePreview() {
+    if (previewNoticeDate) {
+        previewNoticeDate.textContent = formatDateLabel(noticeDateInput.value || '');
+    }
+    if (previewSubject) {
+        previewSubject.textContent = subjectInput.value || 'NOTIFICATION TO COMMENCE THE APPROVED PROPOSAL';
+    }
+    if (previewStudentName) {
+        previewStudentName.textContent = studentNameInput.value || 'Student';
+    }
+    if (previewProgram) {
+        const programValue = programInput.value ? `Program: ${programInput.value}` : 'Program: --';
+        previewProgram.textContent = programValue;
+    }
+    if (previewBody) {
+        previewBody.textContent = bodyInput.value || '';
+    }
+}
+
+updateNoticePreview();
 </script>
 </body>
 </html>

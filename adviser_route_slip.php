@@ -849,7 +849,7 @@ function buildRouteSlipPdf(signatureDataUrl) {
     doc.text('Panel Member 1', leftX, firstLineY + 12);
     doc.text('Panel Member 2', rightX, firstLineY + 12);
 
-    const secondLineY = firstLineY + 50;
+    const secondLineY = firstLineY + 60;
     doc.line(leftX, secondLineY, leftX + lineWidth, secondLineY);
     doc.line(rightX, secondLineY, rightX + lineWidth, secondLineY);
     doc.text('Committee Chairperson', leftX, secondLineY + 12);
@@ -857,7 +857,7 @@ function buildRouteSlipPdf(signatureDataUrl) {
 
     if (signatureDataUrl) {
         const format = signatureDataUrl.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG';
-        doc.addImage(signatureDataUrl, format, rightX + 10, secondLineY - 42, 140, 36);
+        doc.addImage(signatureDataUrl, format, rightX + 10, secondLineY - 52, 130, 32);
     }
 
     return doc.output('datauristring');
@@ -1001,23 +1001,23 @@ async function buildSignedRouteSlipPdf(submissionId, adviserSignatureDataUrl) {
     doc.text('Panel Member 1', leftX, firstLineY + 12);
     doc.text('Panel Member 2', rightX, firstLineY + 12);
 
-    const secondLineY = firstLineY + 50;
+    const secondLineY = firstLineY + 60;
     doc.line(leftX, secondLineY, leftX + lineWidth, secondLineY);
     doc.line(rightX, secondLineY, rightX + lineWidth, secondLineY);
     doc.text('Committee Chairperson', leftX, secondLineY + 12);
     doc.text('Adviser', rightX, secondLineY + 12);
 
     if (signatureData.panel1) {
-        doc.addImage(signatureData.panel1, 'PNG', leftX + 10, firstLineY - 42, 140, 36);
+        doc.addImage(signatureData.panel1, 'PNG', leftX + 10, firstLineY - 52, 130, 32);
     }
     if (signatureData.panel2) {
-        doc.addImage(signatureData.panel2, 'PNG', rightX + 10, firstLineY - 42, 140, 36);
+        doc.addImage(signatureData.panel2, 'PNG', rightX + 10, firstLineY - 52, 130, 32);
     }
     if (signatureData.chair) {
-        doc.addImage(signatureData.chair, 'PNG', leftX + 10, secondLineY - 42, 140, 36);
+        doc.addImage(signatureData.chair, 'PNG', leftX + 10, secondLineY - 52, 130, 32);
     }
     if (signatureData.adviser) {
-        doc.addImage(signatureData.adviser, 'PNG', rightX + 10, secondLineY - 42, 140, 36);
+        doc.addImage(signatureData.adviser, 'PNG', rightX + 10, secondLineY - 52, 130, 32);
     }
 
     return doc.output('datauristring');
