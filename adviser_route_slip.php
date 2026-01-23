@@ -368,6 +368,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['finalize_route_slip']
                                 false
                             );
                         }
+                        $programChairId = 0;
+                        $programChairStmt = $conn->prepare("
+                            SELECT u.id
+                            FROM users u
+                            JOIN users s ON s.program = u.program
+                            WHERE s.id = ? AND u.role = 'program_chairperson'
+                            LIMIT 1
+                        ");
+                        if ($programChairStmt) {
+                            $programChairStmt->bind_param('i', $studentId);
+                            $programChairStmt->execute();
+                            $chairResult = $programChairStmt->get_result();
+                            $chairRow = $chairResult ? $chairResult->fetch_assoc() : null;
+                            if ($chairResult) {
+                                $chairResult->free();
+                            }
+                            $programChairStmt->close();
+                            $programChairId = (int)($chairRow['id'] ?? 0);
+                        }
+                        if ($programChairId > 0) {
+                            $chairMessage = "The route slip for {$studentName} has been fully signed. You can now issue the notice to commence.";
+                            notify_user_for_role(
+                                $conn,
+                                $programChairId,
+                                'program_chairperson',
+                                'Route slip fully signed',
+                                $chairMessage,
+                                "notice_to_commence.php?submission_id={$submissionId}",
+                                false
+                            );
+                        }
 
                         $finalizeAlert = ['type' => 'success', 'message' => 'Signed route slip saved and sent to the student.'];
                     } else {
@@ -849,7 +880,7 @@ function buildRouteSlipPdf(signatureDataUrl) {
     doc.text('Panel Member 1', leftX, firstLineY + 12);
     doc.text('Panel Member 2', rightX, firstLineY + 12);
 
-    const secondLineY = firstLineY + 60;
+    const secondLineY = firstLineY + 80;
     doc.line(leftX, secondLineY, leftX + lineWidth, secondLineY);
     doc.line(rightX, secondLineY, rightX + lineWidth, secondLineY);
     doc.text('Committee Chairperson', leftX, secondLineY + 12);
@@ -857,7 +888,7 @@ function buildRouteSlipPdf(signatureDataUrl) {
 
     if (signatureDataUrl) {
         const format = signatureDataUrl.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG';
-        doc.addImage(signatureDataUrl, format, rightX + 10, secondLineY - 52, 130, 32);
+        doc.addImage(signatureDataUrl, format, rightX + 10, secondLineY - 36, 120, 28);
     }
 
     return doc.output('datauristring');
@@ -1001,23 +1032,23 @@ async function buildSignedRouteSlipPdf(submissionId, adviserSignatureDataUrl) {
     doc.text('Panel Member 1', leftX, firstLineY + 12);
     doc.text('Panel Member 2', rightX, firstLineY + 12);
 
-    const secondLineY = firstLineY + 60;
+    const secondLineY = firstLineY + 80;
     doc.line(leftX, secondLineY, leftX + lineWidth, secondLineY);
     doc.line(rightX, secondLineY, rightX + lineWidth, secondLineY);
     doc.text('Committee Chairperson', leftX, secondLineY + 12);
     doc.text('Adviser', rightX, secondLineY + 12);
 
     if (signatureData.panel1) {
-        doc.addImage(signatureData.panel1, 'PNG', leftX + 10, firstLineY - 52, 130, 32);
+        doc.addImage(signatureData.panel1, 'PNG', leftX + 10, firstLineY - 36, 120, 28);
     }
     if (signatureData.panel2) {
-        doc.addImage(signatureData.panel2, 'PNG', rightX + 10, firstLineY - 52, 130, 32);
+        doc.addImage(signatureData.panel2, 'PNG', rightX + 10, firstLineY - 36, 120, 28);
     }
     if (signatureData.chair) {
-        doc.addImage(signatureData.chair, 'PNG', leftX + 10, secondLineY - 52, 130, 32);
+        doc.addImage(signatureData.chair, 'PNG', leftX + 10, secondLineY - 36, 120, 28);
     }
     if (signatureData.adviser) {
-        doc.addImage(signatureData.adviser, 'PNG', rightX + 10, secondLineY - 52, 130, 32);
+        doc.addImage(signatureData.adviser, 'PNG', rightX + 10, secondLineY - 36, 120, 28);
     }
 
     return doc.output('datauristring');

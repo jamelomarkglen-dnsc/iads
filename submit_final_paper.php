@@ -108,6 +108,40 @@ function is_pdf_upload(array $fileInfo): bool
     return stripos((string)$typeToCheck, 'pdf') !== false;
 }
 
+function reset_route_slip_reviews(mysqli $conn, int $submissionId): void
+{
+    if ($submissionId <= 0) {
+        return;
+    }
+    $stmt = $conn->prepare("
+        UPDATE final_paper_reviews
+        SET route_slip_status = 'Pending',
+            route_slip_comments = NULL,
+            route_slip_signature_path = NULL,
+            route_slip_reviewed_at = NULL
+        WHERE submission_id = ?
+    ");
+    if ($stmt) {
+        $stmt->bind_param('i', $submissionId);
+        $stmt->execute();
+        $stmt->close();
+    }
+
+    $submissionStmt = $conn->prepare("
+        UPDATE final_paper_submissions
+        SET route_slip_committee_signed_at = NULL,
+            route_slip_signed_path = NULL,
+            route_slip_signed_name = NULL,
+            route_slip_signed_at = NULL
+        WHERE id = ?
+    ");
+    if ($submissionStmt) {
+        $submissionStmt->bind_param('i', $submissionId);
+        $submissionStmt->execute();
+        $submissionStmt->close();
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_route_slip_packet'])) {
     if (!$currentSubmission) {
         $error = 'Please submit your outline defense manuscript first.';
@@ -119,6 +153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_route_slip_pac
             $revisedInfo = $_FILES['revised_document'] ?? null;
             $routeSlipInfo = $_FILES['route_slip_document'] ?? null;
             $hasRevised = $revisedInfo && ($revisedInfo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
+            $hasNewRouteSlip = $routeSlipInfo && ($routeSlipInfo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
             if (!$routeSlipInfo || ($routeSlipInfo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
                 $error = 'Please upload the route slip PDF from your adviser.';
             } elseif (!is_pdf_upload($routeSlipInfo)) {
@@ -181,6 +216,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_route_slip_pac
                                 $currentSubmission['id']
                             );
                             if ($updateStmt->execute()) {
+                                if ($hasNewRouteSlip) {
+                                    reset_route_slip_reviews($conn, (int)$currentSubmission['id']);
+                                }
                                 foreach ($reviewers as $reviewer) {
                                     $reviewerId = (int)($reviewer['reviewer_id'] ?? 0);
                                     $reviewerRole = trim((string)($reviewer['reviewer_role'] ?? ''));
@@ -239,6 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_final_paper'])
         } else {
             $fileInfo = $_FILES['final_document'] ?? null;
             $routeSlipInfo = $_FILES['route_slip_document'] ?? null;
+            $hasNewRouteSlip = $routeSlipInfo && ($routeSlipInfo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
             if (!$fileInfo || ($fileInfo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
                 $error = 'Please upload the outline defense manuscript PDF.';
             } elseif (!is_pdf_upload($fileInfo)) {
@@ -362,6 +401,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_final_paper'])
 
                         if ($submissionId > 0 && $error === '') {
                             replaceFinalPaperReviews($conn, $submissionId, $reviewers);
+                            if ($hasNewRouteSlip) {
+                                reset_route_slip_reviews($conn, $submissionId);
+                            }
                             foreach ($reviewers as $reviewer) {
                                 $reviewerId = (int)($reviewer['reviewer_id'] ?? 0);
                                 $reviewerRole = trim((string)($reviewer['reviewer_role'] ?? ''));
