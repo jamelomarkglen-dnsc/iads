@@ -37,17 +37,12 @@ backfill_final_defense_archive_ready($conn);
 
 function fetchEligibleSubmissions(mysqli $conn): array
 {
-    $finalStatuses = ['approved', 'completed', 'published', 'accepted'];
-    $placeholders = implode(',', array_fill(0, count($finalStatuses), '?'));
-    $types = str_repeat('s', count($finalStatuses));
-
     $sql = "
         SELECT s.id, s.student_id, s.title, s.type, s.status, s.keywords, s.file_path, s.abstract,
                CONCAT(u.firstname, ' ', u.lastname) AS student_name
         FROM submissions s
         LEFT JOIN users u ON s.student_id = u.id
-        WHERE LOWER(s.status) IN ($placeholders)
-          AND EXISTS (
+        WHERE EXISTS (
             SELECT 1 FROM final_defense_submissions fds
             WHERE fds.submission_id = s.id
               AND fds.status = 'Passed'
@@ -63,7 +58,6 @@ function fetchEligibleSubmissions(mysqli $conn): array
     if (!$stmt) {
         return [];
     }
-    $stmt->bind_param($types, ...$finalStatuses);
     $stmt->execute();
     $result = $stmt->get_result();
     $rows = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
@@ -195,6 +189,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['archive_submission'])
                         'Research archived',
                         'Your approved research has been archived for publication reference.',
                         'student_dashboard.php'
+                    );
+                    $archivedTitle = trim((string)($submission['title'] ?? 'Research document'));
+                    notify_role(
+                        $conn,
+                        'dean',
+                        'Research archived',
+                        "{$archivedTitle} has been archived and is ready in the archive catalog.",
+                        'archive_library.php'
                     );
                     $message = 'Submission archived successfully.';
                     $messageType = 'success';
