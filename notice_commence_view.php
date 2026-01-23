@@ -103,8 +103,63 @@ function resolve_notice_signature_path(?int $userId): string
             .content { margin-left: 0; }
             #sidebar.collapsed ~ .content { margin-left: 0; }
         }
+        .notice-card {
+            border-radius: 18px;
+            border: 1px solid rgba(22, 86, 44, 0.12);
+            box-shadow: 0 18px 40px rgba(15, 61, 31, 0.08);
+            overflow: hidden;
+            background: #fff;
+            max-width: 860px;
+            margin: 0 auto;
+        }
+        .letter-head,
+        .letter-foot {
+            width: 100%;
+            overflow: hidden;
+        }
+        .letter-head {
+            height: 180px;
+            border-bottom: 1px solid #d9e2d6;
+        }
+        .letter-foot {
+            height: 120px;
+            border-top: 1px solid #d9e2d6;
+        }
+        .letter-head img,
+        .letter-foot img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .letter-head img { object-position: top center; }
+        .letter-foot img { object-position: bottom center; }
+        .letter-body {
+            padding: 24px 44px;
+            font-size: 0.96rem;
+            line-height: 1.5;
+            text-align: justify;
+            text-justify: inter-word;
+            white-space: pre-line;
+        }
+        @media print {
+            @page { size: letter; margin: 0.5in; }
+            body { background: #fff; }
+            nav.navbar,
+            #sidebar,
+            .btn {
+                display: none !important;
+            }
+            .content { margin: 0 !important; }
+            .notice-card { border: none; box-shadow: none; max-width: 100%; margin: 0; }
+            .letter-head { height: 170px; }
+            .letter-foot { height: 110px; }
+            .letter-body { padding: 18px 28px; font-size: 10.5pt; line-height: 1.5; }
+        }
         .notice-card { border-radius: 18px; border: 1px solid rgba(22, 86, 44, 0.12); box-shadow: 0 18px 40px rgba(15, 61, 31, 0.08); }
-        .notice-body { white-space: pre-wrap; text-align: center; }
+        .notice-body { line-height: 1.5; text-align: justify; text-justify: inter-word; }
+        .notice-body p { margin: 0 0 0.75rem; }
+        .notice-body p:last-child { margin-bottom: 0; }
         .signature-grid { margin-top: 24px; }
         .signature-block { text-align: center; }
         .signature-image { max-height: 70px; max-width: 180px; object-fit: contain; }
@@ -159,12 +214,11 @@ function resolve_notice_signature_path(?int $userId): string
                 : '';
             ?>
             <div class="card notice-card">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between flex-wrap gap-2 mb-3">
-                        <div>
-                            <div class="text-uppercase text-muted small">Status</div>
-                            <span class="badge <?= notice_status_badge($status); ?>"><?= htmlspecialchars($status); ?></span>
-                        </div>
+                <div class="letter-head" aria-hidden="true">
+                    <img src="memopic.jpg" alt="">
+                </div>
+                <div class="card-body letter-body">
+                    <div class="d-flex justify-content-end mb-3">
                         <div class="text-muted small">
                             <strong>Date:</strong> <?= htmlspecialchars($noticeDateLabel ?: 'Date not set'); ?>
                         </div>
@@ -185,7 +239,15 @@ function resolve_notice_signature_path(?int $userId): string
                         </div>
                     </div>
 
-                    <div class="notice-body mb-4"><?= nl2br(htmlspecialchars($body)); ?></div>
+                    <?php
+                    $noticeParagraphs = preg_split("/\\R{2,}/", $body);
+                    $noticeParagraphs = array_filter(array_map('trim', $noticeParagraphs), 'strlen');
+                    $noticeBodyHtml = '';
+                    foreach ($noticeParagraphs as $paragraph) {
+                        $noticeBodyHtml .= '<p>' . nl2br(htmlspecialchars($paragraph)) . '</p>';
+                    }
+                    ?>
+                    <div class="notice-body mb-4"><?= $noticeBodyHtml; ?></div>
 
                     <div class="row signature-grid">
                         <div class="col-md-6">
@@ -215,6 +277,9 @@ function resolve_notice_signature_path(?int $userId): string
                             </div>
                         </div>
                     </div>
+                </div>
+                <div class="letter-foot" aria-hidden="true">
+                    <img src="memopic.jpg" alt="">
                 </div>
             </div>
         <?php endif; ?>

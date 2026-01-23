@@ -275,8 +275,9 @@ include 'sidebar.php';
             line-height: 1.5;
             text-align: justify;
             text-justify: inter-word;
-            white-space: pre-line;
         }
+        .notice-letter-body p { margin: 0 0 0.75rem; }
+        .notice-letter-body p:last-child { margin-bottom: 0; }
         .notice-preview-title { letter-spacing: 0.08em; font-size: 0.9rem; }
         .notice-signature-line { width: 220px; border-top: 1px solid #1f2d22; margin-top: 28px; }
         @media (max-width: 992px) { .content { margin-left: 0; } }
@@ -571,11 +572,30 @@ function updateNoticePreview() {
         previewProgram.textContent = programValue;
     }
     if (previewBody) {
-        previewBody.textContent = bodyInput.value || '';
+        const rawBody = bodyInput.value || '';
+        previewBody.innerHTML = renderNoticeBody(rawBody);
     }
 }
 
 updateNoticePreview();
+
+function escapeHtml(value) {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function renderNoticeBody(value) {
+    const normalized = (value || '').replace(/\r\n/g, '\n');
+    const parts = normalized.split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
+    if (!parts.length) {
+        return '';
+    }
+    return parts.map((part) => `<p>${escapeHtml(part).replace(/\n/g, '<br>')}</p>`).join('');
+}
 </script>
 </body>
 </html>
