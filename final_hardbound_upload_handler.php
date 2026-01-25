@@ -51,7 +51,7 @@ if (!$upload_result['success']) {
     exit;
 }
 
-$submission_id = fetch_latest_submission_id_for_student($conn, $student_id);
+$submission_id = fetch_latest_submission_id_for_student_hardbound($conn, $student_id);
 if ($submission_id <= 0) {
     @unlink($upload_result['file_path']);
     $_SESSION['final_hardbound_upload_error'] = 'No submission record found for this student.';

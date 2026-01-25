@@ -129,9 +129,12 @@ function ensureFinalHardboundTables(mysqli $conn): void
 {
     ensureFinalRoutingHardboundTables($conn);
     ensureDefenseCommitteeRequestsTable($conn);
+    if (!hardbound_column_exists($conn, 'final_routing_submissions', 'parent_submission_id')) {
+        $conn->query("ALTER TABLE final_routing_submissions ADD COLUMN parent_submission_id INT NULL AFTER version_number");
+    }
 }
 
-function fetch_latest_submission_id_for_student(mysqli $conn, int $student_id): int
+function fetch_latest_submission_id_for_student_hardbound(mysqli $conn, int $student_id): int
 {
     if ($student_id <= 0) {
         return 0;
@@ -164,7 +167,7 @@ function fetch_latest_passed_final_routing(mysqli $conn, int $student_id): ?arra
         SELECT frs.*
         FROM final_routing_submissions frs
         WHERE frs.student_id = ?
-          AND frs.status = 'Passed'
+          AND LOWER(TRIM(frs.status)) = 'passed'
           AND NOT EXISTS (
             SELECT 1 FROM final_routing_submissions child
             WHERE child.parent_submission_id = frs.id
