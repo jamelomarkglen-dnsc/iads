@@ -309,7 +309,16 @@ if ($role === 'adviser' || $role === 'faculty') {
 $reviewerDashboardSlug = basename($reviewerDashboardLink);
 $reviewerInboxAllowed = in_array($role, ['committee_chair', 'committee_chairperson'], true);
 
-$facultyMenuPages = ['create_faculty.php', 'assign_adviser.php', 'reviewer_pipeline.php', 'assign_panel.php', 'faculty_reviewer_feedback.php', 'defense_committee.php', 'program_chair_final_endorsement.php'];
+$facultyMenuPages = [
+    'create_faculty.php',
+    'assign_adviser.php',
+    'reviewer_pipeline.php',
+    'assign_panel.php',
+    'faculty_reviewer_feedback.php',
+    'defense_committee.php',
+    'program_chair_final_endorsement.php',
+    'program_chair_final_hardbound_verify.php',
+];
 $studentMenuPages = ['create_student.php', 'student_directory.php', 'submissions.php', 'status_logs.php', 'notice_to_commence.php'];
 $recordsMenuPages = ['archive_manager.php', 'receive_payment.php'];
 $facultySectionOpen = in_array($currentPage, $facultyMenuPages, true);
@@ -324,6 +333,7 @@ $adviserDefensePages = [
     'final_defense_committee_dashboard.php',
     'committee_pdf_inbox.php',
     'committee_final_routing_inbox.php',
+    'adviser_final_hardbound_request.php',
 ];
 $adviserStudentOpen = in_array($currentPage, $adviserStudentPages, true);
 $adviserDefenseOpen = in_array($currentPage, $adviserDefensePages, true);
@@ -438,6 +448,9 @@ if ($userLastLogin !== '') {
                             <a href="program_chair_final_endorsement.php" class="nav-sub-link <?php echo ($currentPage == 'program_chair_final_endorsement.php') ? 'active' : ''; ?>">
                                 Final Defense Endorsements
                             </a>
+                            <a href="program_chair_final_hardbound_verify.php" class="nav-sub-link <?php echo ($currentPage == 'program_chair_final_hardbound_verify.php') ? 'active' : ''; ?>">
+                                Final Hardbound Verification
+                            </a>
                             <a href="assign_panel.php" class="nav-sub-link <?php echo ($currentPage == 'assign_panel.php') ? 'active' : ''; ?>">
                                 Panel Assignment
                             </a>
@@ -502,6 +515,9 @@ if ($userLastLogin !== '') {
                     <a href="student_final_routing_submission.php" class="nav-link <?php echo ($currentPage == 'student_final_routing_submission.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Final Routing Submission</span>
                     </a>
+                    <a href="student_final_hardbound_submission.php" class="nav-link <?php echo ($currentPage == 'student_final_hardbound_submission.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-file-earmark-check"></i> <span class="link-text">Final Hardbound Submission</span>
+                    </a>
                     <a href="submit_final_defense.php" class="nav-link <?php echo ($currentPage == 'submit_final_defense.php') ? 'active' : ''; ?>">
                         <i class="bi bi-upload"></i> <span class="link-text">Final Defense Submission</span>
                     </a>
@@ -561,6 +577,9 @@ if ($userLastLogin !== '') {
                             </a>
                             <a href="committee_final_routing_inbox.php" class="nav-sub-link <?php echo ($currentPage == 'committee_final_routing_inbox.php') ? 'active' : ''; ?>">
                                 Final Routing Inbox
+                            </a>
+                            <a href="adviser_final_hardbound_request.php" class="nav-sub-link <?php echo ($currentPage == 'adviser_final_hardbound_request.php') ? 'active' : ''; ?>">
+                                Final Hardbound Requests
                             </a>
                             <a href="route_slip_inbox.php" class="nav-sub-link <?php echo ($currentPage == 'route_slip_inbox.php') ? 'active' : ''; ?>">
                                 Route Slip Inbox
