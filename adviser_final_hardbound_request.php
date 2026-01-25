@@ -83,7 +83,11 @@ $submissions = fetch_final_hardbound_submissions_for_adviser($conn, $adviser_id)
         .content { margin-left: 220px; padding: 28px 24px; min-height: 100vh; transition: margin-left .3s; }
         #sidebar.collapsed ~ .content { margin-left: 60px; }
         .card { border-radius: 18px; border: none; box-shadow: 0 14px 28px rgba(22, 86, 44, 0.08); }
-        .status-pill { font-size: 0.75rem; }
+        .card-header { background: #f8fbf8; border-bottom: 1px solid #e2ece2; }
+        .table thead { text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.08em; }
+        .badge { font-weight: 600; }
+        .btn-request { min-width: 96px; }
+        .guide-card { border-left: 4px solid #1f6f3a; }
         @media (max-width: 992px) { .content { margin-left: 0; } }
     </style>
 </head>
@@ -119,6 +123,7 @@ $submissions = fetch_final_hardbound_submissions_for_adviser($conn, $adviser_id)
                                 No hardbound submissions yet.
                             </div>
                         <?php else: ?>
+                            <?php $modalBlocks = []; ?>
                             <div class="table-responsive">
                                 <table class="table table-hover mb-0 align-middle">
                                     <thead class="table-light">
@@ -158,46 +163,49 @@ $submissions = fetch_final_hardbound_submissions_for_adviser($conn, $adviser_id)
                                                         </a>
                                                     <?php endif; ?>
                                                     <?php if ($canRequest): ?>
-                                                        <button class="btn btn-sm btn-success ms-1" data-bs-toggle="modal" data-bs-target="#requestModal<?php echo (int)$submission['id']; ?>">
+                                                        <button class="btn btn-sm btn-success ms-1 btn-request" data-bs-toggle="modal" data-bs-target="#requestModal<?php echo (int)$submission['id']; ?>">
                                                             Request
                                                         </button>
                                                     <?php endif; ?>
                                                 </td>
                                             </tr>
                                             <?php if ($canRequest): ?>
-                                            <div class="modal fade" id="requestModal<?php echo (int)$submission['id']; ?>" tabindex="-1" aria-hidden="true">
-                                                <div class="modal-dialog">
-                                                    <form method="post" class="modal-content">
-                                                        <div class="modal-header">
-                                                            <h5 class="modal-title">Request Verification</h5>
-                                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                        </div>
-                                                        <div class="modal-body">
-                                                            <input type="hidden" name="request_verification" value="1">
-                                                            <input type="hidden" name="hardbound_id" value="<?php echo (int)$submission['id']; ?>">
-                                                            <p class="mb-2">Send this hardbound submission to the program chair for verification.</p>
-                                                            <label class="form-label">Remarks (optional)</label>
-                                                            <textarea name="remarks" class="form-control" rows="3" placeholder="Any notes for the program chair..."></textarea>
-                                                        </div>
-                                                        <div class="modal-footer">
-                                                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                            <button type="submit" class="btn btn-success">Send Request</button>
-                                                        </div>
-                                                    </form>
+                                                <?php ob_start(); ?>
+                                                <div class="modal fade" id="requestModal<?php echo (int)$submission['id']; ?>" tabindex="-1" aria-hidden="true">
+                                                    <div class="modal-dialog">
+                                                        <form method="post" class="modal-content">
+                                                            <div class="modal-header">
+                                                                <h5 class="modal-title">Request Verification</h5>
+                                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                            </div>
+                                                            <div class="modal-body">
+                                                                <input type="hidden" name="request_verification" value="1">
+                                                                <input type="hidden" name="hardbound_id" value="<?php echo (int)$submission['id']; ?>">
+                                                                <p class="mb-2">Send this hardbound submission to the program chair for verification.</p>
+                                                                <label class="form-label">Remarks (optional)</label>
+                                                                <textarea name="remarks" class="form-control" rows="3" placeholder="Any notes for the program chair..."></textarea>
+                                                            </div>
+                                                            <div class="modal-footer">
+                                                                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                                <button type="submit" class="btn btn-success">Send Request</button>
+                                                            </div>
+                                                        </form>
+                                                    </div>
                                                 </div>
-                                            </div>
+                                                <?php $modalBlocks[] = ob_get_clean(); ?>
                                             <?php endif; ?>
                                         <?php endforeach; ?>
                                     </tbody>
                                 </table>
                             </div>
+                            <?php if (!empty($modalBlocks)) echo implode("\n", $modalBlocks); ?>
                         <?php endif; ?>
                     </div>
                 </div>
             </div>
 
             <div class="col-lg-4">
-                <div class="card">
+                <div class="card guide-card">
                     <div class="card-body">
                         <h5 class="fw-semibold mb-3">Request Guide</h5>
                         <p class="text-muted mb-3">Submit verification requests only after the student uploads the hardbound copy.</p>

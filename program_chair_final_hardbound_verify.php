@@ -97,6 +97,10 @@ $pendingRequests = fetch_pending_hardbound_requests_for_chair($conn, $chair_id);
         .content { margin-left: 220px; padding: 28px 24px; min-height: 100vh; transition: margin-left .3s; }
         #sidebar.collapsed ~ .content { margin-left: 60px; }
         .card { border-radius: 18px; border: none; box-shadow: 0 14px 28px rgba(22, 86, 44, 0.08); }
+        .card-header { background: #f8fbf8; border-bottom: 1px solid #e2ece2; }
+        .table thead { text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.08em; }
+        .badge { font-weight: 600; }
+        .btn-review { min-width: 90px; }
         @media (max-width: 992px) { .content { margin-left: 0; } }
     </style>
 </head>
@@ -129,11 +133,12 @@ $pendingRequests = fetch_pending_hardbound_requests_for_chair($conn, $chair_id);
                         <i class="bi bi-inbox fs-2 d-block mb-2"></i>
                         No pending hardbound requests.
                     </div>
-                <?php else: ?>
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="table-light">
-                                <tr>
+                        <?php else: ?>
+                            <?php $modalBlocks = []; ?>
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
                                     <th>Student</th>
                                     <th>Title</th>
                                     <th>Adviser</th>
@@ -153,49 +158,52 @@ $pendingRequests = fetch_pending_hardbound_requests_for_chair($conn, $chair_id);
                                         <td><?php echo htmlspecialchars($row['submission_title'] ?? ''); ?></td>
                                         <td><?php echo htmlspecialchars($adviserName); ?></td>
                                         <td><?php echo htmlspecialchars($submitted); ?></td>
-                                        <td class="text-end">
-                                            <?php if (!empty($row['file_path'])): ?>
-                                                <a class="btn btn-sm btn-outline-success" href="<?php echo htmlspecialchars($row['file_path']); ?>" target="_blank">
-                                                    View
-                                                </a>
-                                            <?php endif; ?>
-                                            <button class="btn btn-sm btn-success ms-1" data-bs-toggle="modal" data-bs-target="#verifyModal<?php echo (int)$row['id']; ?>">
-                                                Review
-                                            </button>
-                                        </td>
-                                    </tr>
+                                            <td class="text-end">
+                                                <?php if (!empty($row['file_path'])): ?>
+                                                    <a class="btn btn-sm btn-outline-success" href="<?php echo htmlspecialchars($row['file_path']); ?>" target="_blank">
+                                                        View
+                                                    </a>
+                                                <?php endif; ?>
+                                                <button class="btn btn-sm btn-success ms-1 btn-review" data-bs-toggle="modal" data-bs-target="#verifyModal<?php echo (int)$row['id']; ?>">
+                                                    Review
+                                                </button>
+                                            </td>
+                                        </tr>
 
-                                    <div class="modal fade" id="verifyModal<?php echo (int)$row['id']; ?>" tabindex="-1" aria-hidden="true">
-                                        <div class="modal-dialog">
-                                            <form method="post" class="modal-content">
-                                                <div class="modal-header">
-                                                    <h5 class="modal-title">Verify Hardbound</h5>
-                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                                </div>
-                                                <div class="modal-body">
-                                                    <input type="hidden" name="review_request" value="1">
-                                                    <input type="hidden" name="request_id" value="<?php echo (int)$row['id']; ?>">
-                                                    <input type="hidden" name="hardbound_id" value="<?php echo (int)$row['hardbound_submission_id']; ?>">
-                                                    <label class="form-label">Decision</label>
-                                                    <select name="decision" class="form-select mb-3" required>
-                                                        <option value="">Select...</option>
-                                                        <option value="Verified">Verify</option>
-                                                        <option value="Rejected">Reject</option>
-                                                    </select>
-                                                    <label class="form-label">Remarks (optional)</label>
-                                                    <textarea name="remarks" class="form-control" rows="3" placeholder="Notes for adviser/student..."></textarea>
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                                                    <button type="submit" class="btn btn-success">Submit</button>
-                                                </div>
-                                            </form>
+                                        <?php ob_start(); ?>
+                                        <div class="modal fade" id="verifyModal<?php echo (int)$row['id']; ?>" tabindex="-1" aria-hidden="true">
+                                            <div class="modal-dialog">
+                                                <form method="post" class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title">Verify Hardbound</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <input type="hidden" name="review_request" value="1">
+                                                        <input type="hidden" name="request_id" value="<?php echo (int)$row['id']; ?>">
+                                                        <input type="hidden" name="hardbound_id" value="<?php echo (int)$row['hardbound_submission_id']; ?>">
+                                                        <label class="form-label">Decision</label>
+                                                        <select name="decision" class="form-select mb-3" required>
+                                                            <option value="">Select...</option>
+                                                            <option value="Verified">Verify</option>
+                                                            <option value="Rejected">Reject</option>
+                                                        </select>
+                                                        <label class="form-label">Remarks (optional)</label>
+                                                        <textarea name="remarks" class="form-control" rows="3" placeholder="Notes for adviser/student..."></textarea>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                        <button type="submit" class="btn btn-success">Submit</button>
+                                                    </div>
+                                                </form>
+                                            </div>
                                         </div>
-                                    </div>
+                                        <?php $modalBlocks[] = ob_get_clean(); ?>
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
+                    <?php if (!empty($modalBlocks)) echo implode("\n", $modalBlocks); ?>
                 <?php endif; ?>
             </div>
         </div>
