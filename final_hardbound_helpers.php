@@ -302,6 +302,384 @@ function create_final_hardbound_submission(
     return ['success' => true, 'submission_id' => $new_id];
 }
 
+function find_existing_signature_path(int $userId): string
+{
+    if ($userId <= 0) {
+        return '';
+    }
+    $base = 'uploads/signatures/user_' . $userId . '.';
+    foreach (['png', 'jpg', 'jpeg'] as $ext) {
+        $path = $base . $ext;
+        if (is_file($path)) {
+            return $path;
+        }
+    }
+    return '';
+}
+
+function fetch_latest_hardbound_committee_for_student(mysqli $conn, int $student_id): ?array
+{
+    if ($student_id <= 0) {
+        return null;
+    }
+    $stmt = $conn->prepare("
+        SELECT *
+        FROM defense_committee_requests
+        WHERE student_id = ? AND status = 'Approved'
+        ORDER BY reviewed_at DESC, requested_at DESC, id DESC
+        LIMIT 1
+    ");
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param('i', $student_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : null;
+    if ($result) {
+        $result->free();
+    }
+    $stmt->close();
+    return $row ?: null;
+}
+
+function build_final_hardbound_committee_reviewers(array $committee): array
+{
+    $reviewers = [];
+    $mapping = [
+        'chair_id' => 'committee_chairperson',
+        'panel_member_one_id' => 'panel',
+        'panel_member_two_id' => 'panel',
+    ];
+    $seen = [];
+    foreach ($mapping as $key => $role) {
+        $userId = (int)($committee[$key] ?? 0);
+        if ($userId <= 0 || isset($seen[$userId])) {
+            continue;
+        }
+        $seen[$userId] = true;
+        $reviewers[] = [
+            'reviewer_id' => $userId,
+            'reviewer_role' => $role,
+        ];
+    }
+    return $reviewers;
+}
+
+function fetch_final_hardbound_committee_request(mysqli $conn, int $hardbound_submission_id): ?array
+{
+    $stmt = $conn->prepare("
+        SELECT *
+        FROM final_hardbound_committee_requests
+        WHERE hardbound_submission_id = ?
+        ORDER BY requested_at DESC, id DESC
+        LIMIT 1
+    ");
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param('i', $hardbound_submission_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : null;
+    if ($result) {
+        $result->free();
+    }
+    $stmt->close();
+    return $row ?: null;
+}
+
+function fetch_final_hardbound_committee_request_by_id(mysqli $conn, int $request_id): ?array
+{
+    $stmt = $conn->prepare("
+        SELECT r.*, s.student_id, s.file_path, s.original_filename, s.status AS submission_status,
+               s.submitted_at, s.review_notes,
+               u.firstname, u.lastname,
+               sub.title AS submission_title,
+               adv.firstname AS adviser_firstname,
+               adv.lastname AS adviser_lastname
+        FROM final_hardbound_committee_requests r
+        JOIN final_hardbound_submissions s ON s.id = r.hardbound_submission_id
+        JOIN users u ON u.id = s.student_id
+        LEFT JOIN submissions sub ON sub.id = s.submission_id
+        LEFT JOIN users adv ON adv.id = r.adviser_id
+        WHERE r.id = ?
+        LIMIT 1
+    ");
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param('i', $request_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : null;
+    if ($result) {
+        $result->free();
+    }
+    $stmt->close();
+    return $row ?: null;
+}
+
+function fetch_final_hardbound_committee_reviews(mysqli $conn, int $request_id): array
+{
+    $stmt = $conn->prepare("
+        SELECT r.*, CONCAT(u.firstname, ' ', u.lastname) AS reviewer_name
+        FROM final_hardbound_committee_reviews r
+        JOIN users u ON u.id = r.reviewer_id
+        WHERE r.request_id = ?
+        ORDER BY FIELD(r.reviewer_role, 'committee_chairperson','panel'), u.firstname, u.lastname
+    ");
+    if (!$stmt) {
+        return [];
+    }
+    $stmt->bind_param('i', $request_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $rows = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+    if ($result) {
+        $result->free();
+    }
+    $stmt->close();
+    return $rows ?: [];
+}
+
+function fetch_final_hardbound_committee_review_row(mysqli $conn, int $request_id, int $reviewer_id): ?array
+{
+    $stmt = $conn->prepare("
+        SELECT *
+        FROM final_hardbound_committee_reviews
+        WHERE request_id = ? AND reviewer_id = ?
+        LIMIT 1
+    ");
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param('ii', $request_id, $reviewer_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : null;
+    if ($result) {
+        $result->free();
+    }
+    $stmt->close();
+    return $row ?: null;
+}
+
+function fetch_final_hardbound_committee_requests_for_reviewer(mysqli $conn, int $reviewer_id): array
+{
+    $stmt = $conn->prepare("
+        SELECT r.*, s.file_path, s.original_filename, s.status AS submission_status,
+               s.submitted_at,
+               u.firstname, u.lastname,
+               sub.title AS submission_title,
+               adv.firstname AS adviser_firstname,
+               adv.lastname AS adviser_lastname,
+               rv.status AS review_status,
+               rv.reviewed_at,
+               rv.signature_path
+        FROM final_hardbound_committee_reviews rv
+        JOIN final_hardbound_committee_requests r ON r.id = rv.request_id
+        JOIN final_hardbound_submissions s ON s.id = r.hardbound_submission_id
+        JOIN users u ON u.id = s.student_id
+        LEFT JOIN submissions sub ON sub.id = s.submission_id
+        LEFT JOIN users adv ON adv.id = r.adviser_id
+        WHERE rv.reviewer_id = ?
+        ORDER BY r.requested_at DESC, r.id DESC
+    ");
+    if (!$stmt) {
+        return [];
+    }
+    $stmt->bind_param('i', $reviewer_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $rows = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+    if ($result) {
+        $result->free();
+    }
+    $stmt->close();
+    return $rows ?: [];
+}
+
+function create_final_hardbound_committee_request(
+    mysqli $conn,
+    int $hardbound_submission_id,
+    int $adviser_id,
+    string $remarks,
+    string $adviser_signature_path,
+    array $committee
+): array {
+    $existing = $conn->prepare("
+        SELECT id
+        FROM final_hardbound_committee_requests
+        WHERE hardbound_submission_id = ? AND status IN ('Pending','Approved')
+        ORDER BY requested_at DESC, id DESC
+        LIMIT 1
+    ");
+    if ($existing) {
+        $existing->bind_param('i', $hardbound_submission_id);
+        $existing->execute();
+        $res = $existing->get_result();
+        $row = $res ? $res->fetch_assoc() : null;
+        if ($res) {
+            $res->free();
+        }
+        $existing->close();
+        if ($row) {
+            return ['success' => false, 'error' => 'A committee request is already pending or approved for this submission.'];
+        }
+    }
+
+    $reviewers = build_final_hardbound_committee_reviewers($committee);
+    if (empty($reviewers)) {
+        return ['success' => false, 'error' => 'No committee reviewers found for this student.'];
+    }
+
+    $stmt = $conn->prepare("
+        INSERT INTO final_hardbound_committee_requests
+            (hardbound_submission_id, adviser_id, status, remarks, adviser_signature_path)
+        VALUES (?, ?, 'Pending', ?, ?)
+    ");
+    if (!$stmt) {
+        return ['success' => false, 'error' => 'Database error: ' . $conn->error];
+    }
+    $stmt->bind_param('iiss', $hardbound_submission_id, $adviser_id, $remarks, $adviser_signature_path);
+    if (!$stmt->execute()) {
+        $stmt->close();
+        return ['success' => false, 'error' => 'Failed to create committee request: ' . $stmt->error];
+    }
+    $requestId = (int)$stmt->insert_id;
+    $stmt->close();
+    if (!empty($reviewers)) {
+        $reviewStmt = $conn->prepare("
+            INSERT INTO final_hardbound_committee_reviews
+                (request_id, reviewer_id, reviewer_role, status)
+            VALUES (?, ?, ?, 'Pending')
+        ");
+        if ($reviewStmt) {
+            foreach ($reviewers as $reviewer) {
+                $reviewStmt->bind_param(
+                    'iis',
+                    $requestId,
+                    $reviewer['reviewer_id'],
+                    $reviewer['reviewer_role']
+                );
+                $reviewStmt->execute();
+            }
+            $reviewStmt->close();
+        }
+    }
+
+    $conn->query("
+        UPDATE final_hardbound_submissions
+        SET status = 'Under Review'
+        WHERE id = {$hardbound_submission_id}
+    ");
+
+    return ['success' => true, 'request_id' => $requestId];
+}
+
+function update_final_hardbound_committee_review(
+    mysqli $conn,
+    int $request_id,
+    int $reviewer_id,
+    string $status,
+    string $remarks,
+    string $signature_path
+): array {
+    $allowed = ['Approved', 'Needs Revision'];
+    if (!in_array($status, $allowed, true)) {
+        return ['success' => false, 'error' => 'Invalid review status.'];
+    }
+
+    if ($signature_path !== '') {
+        $stmt = $conn->prepare("
+            UPDATE final_hardbound_committee_reviews
+            SET status = ?, remarks = ?, signature_path = ?, reviewed_at = NOW()
+            WHERE request_id = ? AND reviewer_id = ?
+        ");
+        if (!$stmt) {
+            return ['success' => false, 'error' => 'Unable to prepare review update.'];
+        }
+        $stmt->bind_param('sssii', $status, $remarks, $signature_path, $request_id, $reviewer_id);
+    } else {
+        $stmt = $conn->prepare("
+            UPDATE final_hardbound_committee_reviews
+            SET status = ?, remarks = ?, reviewed_at = NOW()
+            WHERE request_id = ? AND reviewer_id = ?
+        ");
+        if (!$stmt) {
+            return ['success' => false, 'error' => 'Unable to prepare review update.'];
+        }
+        $stmt->bind_param('ssii', $status, $remarks, $request_id, $reviewer_id);
+    }
+
+    if (!$stmt->execute()) {
+        $stmt->close();
+        return ['success' => false, 'error' => 'Unable to save review.'];
+    }
+    $stmt->close();
+
+    $summaryStmt = $conn->prepare("
+        SELECT status
+        FROM final_hardbound_committee_reviews
+        WHERE request_id = ?
+    ");
+    $overall = 'Pending';
+    if ($summaryStmt) {
+        $summaryStmt->bind_param('i', $request_id);
+        $summaryStmt->execute();
+        $result = $summaryStmt->get_result();
+        $statuses = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+        if ($result) {
+            $result->free();
+        }
+        $summaryStmt->close();
+
+        $hasNeedsRevision = false;
+        $allApproved = true;
+        foreach ($statuses as $row) {
+            $rowStatus = $row['status'] ?? 'Pending';
+            if ($rowStatus === 'Needs Revision') {
+                $hasNeedsRevision = true;
+            }
+            if ($rowStatus !== 'Approved') {
+                $allApproved = false;
+            }
+        }
+        if ($hasNeedsRevision) {
+            $overall = 'Needs Revision';
+        } elseif ($allApproved && !empty($statuses)) {
+            $overall = 'Approved';
+        }
+    }
+
+    $updateReq = $conn->prepare("
+        UPDATE final_hardbound_committee_requests
+        SET status = ?, updated_at = NOW()
+        WHERE id = ?
+    ");
+    if ($updateReq) {
+        $updateReq->bind_param('si', $overall, $request_id);
+        $updateReq->execute();
+        $updateReq->close();
+    }
+
+    $submissionStatus = $overall === 'Approved' ? 'Verified' : ($overall === 'Needs Revision' ? 'Needs Revision' : 'Under Review');
+    $submissionUpdate = $conn->prepare("
+        UPDATE final_hardbound_submissions s
+        JOIN final_hardbound_committee_requests r ON r.hardbound_submission_id = s.id
+        SET s.status = ?, s.reviewed_at = NOW(), s.reviewed_by = ?, s.review_notes = ?
+        WHERE r.id = ?
+    ");
+    if ($submissionUpdate) {
+        $submissionUpdate->bind_param('sisi', $submissionStatus, $reviewer_id, $remarks, $request_id);
+        $submissionUpdate->execute();
+        $submissionUpdate->close();
+    }
+
+    return ['success' => true, 'overall_status' => $overall, 'submission_status' => $submissionStatus];
+}
+
 function fetch_final_hardbound_request(mysqli $conn, int $hardbound_submission_id): ?array
 {
     $stmt = $conn->prepare("
@@ -449,6 +827,9 @@ function final_hardbound_status_badge(string $status): string
     return match (trim($status)) {
         'Verified' => 'bg-success-subtle text-success',
         'Rejected' => 'bg-danger-subtle text-danger',
+        'Needs Revision' => 'bg-danger-subtle text-danger',
+        'Approved' => 'bg-success-subtle text-success',
+        'Pending' => 'bg-warning-subtle text-warning',
         'Under Review' => 'bg-warning-subtle text-warning',
         'Submitted' => 'bg-info-subtle text-info',
         default => 'bg-secondary-subtle text-secondary',

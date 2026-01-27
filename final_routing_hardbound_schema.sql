@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS final_hardbound_submissions (
     original_filename VARCHAR(255) NOT NULL,
     file_size INT NULL,
     mime_type VARCHAR(100) NULL,
-    status ENUM('Submitted','Under Review','Verified','Rejected') DEFAULT 'Submitted',
+    status ENUM('Submitted','Under Review','Needs Revision','Verified','Rejected') DEFAULT 'Submitted',
     submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     reviewed_at TIMESTAMP NULL DEFAULT NULL,
     reviewed_by INT NULL,
@@ -101,4 +101,33 @@ CREATE TABLE IF NOT EXISTS final_hardbound_requests (
     INDEX idx_final_hardbound_request_submission (hardbound_submission_id),
     INDEX idx_final_hardbound_request_status (status),
     INDEX idx_final_hardbound_request_chair (program_chair_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS final_hardbound_committee_requests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    hardbound_submission_id INT NOT NULL,
+    adviser_id INT NOT NULL,
+    status ENUM('Pending','Needs Revision','Approved') DEFAULT 'Pending',
+    remarks TEXT NULL,
+    adviser_signature_path VARCHAR(255) NULL,
+    requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_final_hardbound_committee_request_submission (hardbound_submission_id),
+    INDEX idx_final_hardbound_committee_request_status (status),
+    INDEX idx_final_hardbound_committee_request_adviser (adviser_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS final_hardbound_committee_reviews (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    request_id INT NOT NULL,
+    reviewer_id INT NOT NULL,
+    reviewer_role ENUM('committee_chairperson','panel') NOT NULL,
+    status ENUM('Pending','Approved','Needs Revision') DEFAULT 'Pending',
+    signature_path VARCHAR(255) NULL,
+    remarks TEXT NULL,
+    reviewed_at TIMESTAMP NULL DEFAULT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_final_hardbound_committee_review (request_id, reviewer_id),
+    INDEX idx_final_hardbound_committee_reviewer (reviewer_id),
+    INDEX idx_final_hardbound_committee_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

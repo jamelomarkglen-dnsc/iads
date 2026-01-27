@@ -2,6 +2,7 @@
 session_start();
 require_once 'db.php';
 require_once 'final_hardbound_helpers.php';
+require_once 'notice_commence_helpers.php';
 require_once 'notifications_helper.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'adviser') {
@@ -44,24 +45,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_verification'
             $alert = ['type' => 'danger', 'message' => 'Hardbound submission not found.'];
         } else {
             $student_id = (int)($submission['student_id'] ?? 0);
-            $chairs = getProgramChairsForStudent($conn, $student_id);
-            $program_chair_id = (int)($chairs[0] ?? 0);
-            if ($program_chair_id <= 0) {
-                $alert = ['type' => 'danger', 'message' => 'Program chairperson not found for this student.'];
+            $committee = fetch_latest_hardbound_committee_for_student($conn, $student_id);
+            if (!$committee) {
+                $alert = ['type' => 'danger', 'message' => 'Defense committee is not yet approved for this student.'];
             } else {
-                $result = create_final_hardbound_request($conn, $hardbound_id, $adviser_id, $program_chair_id, $remarks);
-                if ($result['success']) {
+                $signatureError = '';
+                $signaturePath = '';
+                if (isset($_FILES['adviser_signature'])) {
+                    $signaturePath = save_notice_signature_upload($_FILES['adviser_signature'], $adviser_id, $signatureError);
+                }
+                if ($signaturePath === '') {
+                    $signaturePath = find_existing_signature_path($adviser_id);
+                }
+                if ($signatureError !== '' || $signaturePath === '') {
+                    $alert = ['type' => 'danger', 'message' => $signatureError !== '' ? $signatureError : 'Please upload your signature.'];
+                } else {
+                    $result = create_final_hardbound_committee_request($conn, $hardbound_id, $adviser_id, $remarks, $signaturePath, $committee);
+                }
+                if (!empty($result['success'])) {
                     $studentName = trim(($submission['firstname'] ?? '') . ' ' . ($submission['lastname'] ?? '')) ?: 'the student';
-                    notify_user(
+                    $reviewers = build_final_hardbound_committee_reviewers($committee);
+                    $reviewerIds = array_map(static fn ($reviewer) => (int)$reviewer['reviewer_id'], $reviewers);
+                    notify_users(
                         $conn,
-                        $program_chair_id,
-                        'Final hardbound verification request',
-                        "Adviser requested final hardbound verification for {$studentName}.",
-                        'program_chair_final_hardbound_verify.php',
+                        $reviewerIds,
+                        'Final hardbound endorsement request',
+                        "Adviser sent the final hardbound endorsement for {$studentName}. Please review and upload your signature.",
+                        "committee_final_hardbound_review.php?request_id=" . (int)($result['request_id'] ?? 0),
                         true
                     );
-                    $alert = ['type' => 'success', 'message' => 'Verification request sent to the program chairperson.'];
-                } else {
+                    $alert = ['type' => 'success', 'message' => 'Endorsement request sent to the defense committee.'];
+                } elseif (!$alert) {
                     $alert = ['type' => 'danger', 'message' => $result['error'] ?? 'Unable to create request.'];
                 }
             }
@@ -100,7 +114,7 @@ $submissions = fetch_final_hardbound_submissions_for_adviser($conn, $adviser_id)
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div>
                 <h3 class="fw-bold text-success mb-1">Final Hardbound Requests</h3>
-                <p class="text-muted mb-0">Review student uploads and request program chair verification.</p>
+                <p class="text-muted mb-0">Review student uploads and send endorsements to the defense committee.</p>
             </div>
         </div>
 
@@ -139,12 +153,12 @@ $submissions = fetch_final_hardbound_submissions_for_adviser($conn, $adviser_id)
                                     <tbody>
                                         <?php foreach ($submissions as $submission): ?>
                                             <?php
-                                                $request = fetch_final_hardbound_request($conn, (int)$submission['id']);
+                                                $request = fetch_final_hardbound_committee_request($conn, (int)$submission['id']);
                                                 $requestStatus = $request['status'] ?? '';
                                                 $requestBadge = $requestStatus !== '' ? final_hardbound_status_badge($requestStatus) : 'bg-secondary-subtle text-secondary';
                                                 $submitted = $submission['submitted_at'] ? date('M d, Y g:i A', strtotime($submission['submitted_at'])) : 'N/A';
                                                 $statusBadge = final_hardbound_status_badge($submission['status'] ?? 'Submitted');
-                                                $canRequest = empty($requestStatus) || $requestStatus === 'Rejected';
+                                                $canRequest = empty($requestStatus) || $requestStatus === 'Needs Revision';
                                             ?>
                                             <tr>
                                                 <td class="fw-semibold text-success"><?php echo htmlspecialchars($submission['student_name'] ?? 'Student'); ?></td>
@@ -173,17 +187,19 @@ $submissions = fetch_final_hardbound_submissions_for_adviser($conn, $adviser_id)
                                                 <?php ob_start(); ?>
                                                 <div class="modal fade" id="requestModal<?php echo (int)$submission['id']; ?>" tabindex="-1" aria-hidden="true">
                                                     <div class="modal-dialog">
-                                                        <form method="post" class="modal-content">
+                                                        <form method="post" enctype="multipart/form-data" class="modal-content">
                                                             <div class="modal-header">
-                                                                <h5 class="modal-title">Request Verification</h5>
+                                                                <h5 class="modal-title">Send Endorsement</h5>
                                                                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                                             </div>
                                                             <div class="modal-body">
                                                                 <input type="hidden" name="request_verification" value="1">
                                                                 <input type="hidden" name="hardbound_id" value="<?php echo (int)$submission['id']; ?>">
-                                                                <p class="mb-2">Send this hardbound submission to the program chair for verification.</p>
+                                                                <p class="mb-3">Send this hardbound submission to the defense committee for signatures.</p>
+                                                                <label class="form-label">Adviser Signature</label>
+                                                                <input type="file" name="adviser_signature" class="form-control mb-3" accept="image/png,image/jpeg">
                                                                 <label class="form-label">Remarks (optional)</label>
-                                                                <textarea name="remarks" class="form-control" rows="3" placeholder="Any notes for the program chair..."></textarea>
+                                                                <textarea name="remarks" class="form-control" rows="3" placeholder="Any notes for the defense committee..."></textarea>
                                                             </div>
                                                             <div class="modal-footer">
                                                                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -208,11 +224,11 @@ $submissions = fetch_final_hardbound_submissions_for_adviser($conn, $adviser_id)
                 <div class="card guide-card">
                     <div class="card-body">
                         <h5 class="fw-semibold mb-3">Request Guide</h5>
-                        <p class="text-muted mb-3">Submit verification requests only after the student uploads the hardbound copy.</p>
+                        <p class="text-muted mb-3">Send endorsements only after the student uploads the hardbound copy.</p>
                         <ul class="text-muted small ps-3 mb-0">
                             <li>Review the PDF for completeness.</li>
-                            <li>Click Request to notify the program chair.</li>
-                            <li>Track verification status in the list.</li>
+                            <li>Click Request to notify the committee.</li>
+                            <li>Track signature status in the list.</li>
                         </ul>
                     </div>
                 </div>

@@ -5,6 +5,29 @@
 
 require_once 'db.php';
 
+if (!function_exists('final_routing_enum_contains')) {
+    function final_routing_enum_contains(mysqli $conn, string $table, string $column, string $value): bool
+    {
+        $tableEscaped = $conn->real_escape_string($table);
+        $columnEscaped = $conn->real_escape_string($column);
+        $sql = "
+            SELECT COLUMN_TYPE
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = '{$tableEscaped}'
+              AND COLUMN_NAME = '{$columnEscaped}'
+            LIMIT 1
+        ";
+        $result = $conn->query($sql);
+        $row = $result ? $result->fetch_assoc() : null;
+        if ($result) {
+            $result->free();
+        }
+        $columnType = $row['COLUMN_TYPE'] ?? '';
+        return $columnType !== '' && str_contains($columnType, "'" . $value . "'");
+    }
+}
+
 if (!function_exists('ensureFinalRoutingHardboundTables')) {
     function ensureFinalRoutingHardboundTables(mysqli $conn): void
     {
@@ -99,7 +122,7 @@ if (!function_exists('ensureFinalRoutingHardboundTables')) {
                 original_filename VARCHAR(255) NOT NULL,
                 file_size INT NULL,
                 mime_type VARCHAR(100) NULL,
-                status ENUM('Submitted','Under Review','Verified','Rejected') DEFAULT 'Submitted',
+                status ENUM('Submitted','Under Review','Needs Revision','Verified','Rejected') DEFAULT 'Submitted',
                 submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 reviewed_at TIMESTAMP NULL DEFAULT NULL,
                 reviewed_by INT NULL,
@@ -110,6 +133,13 @@ if (!function_exists('ensureFinalRoutingHardboundTables')) {
                 INDEX idx_final_hardbound_status (status)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
         ");
+
+        if (!final_routing_enum_contains($conn, 'final_hardbound_submissions', 'status', 'Needs Revision')) {
+            $conn->query("
+                ALTER TABLE final_hardbound_submissions
+                MODIFY COLUMN status ENUM('Submitted','Under Review','Needs Revision','Verified','Rejected') DEFAULT 'Submitted'
+            ");
+        }
 
         $conn->query("
             CREATE TABLE IF NOT EXISTS final_hardbound_requests (
@@ -124,6 +154,39 @@ if (!function_exists('ensureFinalRoutingHardboundTables')) {
                 INDEX idx_final_hardbound_request_submission (hardbound_submission_id),
                 INDEX idx_final_hardbound_request_status (status),
                 INDEX idx_final_hardbound_request_chair (program_chair_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+        ");
+
+        $conn->query("
+            CREATE TABLE IF NOT EXISTS final_hardbound_committee_requests (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                hardbound_submission_id INT NOT NULL,
+                adviser_id INT NOT NULL,
+                status ENUM('Pending','Needs Revision','Approved') DEFAULT 'Pending',
+                remarks TEXT NULL,
+                adviser_signature_path VARCHAR(255) NULL,
+                requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_final_hardbound_committee_request_submission (hardbound_submission_id),
+                INDEX idx_final_hardbound_committee_request_status (status),
+                INDEX idx_final_hardbound_committee_request_adviser (adviser_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+        ");
+
+        $conn->query("
+            CREATE TABLE IF NOT EXISTS final_hardbound_committee_reviews (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                request_id INT NOT NULL,
+                reviewer_id INT NOT NULL,
+                reviewer_role ENUM('committee_chairperson','panel') NOT NULL,
+                status ENUM('Pending','Approved','Needs Revision') DEFAULT 'Pending',
+                signature_path VARCHAR(255) NULL,
+                remarks TEXT NULL,
+                reviewed_at TIMESTAMP NULL DEFAULT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_final_hardbound_committee_review (request_id, reviewer_id),
+                INDEX idx_final_hardbound_committee_reviewer (reviewer_id),
+                INDEX idx_final_hardbound_committee_status (status)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
         ");
 

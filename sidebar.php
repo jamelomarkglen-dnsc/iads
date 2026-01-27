@@ -317,7 +317,6 @@ $facultyMenuPages = [
     'faculty_reviewer_feedback.php',
     'defense_committee.php',
     'program_chair_final_endorsement.php',
-    'program_chair_final_hardbound_verify.php',
 ];
 $studentMenuPages = ['create_student.php', 'student_directory.php', 'submissions.php', 'status_logs.php', 'notice_to_commence.php'];
 $recordsMenuPages = ['archive_manager.php', 'receive_payment.php'];
@@ -447,9 +446,6 @@ if ($userLastLogin !== '') {
                             </a>
                             <a href="program_chair_final_endorsement.php" class="nav-sub-link <?php echo ($currentPage == 'program_chair_final_endorsement.php') ? 'active' : ''; ?>">
                                 Final Defense Endorsements
-                            </a>
-                            <a href="program_chair_final_hardbound_verify.php" class="nav-sub-link <?php echo ($currentPage == 'program_chair_final_hardbound_verify.php') ? 'active' : ''; ?>">
-                                Final Hardbound Verification
                             </a>
                             <a href="assign_panel.php" class="nav-sub-link <?php echo ($currentPage == 'assign_panel.php') ? 'active' : ''; ?>">
                                 Panel Assignment
@@ -610,6 +606,9 @@ if ($userLastLogin !== '') {
                     <a href="committee_final_routing_inbox.php" class="nav-link <?php echo ($currentPage == 'committee_final_routing_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Final Routing Inbox</span>
                     </a>
+                    <a href="committee_final_hardbound_inbox.php" class="nav-link <?php echo ($currentPage == 'committee_final_hardbound_inbox.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-pen"></i> <span class="link-text">Final Hardbound Endorsement</span>
+                    </a>
                     <a href="route_slip_inbox.php" class="nav-link <?php echo ($currentPage == 'route_slip_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Route Slip Inbox</span>
                     </a>
@@ -631,6 +630,9 @@ if ($userLastLogin !== '') {
                     <a href="committee_final_routing_inbox.php" class="nav-link <?php echo ($currentPage == 'committee_final_routing_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Final Routing Inbox</span>
                     </a>
+                    <a href="committee_final_hardbound_inbox.php" class="nav-link <?php echo ($currentPage == 'committee_final_hardbound_inbox.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-pen"></i> <span class="link-text">Final Hardbound Endorsement</span>
+                    </a>
                     <a href="route_slip_inbox.php" class="nav-link <?php echo ($currentPage == 'route_slip_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Route Slip Inbox</span>
                     </a>
@@ -651,6 +653,9 @@ if ($userLastLogin !== '') {
                     </a>
                     <a href="committee_final_routing_inbox.php" class="nav-link <?php echo ($currentPage == 'committee_final_routing_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Final Routing Inbox</span>
+                    </a>
+                    <a href="committee_final_hardbound_inbox.php" class="nav-link <?php echo ($currentPage == 'committee_final_hardbound_inbox.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-pen"></i> <span class="link-text">Final Hardbound Endorsement</span>
                     </a>
                     <a href="route_slip_inbox.php" class="nav-link <?php echo ($currentPage == 'route_slip_inbox.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Route Slip Inbox</span>

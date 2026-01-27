@@ -32,7 +32,7 @@ if (!$routing_submission) {
 }
 
 $latest = fetch_latest_final_hardbound_submission($conn, $student_id);
-if ($latest && !in_array(($latest['status'] ?? ''), ['Rejected'], true)) {
+if ($latest && !in_array(($latest['status'] ?? ''), ['Rejected', 'Needs Revision'], true)) {
     $_SESSION['final_hardbound_upload_error'] = 'A hardbound submission is already in progress.';
     header('Location: student_final_hardbound_submission.php');
     exit;
@@ -85,13 +85,13 @@ if ($adviser_id > 0) {
         $conn,
         $adviser_id,
         'Final hardbound submission uploaded',
-        "{$studentName} uploaded the final hardbound PDF. Please review and request verification.",
+        "{$studentName} uploaded the final hardbound PDF. Please review and forward the endorsement to the committee.",
         'adviser_final_hardbound_request.php',
         true
     );
 }
 
-$_SESSION['final_hardbound_upload_success'] = 'Final hardbound PDF uploaded successfully. Please wait for adviser verification.';
+$_SESSION['final_hardbound_upload_success'] = 'Final hardbound PDF uploaded successfully. Please wait for adviser endorsement and committee signatures.';
 header('Location: student_final_hardbound_submission.php');
 exit;
 ?>
