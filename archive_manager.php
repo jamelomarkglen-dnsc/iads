@@ -37,6 +37,88 @@ function backfill_final_defense_archive_ready(mysqli $conn): void
 
 backfill_final_defense_archive_ready($conn);
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_archive'])) {
+    $archiveId = (int)($_POST['archive_id'] ?? 0);
+    if ($archiveId <= 0) {
+        $message = 'Invalid archive entry.';
+        $messageType = 'danger';
+    } else {
+        $stmt = $conn->prepare("SELECT * FROM research_archive WHERE id = ? LIMIT 1");
+        if ($stmt) {
+            $stmt->bind_param('i', $archiveId);
+            $stmt->execute();
+            $archiveEntry = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+        } else {
+            $archiveEntry = null;
+        }
+
+        if (!$archiveEntry) {
+            $message = 'Archive entry not found.';
+            $messageType = 'danger';
+        } elseif (($archiveEntry['status'] ?? 'Archived') === 'Restored') {
+            $message = 'Archive entry is already restored.';
+            $messageType = 'warning';
+        } else {
+            $update = $conn->prepare("
+                UPDATE research_archive
+                SET status = 'Restored', restored_at = NOW(), restored_by = ?
+                WHERE id = ?
+            ");
+            if ($update) {
+                $update->bind_param('ii', $chairId, $archiveId);
+                $ok = $update->execute();
+                $update->close();
+            } else {
+                $ok = false;
+            }
+
+            if ($ok) {
+                $submissionId = (int)($archiveEntry['submission_id'] ?? 0);
+                if ($submissionId > 0) {
+                    $conn->query("UPDATE submissions SET archived_at = NULL WHERE id = {$submissionId}");
+
+                    $reopen = $conn->prepare("
+                        UPDATE final_hardbound_archive_uploads fha
+                        JOIN final_hardbound_submissions fhs ON fhs.id = fha.hardbound_submission_id
+                        SET fha.status = 'Pending', fha.archived_at = NULL, fha.archived_by = NULL
+                        WHERE fhs.submission_id = ?
+                          AND fha.status = 'Archived'
+                          AND NOT EXISTS (
+                            SELECT 1
+                            FROM final_hardbound_submissions newer
+                            WHERE newer.submission_id = fhs.submission_id
+                              AND newer.id > fhs.id
+                          )
+                    ");
+                    if ($reopen) {
+                        $reopen->bind_param('i', $submissionId);
+                        $reopen->execute();
+                        $reopen->close();
+                    }
+                }
+
+                $studentId = (int)($archiveEntry['student_id'] ?? 0);
+                if ($studentId > 0) {
+                    notify_user(
+                        $conn,
+                        $studentId,
+                        'Research archive restored',
+                        'Your archived research has been restored by the program chairperson.',
+                        'student_dashboard.php'
+                    );
+                }
+
+                $message = 'Archive entry restored successfully.';
+                $messageType = 'success';
+            } else {
+                $message = 'Unable to restore archive entry.';
+                $messageType = 'danger';
+            }
+        }
+    }
+}
+
 function fetchEligibleSubmissions(mysqli $conn): array
 {
     $sql = "
@@ -79,6 +161,8 @@ function fetchArchiveEntries(mysqli $conn, string $search = '', string $typeFilt
     $conditions = [];
     $params = [];
     $types = '';
+
+    $conditions[] = "(ra.status IS NULL OR ra.status = 'Archived')";
 
     if ($search !== '') {
         $conditions[] = "(ra.title LIKE ? OR CONCAT(u.firstname, ' ', u.lastname) LIKE ?)";
@@ -396,13 +480,21 @@ include 'sidebar.php';
                                                         <div class="text-muted small">By <?= htmlspecialchars($entry['archived_by_name']); ?></div>
                                                     <?php endif; ?>
                                                 </td>
-                                                <td class="text-end">
-                                                    <?php if (!empty($entry['file_path'])): ?>
-                                                        <a href="<?= htmlspecialchars($entry['file_path']); ?>" class="btn btn-sm btn-outline-success" target="_blank"><i class="bi bi-download"></i></a>
-                                                    <?php endif; ?>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
+                                        <td class="text-end">
+                                            <?php if (!empty($entry['file_path'])): ?>
+                                                <a href="<?= htmlspecialchars($entry['file_path']); ?>" class="btn btn-sm btn-outline-success" target="_blank"><i class="bi bi-download"></i></a>
+                                            <?php endif; ?>
+                                            <form method="post" class="d-inline">
+                                                <input type="hidden" name="restore_archive" value="1">
+                                                <input type="hidden" name="archive_id" value="<?= (int)$entry['id']; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                        onclick="return confirm('Restore this archive entry?');">
+                                                    <i class="bi bi-arrow-counterclockwise"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
                                     </tbody>
                                 </table>
                             </div>

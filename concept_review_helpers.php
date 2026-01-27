@@ -166,14 +166,28 @@ function ensureResearchArchiveSupport(mysqli $conn): void
             notes TEXT NULL,
             archived_by INT DEFAULT NULL,
             archived_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            status ENUM('Archived','Restored') DEFAULT 'Archived',
+            restored_at TIMESTAMP NULL DEFAULT NULL,
+            restored_by INT DEFAULT NULL,
             INDEX idx_submission (submission_id),
             INDEX idx_student (student_id),
             INDEX idx_doc_type (doc_type),
+            INDEX idx_archive_status (status),
             CONSTRAINT fk_archive_submission FOREIGN KEY (submission_id) REFERENCES submissions(id) ON DELETE CASCADE,
             CONSTRAINT fk_archive_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
             CONSTRAINT fk_archive_user FOREIGN KEY (archived_by) REFERENCES users(id) ON DELETE SET NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     ");
+
+    if (!conceptReviewColumnExists($conn, 'research_archive', 'status')) {
+        $conn->query("ALTER TABLE research_archive ADD COLUMN status ENUM('Archived','Restored') DEFAULT 'Archived' AFTER archived_at");
+    }
+    if (!conceptReviewColumnExists($conn, 'research_archive', 'restored_at')) {
+        $conn->query("ALTER TABLE research_archive ADD COLUMN restored_at TIMESTAMP NULL DEFAULT NULL AFTER status");
+    }
+    if (!conceptReviewColumnExists($conn, 'research_archive', 'restored_by')) {
+        $conn->query("ALTER TABLE research_archive ADD COLUMN restored_by INT DEFAULT NULL AFTER restored_at");
+    }
 
     $hasArchivedColumn = $conn->query("SHOW COLUMNS FROM submissions LIKE 'archived_at'");
     if ($hasArchivedColumn) {

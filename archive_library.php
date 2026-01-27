@@ -19,6 +19,8 @@ $conditions = [];
 $params = [];
 $types = '';
 
+$conditions[] = "(ra.status IS NULL OR ra.status = 'Archived')";
+
 if ($search !== '') {
     $conditions[] = "(ra.title LIKE ? OR CONCAT(u.firstname, ' ', u.lastname) LIKE ?)";
     $searchTerm = '%' . $search . '%';
