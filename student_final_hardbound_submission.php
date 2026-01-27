@@ -17,15 +17,42 @@ $submissions = fetch_final_hardbound_submissions_for_student($conn, $student_id)
 $latest_request = $latest ? fetch_final_hardbound_committee_request($conn, (int)$latest['id']) : null;
 $latestDisplayStatus = $latest ? final_hardbound_display_status($latest['status'] ?? 'Submitted') : '';
 $latestRequestStatus = $latest_request ? final_hardbound_display_status($latest_request['status'] ?? 'Pending') : '';
+$archive_upload = $latest ? fetch_final_hardbound_archive_upload($conn, (int)$latest['id']) : null;
+$archive_display_status = $archive_upload ? ($archive_upload['status'] ?? 'Pending') : '';
 
 $routingReady = $routing_submission !== null;
 $canUpload = $routingReady && (!$latest || in_array(($latest['status'] ?? ''), ['Rejected', 'Needs Revision'], true));
+$submissionPassed = $latest && final_hardbound_display_status($latest['status'] ?? '') === 'Passed';
+$committeePassed = $latest_request && final_hardbound_display_status($latest_request['status'] ?? '') === 'Passed';
+$archiveEligible = $submissionPassed && $committeePassed;
+$archiveCanUpload = $archiveEligible && (!$archive_upload || ($archive_upload['status'] ?? '') !== 'Archived');
 
 $step1Status = $latest ? 'Completed' : ($canUpload ? 'Ready' : 'Locked');
 $step2Status = $latest_request ? 'Sent' : 'Not requested';
 $step3Status = $latest_request ? $latestRequestStatus : 'Pending';
+$step4Status = 'Locked';
+if ($archiveEligible) {
+    if (!$archive_upload) {
+        $step4Status = 'Ready';
+    } elseif (($archive_upload['status'] ?? '') === 'Archived') {
+        $step4Status = 'Archived';
+    } else {
+        $step4Status = 'Submitted';
+    }
+}
 
 $statusBadge = $latest ? final_hardbound_status_badge($latestDisplayStatus) : 'bg-secondary-subtle text-secondary';
+$archiveBadge = match ($archive_display_status) {
+    'Archived' => 'bg-success-subtle text-success',
+    'Pending' => 'bg-warning-subtle text-warning',
+    default => 'bg-secondary-subtle text-secondary',
+};
+$archiveStatusLabel = $archive_upload
+    ? ($archive_upload['status'] ?? 'Pending')
+    : ($archiveEligible ? 'Not uploaded' : 'Locked');
+$archiveStatusBadge = $archive_upload
+    ? $archiveBadge
+    : ($archiveEligible ? 'bg-warning-subtle text-warning' : 'bg-secondary-subtle text-secondary');
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -84,6 +111,11 @@ $statusBadge = $latest ? final_hardbound_status_badge($latestDisplayStatus) : 'b
                 <div class="step-title">Committee Signatures</div>
                 <div class="step-status"><?php echo htmlspecialchars($step3Status); ?></div>
             </div>
+            <div class="step-item">
+                <small>Step 4</small>
+                <div class="step-title">Archive Upload</div>
+                <div class="step-status"><?php echo htmlspecialchars($step4Status); ?></div>
+            </div>
         </div>
 
         <?php if (isset($_SESSION['final_hardbound_upload_success'])): ?>
@@ -102,6 +134,24 @@ $statusBadge = $latest ? final_hardbound_status_badge($latestDisplayStatus) : 'b
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
             <?php unset($_SESSION['final_hardbound_upload_error']); ?>
+        <?php endif; ?>
+
+        <?php if (isset($_SESSION['final_hardbound_archive_upload_success'])): ?>
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                <?php echo htmlspecialchars($_SESSION['final_hardbound_archive_upload_success']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            <?php unset($_SESSION['final_hardbound_archive_upload_success']); ?>
+        <?php endif; ?>
+
+        <?php if (isset($_SESSION['final_hardbound_archive_upload_error'])): ?>
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <?php echo htmlspecialchars($_SESSION['final_hardbound_archive_upload_error']); ?>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            <?php unset($_SESSION['final_hardbound_archive_upload_error']); ?>
         <?php endif; ?>
 
         <div class="row g-4">
@@ -134,6 +184,49 @@ $statusBadge = $latest ? final_hardbound_status_badge($latestDisplayStatus) : 'b
                                     <i class="bi bi-cloud-upload me-2"></i>Upload Hardbound
                                 </button>
                             </form>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h5 class="fw-semibold mb-3">Upload Archive Copy (Program Chairperson)</h5>
+                        <?php if (!$archiveEligible): ?>
+                            <div class="alert alert-warning mb-0">
+                                Archive upload unlocks once the committee endorsement is marked as <strong>Passed</strong>.
+                            </div>
+                        <?php else: ?>
+                            <?php if ($archive_upload && ($archive_upload['status'] ?? '') === 'Archived'): ?>
+                                <div class="alert alert-success">
+                                    Your archive copy has been archived by the program chairperson.
+                                </div>
+                            <?php elseif ($archive_upload): ?>
+                                <div class="alert alert-info">
+                                    Your archive copy is on file and awaiting program chairperson archiving.
+                                </div>
+                            <?php endif; ?>
+
+                            <?php if ($archiveCanUpload): ?>
+                                <form enctype="multipart/form-data" method="POST" action="student_archive_upload_handler.php">
+                                    <input type="hidden" name="hardbound_id" value="<?php echo (int)($latest['id'] ?? 0); ?>">
+                                    <div class="mb-3">
+                                        <label class="form-label">Select PDF File</label>
+                                        <input type="file" class="form-control" name="archive_file" accept=".pdf" required>
+                                        <small class="text-muted">PDF only, maximum file size: 50MB</small>
+                                    </div>
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="bi bi-cloud-upload me-2"></i>Upload Archive PDF
+                                    </button>
+                                </form>
+                            <?php endif; ?>
+
+                            <?php if ($archive_upload && !empty($archive_upload['file_path'])): ?>
+                                <div class="mt-3">
+                                    <a class="btn btn-sm btn-outline-success" href="<?php echo htmlspecialchars($archive_upload['file_path']); ?>" target="_blank">
+                                        View uploaded archive PDF
+                                    </a>
+                                </div>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -217,6 +310,12 @@ $statusBadge = $latest ? final_hardbound_status_badge($latestDisplayStatus) : 'b
                                 <span>Committee Endorsement</span>
                                 <span class="badge <?php echo $latest_request ? final_hardbound_status_badge($latestRequestStatus) : 'bg-secondary-subtle text-secondary'; ?>">
                                     <?php echo $latest_request ? htmlspecialchars($latestRequestStatus ?: 'Pending') : 'Pending'; ?>
+                                </span>
+                            </li>
+                            <li>
+                                <span>Archive Upload</span>
+                                <span class="badge <?php echo $archiveStatusBadge; ?>">
+                                    <?php echo htmlspecialchars($archiveStatusLabel); ?>
                                 </span>
                             </li>
                         </ul>

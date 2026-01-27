@@ -4,6 +4,7 @@ require_once 'db.php';
 require_once 'concept_review_helpers.php';
 require_once 'notifications_helper.php';
 require_once 'final_defense_submission_helpers.php';
+require_once 'final_hardbound_helpers.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'program_chairperson') {
     header('Location: login.php');
@@ -13,6 +14,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'program_chair
 ensureConceptReviewTables($conn);
 ensureResearchArchiveSupport($conn);
 ensureFinalDefenseSubmissionTable($conn);
+ensureFinalHardboundTables($conn);
 
 $chairId = (int)($_SESSION['user_id'] ?? 0);
 $message = '';
@@ -39,19 +41,26 @@ function fetchEligibleSubmissions(mysqli $conn): array
 {
     $sql = "
         SELECT s.id, s.student_id, s.title, s.type, s.status, s.keywords, s.file_path, s.abstract,
-               CONCAT(u.firstname, ' ', u.lastname) AS student_name
+               CONCAT(u.firstname, ' ', u.lastname) AS student_name,
+               fhs.id AS hardbound_submission_id,
+               fha.file_path AS archive_file_path,
+               fha.original_filename AS archive_original_filename
         FROM submissions s
+        JOIN final_hardbound_submissions fhs ON fhs.submission_id = s.id
+        JOIN final_hardbound_archive_uploads fha ON fha.hardbound_submission_id = fhs.id
         LEFT JOIN users u ON s.student_id = u.id
-        WHERE EXISTS (
-            SELECT 1 FROM final_defense_submissions fds
-            WHERE fds.submission_id = s.id
-              AND fds.status = 'Passed'
-              AND fds.archive_ready_at IS NOT NULL
+        WHERE fhs.status IN ('Passed','Verified')
+          AND fha.status = 'Pending'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM final_hardbound_submissions newer
+            WHERE newer.submission_id = fhs.submission_id
+              AND newer.id > fhs.id
           )
           AND NOT EXISTS (
             SELECT 1 FROM research_archive ra WHERE ra.submission_id = s.id
           )
-        ORDER BY s.created_at DESC
+        ORDER BY fhs.reviewed_at DESC, fhs.submitted_at DESC, s.created_at DESC
         LIMIT 20
     ";
     $stmt = $conn->prepare($sql);
@@ -151,20 +160,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['archive_submission'])
             $message = 'Submission not found.';
             $messageType = 'danger';
         } else {
-            $existingPath = trim($submission['file_path'] ?? '');
-            $storedPath = $existingPath;
-            $uploadedPath = storeArchiveFile($_FILES['archive_file'] ?? null);
-            if ($uploadedPath !== null) {
-                $storedPath = $uploadedPath;
-            }
-            if ($storedPath === '') {
-                $message = 'No document available to archive. Please upload the final file.';
+            $pendingUpload = fetch_pending_final_hardbound_archive_upload_for_submission($conn, $submissionId);
+            if (!$pendingUpload) {
+                $message = 'Student archive upload is required before archiving.';
                 $messageType = 'warning';
             } else {
-                $archiveStmt = $conn->prepare("
-                    INSERT INTO research_archive (submission_id, student_id, title, doc_type, publication_type, file_path, keywords, abstract, notes, archived_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ");
+                $storedPath = trim((string)($pendingUpload['file_path'] ?? ''));
+                $uploadedPath = storeArchiveFile($_FILES['archive_file'] ?? null);
+                if ($uploadedPath !== null) {
+                    $storedPath = $uploadedPath;
+                }
+                if ($storedPath === '') {
+                    $message = 'No document available to archive. Please upload the final file.';
+                    $messageType = 'warning';
+                } else {
+                    $archiveStmt = $conn->prepare("
+                        INSERT INTO research_archive (submission_id, student_id, title, doc_type, publication_type, file_path, keywords, abstract, notes, archived_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ");
                 $docType = $submission['type'] ?? 'Concept Paper';
                 $keywords = $submission['keywords'] ?? '';
                 $abstract = $submission['abstract'] ?? null;
@@ -181,30 +194,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['archive_submission'])
                     $notes,
                     $chairId
                 );
-                if ($archiveStmt->execute()) {
-                    $conn->query("UPDATE submissions SET archived_at = NOW() WHERE id = {$submissionId}");
-                    notify_user(
-                        $conn,
-                        (int)$submission['student_id'],
-                        'Research archived',
-                        'Your approved research has been archived for publication reference.',
-                        'student_dashboard.php'
-                    );
-                    $archivedTitle = trim((string)($submission['title'] ?? 'Research document'));
-                    notify_role(
-                        $conn,
-                        'dean',
-                        'Research archived',
-                        "{$archivedTitle} has been archived and is ready in the archive catalog.",
-                        'archive_library.php'
-                    );
-                    $message = 'Submission archived successfully.';
-                    $messageType = 'success';
-                } else {
-                    $message = 'Unable to archive submission. Please try again.';
-                    $messageType = 'danger';
+                    if ($archiveStmt->execute()) {
+                        $conn->query("UPDATE submissions SET archived_at = NOW() WHERE id = {$submissionId}");
+
+                        $markStmt = $conn->prepare("
+                            UPDATE final_hardbound_archive_uploads
+                            SET status = 'Archived', archived_at = NOW(), archived_by = ?
+                            WHERE id = ?
+                        ");
+                        if ($markStmt) {
+                            $pendingUploadId = (int)$pendingUpload['id'];
+                            $markStmt->bind_param('ii', $chairId, $pendingUploadId);
+                            $markStmt->execute();
+                            $markStmt->close();
+                        }
+
+                        notify_user(
+                            $conn,
+                            (int)$submission['student_id'],
+                            'Research archived',
+                            'Your approved research has been archived for publication reference.',
+                            'student_dashboard.php'
+                        );
+                        $archivedTitle = trim((string)($submission['title'] ?? 'Research document'));
+                        notify_role(
+                            $conn,
+                            'dean',
+                            'Research archived',
+                            "{$archivedTitle} has been archived and is ready in the archive catalog.",
+                            'archive_library.php'
+                        );
+                        $message = 'Submission archived successfully.';
+                        $messageType = 'success';
+                    } else {
+                        $message = 'Unable to archive submission. Please try again.';
+                        $messageType = 'danger';
+                    }
+                    $archiveStmt->close();
                 }
-                $archiveStmt->close();
             }
         }
     }
@@ -267,14 +294,20 @@ include 'sidebar.php';
                                 <input type="hidden" name="archive_submission" value="1">
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-success">Select Submission</label>
-                                    <select name="submission_id" class="form-select" required>
+                                    <select name="submission_id" id="archiveSubmissionSelect" class="form-select" required>
                                         <option value="">Choose...</option>
                                         <?php foreach ($eligibleSubmissions as $submission): ?>
-                                            <option value="<?= (int)$submission['id']; ?>">
+                                            <option value="<?= (int)$submission['id']; ?>"
+                                                data-archive-file="<?= htmlspecialchars($submission['archive_file_path'] ?? ''); ?>">
                                                 <?= htmlspecialchars($submission['title']); ?> (<?= htmlspecialchars($submission['student_name']); ?>)
                                             </option>
                                         <?php endforeach; ?>
                                     </select>
+                                    <div class="mt-2">
+                                        <a id="archiveFileLink" class="btn btn-sm btn-outline-success" href="#" target="_blank" style="display: none;">
+                                            View student archive upload
+                                        </a>
+                                    </div>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-success">Publication Type</label>
@@ -382,5 +415,24 @@ include 'sidebar.php';
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const archiveSelect = document.getElementById('archiveSubmissionSelect');
+    const archiveLink = document.getElementById('archiveFileLink');
+    if (archiveSelect && archiveLink) {
+        const updateArchiveLink = () => {
+            const option = archiveSelect.options[archiveSelect.selectedIndex];
+            const filePath = option ? option.getAttribute('data-archive-file') : '';
+            if (filePath) {
+                archiveLink.href = filePath;
+                archiveLink.style.display = 'inline-block';
+            } else {
+                archiveLink.href = '#';
+                archiveLink.style.display = 'none';
+            }
+        };
+        archiveSelect.addEventListener('change', updateArchiveLink);
+        updateArchiveLink();
+    }
+</script>
 </body>
 </html>

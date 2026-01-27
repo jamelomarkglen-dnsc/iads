@@ -12,6 +12,7 @@ define('FINAL_HARDBOUND_UPLOAD_DIR', 'uploads/final_hardbound_submissions/');
 define('FINAL_HARDBOUND_MAX_SIZE', 52428800);
 define('FINAL_HARDBOUND_ALLOWED_MIME', ['application/pdf']);
 define('FINAL_HARDBOUND_ALLOWED_EXT', ['pdf']);
+define('FINAL_HARDBOUND_ARCHIVE_UPLOAD_DIR', 'uploads/archive_submissions/');
 
 function ensure_final_hardbound_directories(): void
 {
@@ -20,6 +21,16 @@ function ensure_final_hardbound_directories(): void
     }
     if (!is_writable(FINAL_HARDBOUND_UPLOAD_DIR)) {
         chmod(FINAL_HARDBOUND_UPLOAD_DIR, 0755);
+    }
+}
+
+function ensure_final_hardbound_archive_directories(): void
+{
+    if (!is_dir(FINAL_HARDBOUND_ARCHIVE_UPLOAD_DIR)) {
+        mkdir(FINAL_HARDBOUND_ARCHIVE_UPLOAD_DIR, 0755, true);
+    }
+    if (!is_writable(FINAL_HARDBOUND_ARCHIVE_UPLOAD_DIR)) {
+        chmod(FINAL_HARDBOUND_ARCHIVE_UPLOAD_DIR, 0755);
     }
 }
 
@@ -77,6 +88,16 @@ function generate_final_hardbound_filename(int $student_id, string $original_fil
     return "final_hardbound_{$student_id}_{$timestamp}_{$random}_{$base_name}.pdf";
 }
 
+function generate_final_hardbound_archive_filename(int $student_id, string $original_filename): string
+{
+    $timestamp = time();
+    $random = bin2hex(random_bytes(4));
+    $base_name = pathinfo($original_filename, PATHINFO_FILENAME);
+    $base_name = preg_replace('/[^a-zA-Z0-9_-]/', '_', $base_name);
+    $base_name = substr($base_name, 0, 30);
+    return "final_hardbound_archive_{$student_id}_{$timestamp}_{$random}_{$base_name}.pdf";
+}
+
 function upload_final_hardbound_file(array $file_array, int $student_id): array
 {
     $validation = validate_final_hardbound_file($file_array);
@@ -88,6 +109,34 @@ function upload_final_hardbound_file(array $file_array, int $student_id): array
 
     $filename = generate_final_hardbound_filename($student_id, $file_array['name']);
     $file_path = FINAL_HARDBOUND_UPLOAD_DIR . $filename;
+
+    if (!move_uploaded_file($file_array['tmp_name'], $file_path)) {
+        return ['success' => false, 'errors' => ['Failed to save file to server.']];
+    }
+
+    chmod($file_path, 0644);
+
+    return [
+        'success' => true,
+        'filename' => $filename,
+        'file_path' => $file_path,
+        'file_size' => filesize($file_path),
+        'mime_type' => $validation['mime_type'],
+        'original_filename' => $file_array['name'],
+    ];
+}
+
+function upload_final_hardbound_archive_file(array $file_array, int $student_id): array
+{
+    $validation = validate_final_hardbound_file($file_array);
+    if (!$validation['valid']) {
+        return ['success' => false, 'errors' => $validation['errors']];
+    }
+
+    ensure_final_hardbound_archive_directories();
+
+    $filename = generate_final_hardbound_archive_filename($student_id, $file_array['name']);
+    $file_path = FINAL_HARDBOUND_ARCHIVE_UPLOAD_DIR . $filename;
 
     if (!move_uploaded_file($file_array['tmp_name'], $file_path)) {
         return ['success' => false, 'errors' => ['Failed to save file to server.']];
@@ -129,9 +178,127 @@ function ensureFinalHardboundTables(mysqli $conn): void
 {
     ensureFinalRoutingHardboundTables($conn);
     ensureDefenseCommitteeRequestsTable($conn);
+    ensureFinalHardboundArchiveUploadsTable($conn);
     if (!hardbound_column_exists($conn, 'final_routing_submissions', 'parent_submission_id')) {
         $conn->query("ALTER TABLE final_routing_submissions ADD COLUMN parent_submission_id INT NULL AFTER version_number");
     }
+}
+
+function ensureFinalHardboundArchiveUploadsTable(mysqli $conn): void
+{
+    static $ensured = false;
+    if ($ensured) {
+        return;
+    }
+
+    $conn->query("
+        CREATE TABLE IF NOT EXISTS final_hardbound_archive_uploads (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            hardbound_submission_id INT NOT NULL,
+            submission_id INT NOT NULL,
+            student_id INT NOT NULL,
+            file_path VARCHAR(255) NOT NULL,
+            original_filename VARCHAR(255) NOT NULL,
+            file_size INT NULL,
+            mime_type VARCHAR(100) NULL,
+            status ENUM('Pending','Archived') DEFAULT 'Pending',
+            uploaded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            archived_at TIMESTAMP NULL DEFAULT NULL,
+            archived_by INT NULL,
+            updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_hardbound_archive_upload (hardbound_submission_id),
+            INDEX idx_archive_submission (submission_id),
+            INDEX idx_archive_student (student_id),
+            INDEX idx_archive_status (status)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+
+    $ensured = true;
+}
+
+function fetch_final_hardbound_archive_upload(mysqli $conn, int $hardbound_submission_id): ?array
+{
+    if ($hardbound_submission_id <= 0) {
+        return null;
+    }
+    $stmt = $conn->prepare("
+        SELECT *
+        FROM final_hardbound_archive_uploads
+        WHERE hardbound_submission_id = ?
+        LIMIT 1
+    ");
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param('i', $hardbound_submission_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : null;
+    if ($result) {
+        $result->free();
+    }
+    $stmt->close();
+    return $row ?: null;
+}
+
+function fetch_pending_final_hardbound_archive_upload_for_submission(mysqli $conn, int $submission_id): ?array
+{
+    if ($submission_id <= 0) {
+        return null;
+    }
+    $stmt = $conn->prepare("
+        SELECT fha.*, fhs.id AS hardbound_submission_id
+        FROM final_hardbound_archive_uploads fha
+        JOIN final_hardbound_submissions fhs ON fhs.id = fha.hardbound_submission_id
+        WHERE fhs.submission_id = ?
+          AND fhs.status IN ('Passed','Verified')
+          AND fha.status = 'Pending'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM final_hardbound_submissions newer
+            WHERE newer.submission_id = fhs.submission_id
+              AND newer.id > fhs.id
+          )
+        ORDER BY fha.uploaded_at DESC, fha.id DESC
+        LIMIT 1
+    ");
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param('i', $submission_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : null;
+    if ($result) {
+        $result->free();
+    }
+    $stmt->close();
+    return $row ?: null;
+}
+
+function fetch_final_hardbound_submission(mysqli $conn, int $hardbound_submission_id): ?array
+{
+    if ($hardbound_submission_id <= 0) {
+        return null;
+    }
+    $stmt = $conn->prepare("
+        SELECT *
+        FROM final_hardbound_submissions
+        WHERE id = ?
+        LIMIT 1
+    ");
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param('i', $hardbound_submission_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : null;
+    if ($result) {
+        $result->free();
+    }
+    $stmt->close();
+    return $row ?: null;
 }
 
 function fetch_latest_submission_id_for_student_hardbound(mysqli $conn, int $student_id): int
