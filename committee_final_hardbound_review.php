@@ -204,8 +204,6 @@ $letterDate = $request['requested_at'] ? date('F d, Y', strtotime($request['requ
         .letter-signature { margin-top: 16px; text-align: center; }
         .letter-signature-line { border-top: 1px solid #1f2d22; width: 200px; margin: 8px auto 6px; }
         .letter-signature-label { font-size: 0.85rem; font-weight: 600; }
-        .letter-grid { display: flex; flex-wrap: wrap; gap: 12px; }
-        .letter-grid > .card { flex: 1 1 260px; }
         @media (max-width: 992px) { .content { margin-left: 0; } }
     </style>
 </head>
@@ -256,68 +254,67 @@ $letterDate = $request['requested_at'] ? date('F d, Y', strtotime($request['requ
                     </div>
                 </div>
 
-                <div class="letter-grid mb-3">
-                    <div class="card p-3">
-                        <h6 class="fw-semibold mb-2">Adviser Endorsement</h6>
-                        <?php if (!empty($request['adviser_signature_path'])): ?>
-                            <img src="<?php echo htmlspecialchars($request['adviser_signature_path']); ?>" alt="Adviser signature" class="signature-preview mb-2">
-                        <?php else: ?>
-                            <div class="text-muted small mb-2">No adviser signature uploaded.</div>
-                        <?php endif; ?>
-                        <?php if (!empty($request['remarks'])): ?>
-                            <div class="text-muted small"><strong>Remarks:</strong> <?php echo nl2br(htmlspecialchars($request['remarks'])); ?></div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="card letter-card">
-                        <div class="letter-head" aria-hidden="true"></div>
-                        <div class="letter-body">
-                            <div class="letter-title">
-                                Adviser's Endorsement for Routing of Final Hardbound Capstone/Thesis/Dissertation
-                            </div>
-                            <p class="letter-text">
-                                The final hardbound thesis/dissertation entitled:
-                                <span class="letter-inline" style="min-width: 100%;">
-                                    <input type="text" class="letter-input" value="<?php echo htmlspecialchars($letterTitleValue); ?>" readonly>
-                                </span>
-                            </p>
-                            <p class="letter-text">
-                                prepared and submitted by
-                                <span class="letter-inline" style="min-width: 200px;">
-                                    <input type="text" class="letter-input" value="<?php echo htmlspecialchars($letterStudentName); ?>" readonly>
-                                </span>
-                                (Name of Student) in partial fulfillment of the requirements for the degree of
-                                <span class="letter-inline" style="min-width: 200px;">
-                                    <input type="text" class="letter-input" value="<?php echo htmlspecialchars($letterDegree); ?>" readonly>
-                                </span>,
-                                has been carefully reviewed by the undersigned.
-                            </p>
-                            <p class="letter-text">I hereby certify that:</p>
-                            <p class="letter-text">
-                                All corrections and revisions required by the Panel of Examiners have been satisfactorily complied with;
-                            </p>
-                            <p class="letter-text">
-                                The manuscript conforms to the prescribed academic, technical, and formatting standards of the Institute of Advanced Studies; and
-                            </p>
-                            <p class="letter-text">
-                                This copy is endorsed as the final corrected and approved manuscript for official routing and hardbinding of the capstone/thesis/dissertation.
-                                This endorsement is issued to facilitate the processing of the student's graduation and institutional documentation requirements.
-                            </p>
-                            <div class="letter-signature">
-                                <?php if (!empty($request['adviser_signature_path'])): ?>
-                                    <img src="<?php echo htmlspecialchars($request['adviser_signature_path']); ?>" alt="Adviser signature" class="signature-preview">
-                                <?php endif; ?>
-                                <div class="letter-signature-line"></div>
-                                <div class="letter-signature-label">Adviser's Signature Over Printed Name</div>
-                            </div>
-                            <div class="letter-text" style="margin-top: 14px;">
-                                Date of Endorsement:
-                                <span class="letter-inline" style="min-width: 160px;">
-                                    <input type="text" class="letter-input" value="<?php echo htmlspecialchars($letterDate); ?>" readonly>
-                                </span>
-                            </div>
+                <div class="card p-3 mb-3">
+                    <h6 class="fw-semibold mb-2">Adviser Endorsement</h6>
+                    <?php if (!empty($request['adviser_signature_path'])): ?>
+                        <img src="<?php echo htmlspecialchars($request['adviser_signature_path']); ?>" alt="Adviser signature" class="signature-preview mb-2">
+                    <?php else: ?>
+                        <div class="text-muted small mb-2">No adviser signature uploaded.</div>
+                    <?php endif; ?>
+                    <?php if (!empty($request['remarks'])): ?>
+                        <div class="text-muted small"><strong>Remarks:</strong> <?php echo nl2br(htmlspecialchars($request['remarks'])); ?></div>
+                    <?php endif; ?>
+                </div>
+
+                <div class="card letter-card mb-3">
+                    <div class="letter-head" aria-hidden="true"></div>
+                    <div class="letter-body">
+                        <div class="letter-title">
+                            Adviser's Endorsement for Routing of Final Hardbound Capstone/Thesis/Dissertation
                         </div>
-                        <div class="letter-foot" aria-hidden="true"></div>
+                        <p class="letter-text">
+                            The final hardbound thesis/dissertation entitled:
+                            <span class="letter-inline" style="min-width: 100%;">
+                                <input type="text" class="letter-input" value="<?php echo htmlspecialchars($letterTitleValue); ?>" readonly>
+                            </span>
+                        </p>
+                        <p class="letter-text">
+                            prepared and submitted by
+                            <span class="letter-inline" style="min-width: 200px;">
+                                <input type="text" class="letter-input" value="<?php echo htmlspecialchars($letterStudentName); ?>" readonly>
+                            </span>
+                            (Name of Student) in partial fulfillment of the requirements for the degree of
+                            <span class="letter-inline" style="min-width: 200px;">
+                                <input type="text" class="letter-input" value="<?php echo htmlspecialchars($letterDegree); ?>" readonly>
+                            </span>,
+                            has been carefully reviewed by the undersigned.
+                        </p>
+                        <p class="letter-text">I hereby certify that:</p>
+                        <p class="letter-text">
+                            All corrections and revisions required by the Panel of Examiners have been satisfactorily complied with;
+                        </p>
+                        <p class="letter-text">
+                            The manuscript conforms to the prescribed academic, technical, and formatting standards of the Institute of Advanced Studies; and
+                        </p>
+                        <p class="letter-text">
+                            This copy is endorsed as the final corrected and approved manuscript for official routing and hardbinding of the capstone/thesis/dissertation.
+                            This endorsement is issued to facilitate the processing of the student's graduation and institutional documentation requirements.
+                        </p>
+                        <div class="letter-signature">
+                            <?php if (!empty($request['adviser_signature_path'])): ?>
+                                <img src="<?php echo htmlspecialchars($request['adviser_signature_path']); ?>" alt="Adviser signature" class="signature-preview">
+                            <?php endif; ?>
+                            <div class="letter-signature-line"></div>
+                            <div class="letter-signature-label">Adviser's Signature Over Printed Name</div>
+                        </div>
+                        <div class="letter-text" style="margin-top: 14px;">
+                            Date of Endorsement:
+                            <span class="letter-inline" style="min-width: 160px;">
+                                <input type="text" class="letter-input" value="<?php echo htmlspecialchars($letterDate); ?>" readonly>
+                            </span>
+                        </div>
                     </div>
+                    <div class="letter-foot" aria-hidden="true"></div>
                 </div>
 
                 <div class="card p-3 mb-3">
