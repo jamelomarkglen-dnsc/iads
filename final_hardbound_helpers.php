@@ -237,7 +237,12 @@ function fetch_final_hardbound_submissions_for_student(mysqli $conn, int $studen
 function fetch_final_hardbound_submissions_for_adviser(mysqli $conn, int $adviser_id): array
 {
     $stmt = $conn->prepare("
-        SELECT fhs.*, CONCAT(u.firstname, ' ', u.lastname) AS student_name, s.title AS submission_title
+        SELECT fhs.*,
+               CONCAT(u.firstname, ' ', u.lastname) AS student_name,
+               u.program AS student_program,
+               u.department AS student_department,
+               u.college AS student_college,
+               s.title AS submission_title
         FROM final_hardbound_submissions fhs
         JOIN users u ON u.id = fhs.student_id
         LEFT JOIN submissions s ON s.id = fhs.submission_id
@@ -394,7 +399,7 @@ function fetch_final_hardbound_committee_request_by_id(mysqli $conn, int $reques
     $stmt = $conn->prepare("
         SELECT r.*, s.student_id, s.file_path, s.original_filename, s.status AS submission_status,
                s.submitted_at, s.review_notes,
-               u.firstname, u.lastname,
+               u.firstname, u.lastname, u.program, u.department, u.college,
                sub.title AS submission_title,
                adv.firstname AS adviser_firstname,
                adv.lastname AS adviser_lastname
@@ -511,7 +516,7 @@ function create_final_hardbound_committee_request(
     $existing = $conn->prepare("
         SELECT id
         FROM final_hardbound_committee_requests
-        WHERE hardbound_submission_id = ? AND status IN ('Pending','Approved')
+        WHERE hardbound_submission_id = ? AND status IN ('Pending','Passed','Approved')
         ORDER BY requested_at DESC, id DESC
         LIMIT 1
     ");
@@ -586,7 +591,7 @@ function update_final_hardbound_committee_review(
     string $remarks,
     string $signature_path
 ): array {
-    $allowed = ['Approved', 'Needs Revision'];
+    $allowed = ['Passed', 'Needs Revision'];
     if (!in_array($status, $allowed, true)) {
         return ['success' => false, 'error' => 'Invalid review status.'];
     }
@@ -639,17 +644,20 @@ function update_final_hardbound_committee_review(
         $allApproved = true;
         foreach ($statuses as $row) {
             $rowStatus = $row['status'] ?? 'Pending';
+            if ($rowStatus === 'Approved') {
+                $rowStatus = 'Passed';
+            }
             if ($rowStatus === 'Needs Revision') {
                 $hasNeedsRevision = true;
             }
-            if ($rowStatus !== 'Approved') {
+            if ($rowStatus !== 'Passed') {
                 $allApproved = false;
             }
         }
         if ($hasNeedsRevision) {
             $overall = 'Needs Revision';
         } elseif ($allApproved && !empty($statuses)) {
-            $overall = 'Approved';
+            $overall = 'Passed';
         }
     }
 
@@ -664,7 +672,7 @@ function update_final_hardbound_committee_review(
         $updateReq->close();
     }
 
-    $submissionStatus = $overall === 'Approved' ? 'Verified' : ($overall === 'Needs Revision' ? 'Needs Revision' : 'Under Review');
+    $submissionStatus = $overall === 'Passed' ? 'Passed' : ($overall === 'Needs Revision' ? 'Needs Revision' : 'Under Review');
     $submissionUpdate = $conn->prepare("
         UPDATE final_hardbound_submissions s
         JOIN final_hardbound_committee_requests r ON r.hardbound_submission_id = s.id
@@ -824,14 +832,25 @@ function update_final_hardbound_request(
 
 function final_hardbound_status_badge(string $status): string
 {
-    return match (trim($status)) {
-        'Verified' => 'bg-success-subtle text-success',
-        'Rejected' => 'bg-danger-subtle text-danger',
+    $status = final_hardbound_display_status($status);
+    return match ($status) {
+        'Passed' => 'bg-success-subtle text-success',
         'Needs Revision' => 'bg-danger-subtle text-danger',
-        'Approved' => 'bg-success-subtle text-success',
         'Pending' => 'bg-warning-subtle text-warning',
         'Under Review' => 'bg-warning-subtle text-warning',
         'Submitted' => 'bg-info-subtle text-info',
         default => 'bg-secondary-subtle text-secondary',
     };
+}
+
+function final_hardbound_display_status(string $status): string
+{
+    $status = trim($status);
+    if ($status === 'Verified' || $status === 'Approved') {
+        return 'Passed';
+    }
+    if ($status === 'Rejected') {
+        return 'Needs Revision';
+    }
+    return $status !== '' ? $status : 'Pending';
 }

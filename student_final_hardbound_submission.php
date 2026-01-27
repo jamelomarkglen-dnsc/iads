@@ -15,15 +15,17 @@ $routing_submission = fetch_latest_passed_final_routing($conn, $student_id);
 $latest = fetch_latest_final_hardbound_submission($conn, $student_id);
 $submissions = fetch_final_hardbound_submissions_for_student($conn, $student_id);
 $latest_request = $latest ? fetch_final_hardbound_committee_request($conn, (int)$latest['id']) : null;
+$latestDisplayStatus = $latest ? final_hardbound_display_status($latest['status'] ?? 'Submitted') : '';
+$latestRequestStatus = $latest_request ? final_hardbound_display_status($latest_request['status'] ?? 'Pending') : '';
 
 $routingReady = $routing_submission !== null;
 $canUpload = $routingReady && (!$latest || in_array(($latest['status'] ?? ''), ['Rejected', 'Needs Revision'], true));
 
 $step1Status = $latest ? 'Completed' : ($canUpload ? 'Ready' : 'Locked');
 $step2Status = $latest_request ? 'Sent' : 'Not requested';
-$step3Status = $latest_request ? ($latest_request['status'] ?? 'Pending') : 'Pending';
+$step3Status = $latest_request ? $latestRequestStatus : 'Pending';
 
-$statusBadge = $latest ? final_hardbound_status_badge($latest['status'] ?? '') : 'bg-secondary-subtle text-secondary';
+$statusBadge = $latest ? final_hardbound_status_badge($latestDisplayStatus) : 'bg-secondary-subtle text-secondary';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -57,11 +59,11 @@ $statusBadge = $latest ? final_hardbound_status_badge($latest['status'] ?? '') :
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div>
                 <h3 class="fw-bold text-success mb-1">Final Hardbound Submission</h3>
-                <p class="text-muted mb-0">Upload the final hardbound PDF and track adviser and committee endorsements.</p>
+        <p class="text-muted mb-0">Upload the final hardbound PDF and track adviser and committee endorsements.</p>
             </div>
             <?php if ($latest): ?>
                 <span class="badge <?php echo $statusBadge; ?>">
-                    <?php echo htmlspecialchars($latest['status'] ?? 'Submitted'); ?>
+                    <?php echo htmlspecialchars($latestDisplayStatus); ?>
                 </span>
             <?php endif; ?>
         </div>
@@ -115,7 +117,7 @@ $statusBadge = $latest ? final_hardbound_status_badge($latest['status'] ?? '') :
                         <?php if (!$canUpload): ?>
                             <div class="alert alert-info mb-0">
                                 <?php if ($latest): ?>
-                                    Your latest hardbound submission is currently <strong><?php echo htmlspecialchars($latest['status'] ?? 'Submitted'); ?></strong>.
+                                    Your latest hardbound submission is currently <strong><?php echo htmlspecialchars($latestDisplayStatus); ?></strong>.
                                     Please wait for adviser and committee endorsements.
                                 <?php else: ?>
                                     Upload will unlock once final routing is passed.
@@ -160,7 +162,8 @@ $statusBadge = $latest ? final_hardbound_status_badge($latest['status'] ?? '') :
                                     <tbody>
                                         <?php foreach ($submissions as $submission): ?>
                                             <?php
-                                                $badge = final_hardbound_status_badge($submission['status'] ?? 'Submitted');
+                                                $submissionDisplay = final_hardbound_display_status($submission['status'] ?? 'Submitted');
+                                                $badge = final_hardbound_status_badge($submissionDisplay);
                                                 $submitted = $submission['submitted_at'] ? date('M d, Y g:i A', strtotime($submission['submitted_at'])) : 'N/A';
                                             ?>
                                             <tr>
@@ -168,7 +171,7 @@ $statusBadge = $latest ? final_hardbound_status_badge($latest['status'] ?? '') :
                                                     <i class="bi bi-file-pdf text-danger me-2"></i>
                                                     <?php echo htmlspecialchars($submission['original_filename'] ?? ''); ?>
                                                 </td>
-                                                <td><span class="badge <?php echo $badge; ?>"><?php echo htmlspecialchars($submission['status'] ?? 'Submitted'); ?></span></td>
+                                                <td><span class="badge <?php echo $badge; ?>"><?php echo htmlspecialchars($submissionDisplay); ?></span></td>
                                                 <td><?php echo htmlspecialchars($submitted); ?></td>
                                                 <td class="text-end">
                                                     <?php if (!empty($submission['file_path'])): ?>
@@ -200,8 +203,8 @@ $statusBadge = $latest ? final_hardbound_status_badge($latest['status'] ?? '') :
                             </li>
                             <li>
                                 <span>Hardbound Upload</span>
-                                <span class="badge <?php echo $latest ? final_hardbound_status_badge($latest['status'] ?? '') : 'bg-secondary-subtle text-secondary'; ?>">
-                                    <?php echo $latest ? htmlspecialchars($latest['status'] ?? 'Submitted') : 'Not uploaded'; ?>
+                                <span class="badge <?php echo $latest ? final_hardbound_status_badge($latestDisplayStatus) : 'bg-secondary-subtle text-secondary'; ?>">
+                                    <?php echo $latest ? htmlspecialchars($latestDisplayStatus ?: 'Submitted') : 'Not uploaded'; ?>
                                 </span>
                             </li>
                             <li>
@@ -212,8 +215,8 @@ $statusBadge = $latest ? final_hardbound_status_badge($latest['status'] ?? '') :
                             </li>
                             <li>
                                 <span>Committee Endorsement</span>
-                                <span class="badge <?php echo $latest_request ? final_hardbound_status_badge($latest_request['status'] ?? 'Pending') : 'bg-secondary-subtle text-secondary'; ?>">
-                                    <?php echo $latest_request ? htmlspecialchars($latest_request['status'] ?? 'Pending') : 'Pending'; ?>
+                                <span class="badge <?php echo $latest_request ? final_hardbound_status_badge($latestRequestStatus) : 'bg-secondary-subtle text-secondary'; ?>">
+                                    <?php echo $latest_request ? htmlspecialchars($latestRequestStatus ?: 'Pending') : 'Pending'; ?>
                                 </span>
                             </li>
                         </ul>

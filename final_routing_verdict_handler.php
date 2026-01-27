@@ -6,6 +6,7 @@
 session_start();
 require_once 'db.php';
 require_once 'final_routing_submission_helpers.php';
+require_once 'final_concept_helpers.php';
 require_once 'notifications_helper.php';
 
 $allowedRoles = ['committee_chairperson', 'committee_chair'];
@@ -87,6 +88,18 @@ foreach ($committee_ids as $member_id) {
         'Final routing verdict updated',
         "Final routing verdict for {$student_name} is {$verdict_label}.",
         "committee_final_routing_review.php?submission_id={$submission_id}",
+        true
+    );
+}
+
+$chairIds = getProgramChairsForStudent($conn, $student_id);
+foreach ($chairIds as $chairId) {
+    notify_user(
+        $conn,
+        (int)$chairId,
+        'Final routing verdict',
+        "Final routing verdict for {$student_name} is {$verdict_label}.",
+        'program_chairperson.php',
         true
     );
 }

@@ -122,7 +122,7 @@ if (!function_exists('ensureFinalRoutingHardboundTables')) {
                 original_filename VARCHAR(255) NOT NULL,
                 file_size INT NULL,
                 mime_type VARCHAR(100) NULL,
-                status ENUM('Submitted','Under Review','Needs Revision','Verified','Rejected') DEFAULT 'Submitted',
+                status ENUM('Submitted','Under Review','Needs Revision','Passed','Rejected') DEFAULT 'Submitted',
                 submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 reviewed_at TIMESTAMP NULL DEFAULT NULL,
                 reviewed_by INT NULL,
@@ -134,10 +134,10 @@ if (!function_exists('ensureFinalRoutingHardboundTables')) {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
         ");
 
-        if (!final_routing_enum_contains($conn, 'final_hardbound_submissions', 'status', 'Needs Revision')) {
+        if (!final_routing_enum_contains($conn, 'final_hardbound_submissions', 'status', 'Passed')) {
             $conn->query("
                 ALTER TABLE final_hardbound_submissions
-                MODIFY COLUMN status ENUM('Submitted','Under Review','Needs Revision','Verified','Rejected') DEFAULT 'Submitted'
+                MODIFY COLUMN status ENUM('Submitted','Under Review','Needs Revision','Passed','Verified','Rejected') DEFAULT 'Submitted'
             ");
         }
 
@@ -162,7 +162,7 @@ if (!function_exists('ensureFinalRoutingHardboundTables')) {
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 hardbound_submission_id INT NOT NULL,
                 adviser_id INT NOT NULL,
-                status ENUM('Pending','Needs Revision','Approved') DEFAULT 'Pending',
+                status ENUM('Pending','Needs Revision','Passed') DEFAULT 'Pending',
                 remarks TEXT NULL,
                 adviser_signature_path VARCHAR(255) NULL,
                 requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -179,7 +179,7 @@ if (!function_exists('ensureFinalRoutingHardboundTables')) {
                 request_id INT NOT NULL,
                 reviewer_id INT NOT NULL,
                 reviewer_role ENUM('committee_chairperson','panel') NOT NULL,
-                status ENUM('Pending','Approved','Needs Revision') DEFAULT 'Pending',
+                status ENUM('Pending','Passed','Needs Revision') DEFAULT 'Pending',
                 signature_path VARCHAR(255) NULL,
                 remarks TEXT NULL,
                 reviewed_at TIMESTAMP NULL DEFAULT NULL,
@@ -189,6 +189,19 @@ if (!function_exists('ensureFinalRoutingHardboundTables')) {
                 INDEX idx_final_hardbound_committee_status (status)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
         ");
+
+        if (!final_routing_enum_contains($conn, 'final_hardbound_committee_requests', 'status', 'Passed')) {
+            $conn->query("
+                ALTER TABLE final_hardbound_committee_requests
+                MODIFY COLUMN status ENUM('Pending','Needs Revision','Passed','Approved') DEFAULT 'Pending'
+            ");
+        }
+        if (!final_routing_enum_contains($conn, 'final_hardbound_committee_reviews', 'status', 'Passed')) {
+            $conn->query("
+                ALTER TABLE final_hardbound_committee_reviews
+                MODIFY COLUMN status ENUM('Pending','Passed','Needs Revision','Approved') DEFAULT 'Pending'
+            ");
+        }
 
         $ensured = true;
     }

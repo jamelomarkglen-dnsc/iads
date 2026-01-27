@@ -75,16 +75,19 @@ $highlight_request_id = (int)($_GET['request_id'] ?? 0);
                                     <?php
                                         $submitted = $request['submitted_at'] ? date('M d, Y g:i A', strtotime($request['submitted_at'])) : 'N/A';
                                         $rowHighlight = $highlight_request_id === (int)$request['id'] ? 'table-success' : '';
-                                        $requestBadge = final_hardbound_status_badge($request['status'] ?? 'Pending');
-                                        $reviewBadge = final_hardbound_status_badge($request['review_status'] ?? 'Pending');
-                                        $submissionBadge = final_hardbound_status_badge($request['submission_status'] ?? 'Submitted');
+                                        $requestDisplay = final_hardbound_display_status($request['status'] ?? 'Pending');
+                                        $reviewDisplay = final_hardbound_display_status($request['review_status'] ?? 'Pending');
+                                        $submissionDisplay = final_hardbound_display_status($request['submission_status'] ?? 'Submitted');
+                                        $requestBadge = final_hardbound_status_badge($requestDisplay);
+                                        $reviewBadge = final_hardbound_status_badge($reviewDisplay);
+                                        $submissionBadge = final_hardbound_status_badge($submissionDisplay);
                                     ?>
                                     <tr class="<?php echo $rowHighlight; ?>">
                                         <td class="fw-semibold text-success"><?php echo htmlspecialchars(($request['firstname'] ?? '') . ' ' . ($request['lastname'] ?? '')); ?></td>
                                         <td><?php echo htmlspecialchars($request['submission_title'] ?? ''); ?></td>
-                                        <td><span class="badge <?php echo $submissionBadge; ?>"><?php echo htmlspecialchars($request['submission_status'] ?? 'Submitted'); ?></span></td>
-                                        <td><span class="badge <?php echo $requestBadge; ?>"><?php echo htmlspecialchars($request['status'] ?? 'Pending'); ?></span></td>
-                                        <td><span class="badge <?php echo $reviewBadge; ?>"><?php echo htmlspecialchars($request['review_status'] ?? 'Pending'); ?></span></td>
+                                        <td><span class="badge <?php echo $submissionBadge; ?>"><?php echo htmlspecialchars($submissionDisplay); ?></span></td>
+                                        <td><span class="badge <?php echo $requestBadge; ?>"><?php echo htmlspecialchars($requestDisplay); ?></span></td>
+                                        <td><span class="badge <?php echo $reviewBadge; ?>"><?php echo htmlspecialchars($reviewDisplay); ?></span></td>
                                         <td><?php echo htmlspecialchars($submitted); ?></td>
                                         <td class="text-end">
                                             <a class="btn btn-sm btn-outline-success" href="committee_final_hardbound_review.php?request_id=<?php echo (int)$request['id']; ?>">

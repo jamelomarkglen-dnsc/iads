@@ -84,6 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_verification'
 }
 
 $submissions = fetch_final_hardbound_submissions_for_adviser($conn, $adviser_id);
+$adviserSignaturePath = find_existing_signature_path($adviser_id);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -102,6 +103,35 @@ $submissions = fetch_final_hardbound_submissions_for_adviser($conn, $adviser_id)
         .badge { font-weight: 600; }
         .btn-request { min-width: 96px; }
         .guide-card { border-left: 4px solid #1f6f3a; }
+        .endorsement-letter { border-radius: 16px; overflow: hidden; border: 1px solid #e2ece2; background: #fff; }
+        .letter-head,
+        .letter-foot {
+            background-image: url('memopic.jpg');
+            background-repeat: no-repeat;
+            background-size: 100% auto;
+            width: 100%;
+        }
+        .letter-head { height: 170px; background-position: top center; border-bottom: 1px solid #d9e2d6; }
+        .letter-foot { height: 110px; background-position: bottom center; border-top: 1px solid #d9e2d6; }
+        .letter-body { padding: 20px 36px; line-height: 1.5; text-align: justify; text-justify: inter-word; font-size: 0.95rem; }
+        .letter-title { text-align: center; font-weight: 600; margin-bottom: 16px; }
+        .letter-text { margin-bottom: 12px; }
+        .letter-inline { display: inline-block; min-width: 200px; vertical-align: baseline; }
+        .letter-input {
+            border: none;
+            border-bottom: 1px solid #1f2d22;
+            background: transparent;
+            padding: 2px 4px;
+            font-weight: 600;
+            width: 100%;
+            font-size: 0.95rem;
+        }
+        .letter-input:focus { outline: none; box-shadow: none; }
+        .signature-block { margin-top: 22px; text-align: center; }
+        .signature-line { border-top: 1px solid #1f2d22; width: 240px; margin: 10px auto 6px; }
+        .signature-preview { max-height: 70px; max-width: 220px; object-fit: contain; display: block; margin: 0 auto; }
+        .signature-label { font-size: 0.9rem; font-weight: 600; }
+        .letter-date { margin-top: 18px; text-align: left; }
         @media (max-width: 992px) { .content { margin-left: 0; } }
     </style>
 </head>
@@ -155,26 +185,30 @@ $submissions = fetch_final_hardbound_submissions_for_adviser($conn, $adviser_id)
                                             <?php
                                                 $request = fetch_final_hardbound_committee_request($conn, (int)$submission['id']);
                                                 $requestStatus = $request['status'] ?? '';
-                                                $requestBadge = $requestStatus !== '' ? final_hardbound_status_badge($requestStatus) : 'bg-secondary-subtle text-secondary';
+                                                $requestDisplay = final_hardbound_display_status($requestStatus);
+                                                $requestBadge = $requestStatus !== '' ? final_hardbound_status_badge($requestDisplay) : 'bg-secondary-subtle text-secondary';
                                                 $submitted = $submission['submitted_at'] ? date('M d, Y g:i A', strtotime($submission['submitted_at'])) : 'N/A';
-                                                $statusBadge = final_hardbound_status_badge($submission['status'] ?? 'Submitted');
-                                                $canRequest = empty($requestStatus) || $requestStatus === 'Needs Revision';
+                                                $submissionDisplay = final_hardbound_display_status($submission['status'] ?? 'Submitted');
+                                                $statusBadge = final_hardbound_status_badge($submissionDisplay);
+                                                $canRequest = empty($requestStatus) || $requestDisplay === 'Needs Revision';
                                             ?>
                                             <tr>
                                                 <td class="fw-semibold text-success"><?php echo htmlspecialchars($submission['student_name'] ?? 'Student'); ?></td>
                                                 <td><?php echo htmlspecialchars($submission['submission_title'] ?? ''); ?></td>
-                                                <td><span class="badge <?php echo $statusBadge; ?>"><?php echo htmlspecialchars($submission['status'] ?? 'Submitted'); ?></span></td>
+                                                <td><span class="badge <?php echo $statusBadge; ?>"><?php echo htmlspecialchars($submissionDisplay); ?></span></td>
                                                 <td><?php echo htmlspecialchars($submitted); ?></td>
                                                 <td>
                                                     <span class="badge <?php echo $requestBadge; ?>">
-                                                        <?php echo $requestStatus !== '' ? htmlspecialchars($requestStatus) : 'Not requested'; ?>
+                                                        <?php echo $requestStatus !== '' ? htmlspecialchars($requestDisplay) : 'Not requested'; ?>
                                                     </span>
                                                 </td>
                                                 <td class="text-end">
-                                                    <?php if (!empty($submission['file_path'])): ?>
-                                                        <a class="btn btn-sm btn-outline-success" href="<?php echo htmlspecialchars($submission['file_path']); ?>" target="_blank">
+                                                    <?php if ($request): ?>
+                                                        <button class="btn btn-sm btn-outline-success" data-bs-toggle="modal" data-bs-target="#letterModal<?php echo (int)$submission['id']; ?>">
                                                             View
-                                                        </a>
+                                                        </button>
+                                                    <?php else: ?>
+                                                        <button class="btn btn-sm btn-outline-success" disabled>View</button>
                                                     <?php endif; ?>
                                                     <?php if ($canRequest): ?>
                                                         <button class="btn btn-sm btn-success ms-1 btn-request" data-bs-toggle="modal" data-bs-target="#requestModal<?php echo (int)$submission['id']; ?>">
@@ -183,10 +217,91 @@ $submissions = fetch_final_hardbound_submissions_for_adviser($conn, $adviser_id)
                                                     <?php endif; ?>
                                                 </td>
                                             </tr>
+                                            <?php if ($request): ?>
+                                                <?php
+                                                    $requestTitle = trim((string)($submission['submission_title'] ?? ''));
+                                                    $requestStudent = $submission['student_name'] ?? '________________________';
+                                                    $requestDegree = trim((string)($submission['student_program'] ?? ''));
+                                                    if ($requestDegree === '') {
+                                                        $requestDegree = trim((string)($submission['student_department'] ?? ''));
+                                                    }
+                                                    if ($requestDegree === '') {
+                                                        $requestDegree = trim((string)($submission['student_college'] ?? ''));
+                                                    }
+                                                    $requestDate = !empty($request['requested_at'])
+                                                        ? date('F d, Y', strtotime($request['requested_at']))
+                                                        : date('F d, Y');
+                                                    $requestSignature = $request['adviser_signature_path'] ?? $adviserSignaturePath;
+                                                ?>
+                                                <?php ob_start(); ?>
+                                                <div class="modal fade" id="letterModal<?php echo (int)$submission['id']; ?>" tabindex="-1" aria-hidden="true">
+                                                    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                                                        <div class="modal-content">
+                                                            <div class="modal-header">
+                                                                <h5 class="modal-title">Adviser Endorsement Letter</h5>
+                                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                            </div>
+                                                            <div class="modal-body">
+                                                                <div class="endorsement-letter">
+                                                                    <div class="letter-head" aria-hidden="true"></div>
+                                                                    <div class="letter-body">
+                                                                        <div class="letter-title">
+                                                                            Adviser's Endorsement for Routing of Final Hardbound Capstone/Thesis/Dissertation
+                                                                        </div>
+                                                                        <p class="letter-text">
+                                                                            The final hardbound thesis/dissertation entitled:
+                                                                            <span class="letter-inline" style="min-width: 100%;">
+                                                                                <input type="text" class="letter-input" value="<?php echo htmlspecialchars($requestTitle); ?>" readonly>
+                                                                            </span>
+                                                                        </p>
+                                                                        <p class="letter-text">
+                                                                            prepared and submitted by
+                                                                            <span class="letter-inline" style="min-width: 220px;">
+                                                                                <input type="text" class="letter-input" value="<?php echo htmlspecialchars($requestStudent); ?>" readonly>
+                                                                            </span>
+                                                                            (Name of Student) in partial fulfillment of the requirements for the degree of
+                                                                            <span class="letter-inline" style="min-width: 220px;">
+                                                                                <input type="text" class="letter-input" value="<?php echo htmlspecialchars($requestDegree); ?>" readonly>
+                                                                            </span>,
+                                                                            has been carefully reviewed by the undersigned.
+                                                                        </p>
+                                                                        <p class="letter-text">I hereby certify that:</p>
+                                                                        <p class="letter-text">
+                                                                            All corrections and revisions required by the Panel of Examiners have been satisfactorily complied with;
+                                                                        </p>
+                                                                        <p class="letter-text">
+                                                                            The manuscript conforms to the prescribed academic, technical, and formatting standards of the Institute of Advanced Studies; and
+                                                                        </p>
+                                                                        <p class="letter-text">
+                                                                            This copy is endorsed as the final corrected and approved manuscript for official routing and hardbinding of the capstone/thesis/dissertation.
+                                                                            This endorsement is issued to facilitate the processing of the student's graduation and institutional documentation requirements.
+                                                                        </p>
+                                                                        <div class="signature-block">
+                                                                            <?php if (!empty($requestSignature)): ?>
+                                                                                <img src="<?php echo htmlspecialchars($requestSignature); ?>" alt="Adviser signature" class="signature-preview">
+                                                                            <?php endif; ?>
+                                                                            <div class="signature-line"></div>
+                                                                            <div class="signature-label">Adviser's Signature Over Printed Name</div>
+                                                                        </div>
+                                                                        <div class="letter-date">
+                                                                            Date of Endorsement:
+                                                                            <span class="letter-inline" style="min-width: 200px;">
+                                                                                <input type="text" class="letter-input" value="<?php echo htmlspecialchars($requestDate); ?>" readonly>
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="letter-foot" aria-hidden="true"></div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <?php $modalBlocks[] = ob_get_clean(); ?>
+                                            <?php endif; ?>
                                             <?php if ($canRequest): ?>
                                                 <?php ob_start(); ?>
                                                 <div class="modal fade" id="requestModal<?php echo (int)$submission['id']; ?>" tabindex="-1" aria-hidden="true">
-                                                    <div class="modal-dialog">
+                                                    <div class="modal-dialog modal-xl modal-dialog-scrollable">
                                                         <form method="post" enctype="multipart/form-data" class="modal-content">
                                                             <div class="modal-header">
                                                                 <h5 class="modal-title">Send Endorsement</h5>
@@ -196,7 +311,69 @@ $submissions = fetch_final_hardbound_submissions_for_adviser($conn, $adviser_id)
                                                                 <input type="hidden" name="request_verification" value="1">
                                                                 <input type="hidden" name="hardbound_id" value="<?php echo (int)$submission['id']; ?>">
                                                                 <p class="mb-3">Send this hardbound submission to the defense committee for signatures.</p>
-                                                                <label class="form-label">Adviser Signature</label>
+                                                                <?php
+                                                                    $studentName = $submission['student_name'] ?? '________________________';
+                                                                    $titleValue = trim((string)($submission['submission_title'] ?? ''));
+                                                                    $degreeValue = trim((string)($submission['student_program'] ?? ''));
+                                                                    if ($degreeValue === '') {
+                                                                        $degreeValue = trim((string)($submission['student_department'] ?? ''));
+                                                                    }
+                                                                    if ($degreeValue === '') {
+                                                                        $degreeValue = trim((string)($submission['student_college'] ?? ''));
+                                                                    }
+                                                                    $dateValue = date('F d, Y');
+                                                                ?>
+                                                                <div class="endorsement-letter mb-4">
+                                                                    <div class="letter-head" aria-hidden="true"></div>
+                                                                    <div class="letter-body">
+                                                                        <div class="letter-title">
+                                                                            Adviser's Endorsement for Routing of Final Hardbound Capstone/Thesis/Dissertation
+                                                                        </div>
+                                                                        <p class="letter-text">
+                                                                            The final hardbound thesis/dissertation entitled:
+                                                                            <span class="letter-inline" style="min-width: 100%;">
+                                                                                <input type="text" class="letter-input" value="<?php echo htmlspecialchars($titleValue); ?>" readonly>
+                                                                            </span>
+                                                                        </p>
+                                                                        <p class="letter-text">
+                                                                            prepared and submitted by
+                                                                            <span class="letter-inline" style="min-width: 220px;">
+                                                                                <input type="text" class="letter-input" value="<?php echo htmlspecialchars($studentName); ?>" readonly>
+                                                                            </span>
+                                                                            (Name of Student) in partial fulfillment of the requirements for the degree of
+                                                                            <span class="letter-inline" style="min-width: 220px;">
+                                                                                <input type="text" class="letter-input" value="<?php echo htmlspecialchars($degreeValue); ?>" readonly>
+                                                                            </span>,
+                                                                            has been carefully reviewed by the undersigned.
+                                                                        </p>
+                                                                        <p class="letter-text">I hereby certify that:</p>
+                                                                        <p class="letter-text">
+                                                                            All corrections and revisions required by the Panel of Examiners have been satisfactorily complied with;
+                                                                        </p>
+                                                                        <p class="letter-text">
+                                                                            The manuscript conforms to the prescribed academic, technical, and formatting standards of the Institute of Advanced Studies; and
+                                                                        </p>
+                                                                        <p class="letter-text">
+                                                                            This copy is endorsed as the final corrected and approved manuscript for official routing and hardbinding of the capstone/thesis/dissertation.
+                                                                            This endorsement is issued to facilitate the processing of the student's graduation and institutional documentation requirements.
+                                                                        </p>
+                                                                        <div class="signature-block">
+                                                                            <?php if ($adviserSignaturePath): ?>
+                                                                                <img src="<?php echo htmlspecialchars($adviserSignaturePath); ?>" alt="Adviser signature" class="signature-preview">
+                                                                            <?php endif; ?>
+                                                                            <div class="signature-line"></div>
+                                                                            <div class="signature-label">Adviser's Signature Over Printed Name</div>
+                                                                        </div>
+                                                                        <div class="letter-date">
+                                                                            Date of Endorsement:
+                                                                            <span class="letter-inline" style="min-width: 200px;">
+                                                                                <input type="text" class="letter-input" value="<?php echo htmlspecialchars($dateValue); ?>" readonly>
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="letter-foot" aria-hidden="true"></div>
+                                                                </div>
+                                                                <label class="form-label">Adviser Signature Upload</label>
                                                                 <input type="file" name="adviser_signature" class="form-control mb-3" accept="image/png,image/jpeg">
                                                                 <label class="form-label">Remarks (optional)</label>
                                                                 <textarea name="remarks" class="form-control" rows="3" placeholder="Any notes for the defense committee..."></textarea>
