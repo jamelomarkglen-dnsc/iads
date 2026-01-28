@@ -336,11 +336,15 @@ if (isset($_POST['create'])) {
                                     <label class="form-label">Program Handled</label>
                                     <select name="program_focus" class="form-select" required>
                                         <option value="" disabled selected>Select Program</option>
-                                        <option value="PhD in Educational Management" data-desc="Doctor of Philosophy in Educational Management">PhD in Educational Management</option>
-                                        <option value="PhD in English Language Studies and Teaching" data-desc="Doctor of Philosophy in English Language Studies and Teaching">PhD in English Language Studies and Teaching</option>
-                                        <option value="MS in Marine Biodiversity & Fisheries Management" data-desc="Master of Science in Marine Biodiversity & Fisheries Management">MS in Marine Biodiversity & Fisheries Management</option>
-                                        <option value="Master in Information Technology" data-desc="Master in Information Technology">Master in Information Technology</option>
-                                        <option value="Custom / Others" data-desc="Custom / Others - specify during onboarding.">Custom / Others</option>
+                                        <option value="PHDEM" data-desc="Doctor of Philosophy in Educational Management">Doctor of Philosophy in Educational Management (PHDEM)</option>
+                                        <option value="MAEM" data-desc="Master of Arts in Educational Management">Master of Arts in Educational Management (MAEM)</option>
+                                        <option value="MAED-ELST" data-desc="Master of Education Major in English Language Studies and Teaching">Master of Education Major in English Language Studies and Teaching (MAED-ELST)</option>
+                                        <option value="MST-GENSCI" data-desc="Master in Science Teaching Major in General Science">Master in Science Teaching Major in General Science (MST-GENSCI)</option>
+                                        <option value="MST-MATH" data-desc="Master in Science Teaching Major in Mathematics">Master in Science Teaching Major in Mathematics (MST-MATH)</option>
+                                        <option value="MFM-AT" data-desc="Master in Fisheries Management Major in Aquaculture Technology">Master in Fisheries Management Major in Aquaculture Technology (MFM-AT)</option>
+                                        <option value="MFM-FP" data-desc="Master in Fisheries Management Major in Fish Processing">Master in Fisheries Management Major in Fish Processing (MFM-FP)</option>
+                                        <option value="MSMB" data-desc="Master of Science in Marine Biodiversity">Master of Science in Marine Biodiversity (MSMB)</option>
+                                        <option value="MIT" data-desc="Master in Information Technology">Master in Information Technology (MIT)</option>
                                     </select>
                                 </div>
                                 <div id="chairInfo" class="alert alert-soft-success mt-2"></div>

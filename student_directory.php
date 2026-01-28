@@ -516,7 +516,27 @@ $uniqueProgramsInView = count($filteredProgramSet);
                                         <?php if ($hasProgramColumn): ?>
                                             <div class="mb-3">
                                                 <label class="form-label">Program</label>
-                                                <input type="text" name="program" class="form-control" value="<?= htmlspecialchars($student['program'] ?? ''); ?>">
+                                                <select name="program" class="form-select">
+                                                    <option value="">Select Program</option>
+                                                    <?php
+                                                    $programOptions = [
+                                                        'PHDEM' => 'Doctor of Philosophy in Educational Management (PHDEM)',
+                                                        'MAEM' => 'Master of Arts in Educational Management (MAEM)',
+                                                        'MAED-ELST' => 'Master of Education Major in English Language Studies and Teaching (MAED-ELST)',
+                                                        'MST-GENSCI' => 'Master in Science Teaching Major in General Science (MST-GENSCI)',
+                                                        'MST-MATH' => 'Master in Science Teaching Major in Mathematics (MST-MATH)',
+                                                        'MFM-AT' => 'Master in Fisheries Management Major in Aquaculture Technology (MFM-AT)',
+                                                        'MFM-FP' => 'Master in Fisheries Management Major in Fish Processing (MFM-FP)',
+                                                        'MSMB' => 'Master of Science in Marine Biodiversity (MSMB)',
+                                                        'MIT' => 'Master in Information Technology (MIT)',
+                                                    ];
+                                                    foreach ($programOptions as $code => $label):
+                                                    ?>
+                                                        <option value="<?= htmlspecialchars($code); ?>" <?= ($student['program'] ?? '') === $code ? 'selected' : ''; ?>>
+                                                            <?= htmlspecialchars($label); ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
                                             </div>
                                         <?php endif; ?>
                                         <?php if ($hasYearLevelColumn): ?>
