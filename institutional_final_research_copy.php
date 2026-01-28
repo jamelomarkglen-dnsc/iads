@@ -17,6 +17,8 @@ $conditions = [];
 $params = [];
 $types = '';
 
+$conditions[] = "(ra.id IS NULL OR ra.status = 'Restored')";
+
 if ($search !== '') {
     $conditions[] = "(s.title LIKE ? OR CONCAT(u.firstname, ' ', u.lastname) LIKE ?)";
     $searchTerm = '%' . $search . '%';
@@ -39,7 +41,15 @@ $sql = "
     FROM institutional_final_copies ifc
     LEFT JOIN submissions s ON s.id = ifc.submission_id
     LEFT JOIN users u ON u.id = ifc.student_id
-    LEFT JOIN research_archive ra ON ra.submission_id = ifc.submission_id
+    LEFT JOIN (
+        SELECT ra1.submission_id, ra1.id, ra1.status
+        FROM research_archive ra1
+        JOIN (
+            SELECT submission_id, MAX(id) AS max_id
+            FROM research_archive
+            GROUP BY submission_id
+        ) ra2 ON ra1.id = ra2.max_id
+    ) ra ON ra.submission_id = ifc.submission_id
 ";
 if (!empty($conditions)) {
     $sql .= ' WHERE ' . implode(' AND ', $conditions);

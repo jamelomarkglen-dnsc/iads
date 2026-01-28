@@ -504,14 +504,11 @@ include 'sidebar.php';
                                             <?php if (!empty($entry['file_path'])): ?>
                                                 <a href="<?= htmlspecialchars($entry['file_path']); ?>" class="btn btn-sm btn-outline-success" target="_blank"><i class="bi bi-download"></i></a>
                                             <?php endif; ?>
-                                            <form method="post" class="d-inline">
-                                                <input type="hidden" name="restore_archive" value="1">
-                                                <input type="hidden" name="archive_id" value="<?= (int)$entry['id']; ?>">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger"
-                                                        onclick="return confirm('Restore this archive entry?');">
-                                                    <i class="bi bi-arrow-counterclockwise"></i>
-                                                </button>
-                                            </form>
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-danger restore-trigger"
+                                                    data-archive-id="<?= (int)$entry['id']; ?>">
+                                                <i class="bi bi-arrow-counterclockwise"></i>
+                                            </button>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -523,6 +520,26 @@ include 'sidebar.php';
                 </div>
             </div>
         </div>
+    </div>
+</div>
+
+<div class="modal fade" id="restoreArchiveModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="post" class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Restore Archive Entry</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="restore_archive" value="1">
+                <input type="hidden" name="archive_id" id="restoreArchiveId" value="">
+                <p class="mb-0">Restore this archived document back to the institutional copy list?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">No</button>
+                <button type="submit" class="btn btn-danger">Yes, Restore</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -547,6 +564,19 @@ include 'sidebar.php';
         };
         archiveSelect.addEventListener('change', updateArchiveMeta);
         updateArchiveMeta();
+    }
+
+    const restoreModalEl = document.getElementById('restoreArchiveModal');
+    if (restoreModalEl) {
+        const restoreModal = new bootstrap.Modal(restoreModalEl);
+        const restoreInput = document.getElementById('restoreArchiveId');
+        document.querySelectorAll('.restore-trigger').forEach((button) => {
+            button.addEventListener('click', () => {
+                const archiveId = button.getAttribute('data-archive-id') || '';
+                restoreInput.value = archiveId;
+                restoreModal.show();
+            });
+        });
     }
 </script>
 </body>
