@@ -132,6 +132,9 @@ function fetchEligibleSubmissions(mysqli $conn): array
         JOIN final_hardbound_submissions fhs ON fhs.id = ifc.hardbound_submission_id
         JOIN submissions s ON s.id = ifc.submission_id
         LEFT JOIN users u ON s.student_id = u.id
+        LEFT JOIN research_archive ra
+          ON ra.submission_id = s.id
+         AND (ra.status IS NULL OR ra.status = 'Archived')
         WHERE fhs.status IN ('Passed','Verified')
           AND ifc.stored_at <= DATE_SUB(NOW(), INTERVAL 5 YEAR)
           AND NOT EXISTS (
@@ -140,9 +143,7 @@ function fetchEligibleSubmissions(mysqli $conn): array
             WHERE newer.submission_id = fhs.submission_id
               AND newer.id > fhs.id
           )
-          AND NOT EXISTS (
-            SELECT 1 FROM research_archive ra WHERE ra.submission_id = s.id
-          )
+          AND ra.id IS NULL
         ORDER BY ifc.stored_at DESC, s.created_at DESC
         LIMIT 20
     ";
@@ -230,6 +231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['archive_submission'])
     $submissionId = (int)($_POST['submission_id'] ?? 0);
     $publicationType = trim($_POST['publication_type'] ?? '');
     $archiveTitle = trim($_POST['archive_title'] ?? '');
+    $forceArchive = isset($_POST['force_archive']) && $_POST['force_archive'] === '1';
     $notes = '';
 
     if ($submissionId <= 0) {
@@ -246,78 +248,90 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['archive_submission'])
             $message = 'Submission not found.';
             $messageType = 'danger';
         } else {
-            $pendingUpload = fetch_pending_final_hardbound_archive_upload_for_submission($conn, $submissionId);
-            if (!$pendingUpload) {
-                $message = 'Student archive upload is required before archiving.';
+            $institutionalCopy = fetch_institutional_final_copy_for_submission($conn, $submissionId);
+            if (!$institutionalCopy) {
+                $message = 'Institutional final copy is required before archiving.';
                 $messageType = 'warning';
             } else {
-                $storedPath = trim((string)($pendingUpload['file_path'] ?? ''));
-                $uploadedPath = storeArchiveFile($_FILES['archive_file'] ?? null);
-                if ($uploadedPath !== null) {
-                    $storedPath = $uploadedPath;
-                }
-                if ($storedPath === '') {
-                    $message = 'No document available to archive. Please upload the final file.';
+                $storedAtRaw = (string)($institutionalCopy['stored_at'] ?? '');
+                $storedAtTs = $storedAtRaw !== '' ? strtotime($storedAtRaw) : 0;
+                $eligibleAtTs = $storedAtTs ? strtotime('+5 years', $storedAtTs) : 0;
+                if ((!$storedAtTs || $eligibleAtTs > time()) && !$forceArchive) {
+                    $eligibleLabel = $eligibleAtTs ? date('M d, Y', $eligibleAtTs) : 'N/A';
+                    $message = "Institutional copy is not yet eligible for archiving. Eligible on {$eligibleLabel}.";
                     $messageType = 'warning';
                 } else {
-                    $archiveStmt = $conn->prepare("
-                        INSERT INTO research_archive (submission_id, student_id, title, doc_type, publication_type, file_path, keywords, abstract, notes, archived_by)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ");
-                $docType = $submission['type'] ?? 'Concept Paper';
-                $keywords = $submission['keywords'] ?? '';
-                $abstract = $submission['abstract'] ?? null;
-                $finalTitle = $archiveTitle !== '' ? $archiveTitle : ($submission['title'] ?? 'Research document');
-                $archiveStmt->bind_param(
-                    'iisssssssi',
-                    $submissionId,
-                    $submission['student_id'],
-                    $finalTitle,
-                    $docType,
-                    $publicationType,
-                    $storedPath,
-                    $keywords,
-                    $abstract,
-                    $notes,
-                    $chairId
-                );
-                    if ($archiveStmt->execute()) {
-                        $conn->query("UPDATE submissions SET archived_at = NOW() WHERE id = {$submissionId}");
-
-                        $markStmt = $conn->prepare("
-                            UPDATE final_hardbound_archive_uploads
-                            SET status = 'Archived', archived_at = NOW(), archived_by = ?
-                            WHERE id = ?
-                        ");
-                        if ($markStmt) {
-                            $pendingUploadId = (int)$pendingUpload['id'];
-                            $markStmt->bind_param('ii', $chairId, $pendingUploadId);
-                            $markStmt->execute();
-                            $markStmt->close();
-                        }
-
-                        notify_user(
-                            $conn,
-                            (int)$submission['student_id'],
-                            'Research archived',
-                            'Your approved research has been archived for publication reference.',
-                            'student_dashboard.php'
-                        );
-                        $archivedTitle = trim((string)($submission['title'] ?? 'Research document'));
-                        notify_role(
-                            $conn,
-                            'dean',
-                            'Research archived',
-                            "{$archivedTitle} has been archived and is ready in the archive catalog.",
-                            'archive_library.php'
-                        );
-                        $message = 'Submission archived successfully.';
-                        $messageType = 'success';
-                    } else {
-                        $message = 'Unable to archive submission. Please try again.';
-                        $messageType = 'danger';
+                    $storedPath = trim((string)($institutionalCopy['file_path'] ?? ''));
+                    $uploadedPath = storeArchiveFile($_FILES['archive_file'] ?? null);
+                    if ($uploadedPath !== null) {
+                        $storedPath = $uploadedPath;
                     }
-                    $archiveStmt->close();
+                    if ($storedPath === '') {
+                        $message = 'No document available to archive. Please upload the final file.';
+                        $messageType = 'warning';
+                    } else {
+                        $archiveStmt = $conn->prepare("
+                            INSERT INTO research_archive (submission_id, student_id, title, doc_type, publication_type, file_path, keywords, abstract, notes, archived_by)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ");
+                    $docType = $submission['type'] ?? 'Concept Paper';
+                    $keywords = $submission['keywords'] ?? '';
+                    $abstract = $submission['abstract'] ?? null;
+                    $finalTitle = $archiveTitle !== '' ? $archiveTitle : ($submission['title'] ?? 'Research document');
+                    $archiveStmt->bind_param(
+                        'iisssssssi',
+                        $submissionId,
+                        $submission['student_id'],
+                        $finalTitle,
+                        $docType,
+                        $publicationType,
+                        $storedPath,
+                        $keywords,
+                        $abstract,
+                        $notes,
+                        $chairId
+                    );
+                        if ($archiveStmt->execute()) {
+                            $conn->query("UPDATE submissions SET archived_at = NOW() WHERE id = {$submissionId}");
+
+                            $pendingUpload = fetch_pending_final_hardbound_archive_upload_for_submission($conn, $submissionId);
+                            if ($pendingUpload) {
+                                $markStmt = $conn->prepare("
+                                    UPDATE final_hardbound_archive_uploads
+                                    SET status = 'Archived', archived_at = NOW(), archived_by = ?
+                                    WHERE id = ?
+                                ");
+                                if ($markStmt) {
+                                    $pendingUploadId = (int)$pendingUpload['id'];
+                                    $markStmt->bind_param('ii', $chairId, $pendingUploadId);
+                                    $markStmt->execute();
+                                    $markStmt->close();
+                                }
+                            }
+
+                            notify_user(
+                                $conn,
+                                (int)$submission['student_id'],
+                                'Research archived',
+                                'Your approved research has been archived for publication reference.',
+                                'student_dashboard.php'
+                            );
+                            $archivedTitle = trim((string)($submission['title'] ?? 'Research document'));
+                            notify_role(
+                                $conn,
+                                'dean',
+                                'Research archived',
+                                "{$archivedTitle} has been archived and is ready in the archive catalog.",
+                                'archive_library.php'
+                            );
+                            $message = 'Submission archived successfully.';
+                            $messageType = 'success';
+                        } else {
+                            $message = 'Unable to archive submission. Please try again.';
+                            $messageType = 'danger';
+                        }
+                        $archiveStmt->close();
+                    }
                 }
             }
         }

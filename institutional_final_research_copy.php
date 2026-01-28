@@ -34,10 +34,12 @@ if ($programFilter !== '') {
 $sql = "
     SELECT ifc.*, s.title, s.type,
            CONCAT(u.firstname, ' ', u.lastname) AS student_name,
-           u.program, u.department, u.college
+           u.program, u.department, u.college,
+           ra.id AS archive_id, ra.status AS archive_status
     FROM institutional_final_copies ifc
     LEFT JOIN submissions s ON s.id = ifc.submission_id
     LEFT JOIN users u ON u.id = ifc.student_id
+    LEFT JOIN research_archive ra ON ra.submission_id = ifc.submission_id
 ";
 if (!empty($conditions)) {
     $sql .= ' WHERE ' . implode(' AND ', $conditions);
@@ -137,6 +139,16 @@ include 'sidebar.php';
                                         $eligibleTs = $storedTs ? strtotime('+5 years', $storedTs) : 0;
                                         $eligibleNow = $eligibleTs > 0 && $eligibleTs <= time();
                                         $eligibleLabel = $eligibleTs ? date('M d, Y', $eligibleTs) : 'N/A';
+                                        $archiveId = (int)($entry['archive_id'] ?? 0);
+                                        $archiveStatus = $entry['archive_status'] ?? null;
+                                        $isArchived = $archiveId > 0 && ($archiveStatus === null || $archiveStatus === '' || $archiveStatus === 'Archived');
+                                        $isRestored = $archiveId > 0 && $archiveStatus === 'Restored';
+                                        $statusLabel = $isArchived ? 'Archived' : ($eligibleNow ? 'Eligible' : 'Eligible on ' . $eligibleLabel);
+                                        $statusBadge = $isArchived ? 'bg-secondary-subtle text-secondary' : ($eligibleNow ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning');
+                                        if ($isRestored) {
+                                            $statusLabel = 'Restored';
+                                            $statusBadge = 'bg-info-subtle text-info';
+                                        }
                                     ?>
                                     <tr>
                                         <td>
@@ -154,11 +166,21 @@ include 'sidebar.php';
                                         </td>
                                         <td><?= $storedAt ? htmlspecialchars(date('M d, Y g:i A', $storedTs)) : 'N/A'; ?></td>
                                         <td>
-                                            <span class="badge <?php echo $eligibleNow ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning'; ?>">
-                                                <?php echo $eligibleNow ? 'Eligible' : 'Eligible on ' . htmlspecialchars($eligibleLabel); ?>
+                                            <span class="badge <?php echo $statusBadge; ?>">
+                                                <?php echo htmlspecialchars($statusLabel); ?>
                                             </span>
                                         </td>
                                         <td class="text-end">
+                                            <?php if (!$isArchived): ?>
+                                                <button type="button"
+                                                        class="btn btn-sm btn-success archive-trigger"
+                                                        data-submission-id="<?php echo (int)($entry['submission_id'] ?? 0); ?>"
+                                                        data-title="<?php echo htmlspecialchars($entry['title'] ?? 'Research document', ENT_QUOTES); ?>"
+                                                        data-eligible="<?php echo $eligibleNow ? '1' : '0'; ?>"
+                                                        data-eligible-label="<?php echo htmlspecialchars($eligibleLabel, ENT_QUOTES); ?>">
+                                                    Archive Now
+                                                </button>
+                                            <?php endif; ?>
                                             <?php if (!empty($entry['file_path'])): ?>
                                                 <a href="<?= htmlspecialchars($entry['file_path']); ?>" target="_blank" class="btn btn-sm btn-outline-success">
                                                     <i class="bi bi-download"></i>
@@ -177,5 +199,64 @@ include 'sidebar.php';
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<div class="modal fade" id="archiveConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form method="post" action="archive_manager.php" class="modal-content" id="archiveConfirmForm">
+            <div class="modal-header">
+                <h5 class="modal-title">Archive Confirmation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="archive_submission" value="1">
+                <input type="hidden" name="submission_id" id="archiveConfirmSubmissionId" value="">
+                <input type="hidden" name="archive_title" id="archiveConfirmTitleInput" value="">
+                <input type="hidden" name="force_archive" id="archiveConfirmForce" value="0">
+                <p class="mb-2" id="archiveConfirmMessage"></p>
+                <div class="fw-semibold" id="archiveConfirmTitle"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">No</button>
+                <button type="submit" class="btn btn-success">Yes, Archive Now</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const modalEl = document.getElementById('archiveConfirmModal');
+        if (!modalEl) {
+            return;
+        }
+        const modal = new bootstrap.Modal(modalEl);
+        const submissionInput = document.getElementById('archiveConfirmSubmissionId');
+        const titleInput = document.getElementById('archiveConfirmTitleInput');
+        const forceInput = document.getElementById('archiveConfirmForce');
+        const messageEl = document.getElementById('archiveConfirmMessage');
+        const titleEl = document.getElementById('archiveConfirmTitle');
+
+        document.querySelectorAll('.archive-trigger').forEach((button) => {
+            button.addEventListener('click', () => {
+                const submissionId = button.getAttribute('data-submission-id') || '';
+                const title = button.getAttribute('data-title') || 'Research document';
+                const eligible = button.getAttribute('data-eligible') === '1';
+                const eligibleLabel = button.getAttribute('data-eligible-label') || 'N/A';
+
+                submissionInput.value = submissionId;
+                titleInput.value = title;
+                titleEl.textContent = title;
+
+                if (eligible) {
+                    messageEl.textContent = 'This file is eligible for archiving. Would you like to archive it now?';
+                    forceInput.value = '0';
+                } else {
+                    messageEl.textContent = `This file has not reached the 5-year retention period (eligible on ${eligibleLabel}). Would you like to archive it now?`;
+                    forceInput.value = '1';
+                }
+
+                modal.show();
+            });
+        });
+    });
+</script>
 </body>
 </html>
