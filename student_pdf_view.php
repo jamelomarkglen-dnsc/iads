@@ -463,10 +463,26 @@ $version_info = get_version_chain_info($conn, $submission_id);
         </div>
     </div>
     
+    <div class="modal fade" id="revisionStatusModal" tabindex="-1" aria-labelledby="revisionStatusModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header" id="revisionStatusModalHeader">
+                    <h5 class="modal-title" id="revisionStatusModalTitle">Upload Status</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="revisionStatusModalBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="pdf_viewer.js"></script>
     <script src="annotation_manager.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
         // Initialize PDF Viewer
@@ -495,6 +511,28 @@ $version_info = get_version_chain_info($conn, $submission_id);
         document.getElementById('zoomInBtn').addEventListener('click', () => pdfViewer.zoomIn());
         document.getElementById('zoomOutBtn').addEventListener('click', () => pdfViewer.zoomOut());
         document.getElementById('resetZoomBtn').addEventListener('click', () => pdfViewer.resetZoom());
+
+        const revisionStatusModalEl = document.getElementById('revisionStatusModal');
+        const revisionStatusModal = revisionStatusModalEl ? new bootstrap.Modal(revisionStatusModalEl) : null;
+        const revisionStatusModalHeader = document.getElementById('revisionStatusModalHeader');
+        const revisionStatusModalTitle = document.getElementById('revisionStatusModalTitle');
+        const revisionStatusModalBody = document.getElementById('revisionStatusModalBody');
+        const revisionStatusHeaderClasses = {
+            success: 'modal-header bg-success text-white',
+            error: 'modal-header bg-danger text-white',
+            warning: 'modal-header bg-warning text-dark',
+            info: 'modal-header bg-info text-white'
+        };
+
+        function showRevisionStatusModal(title, message, variant = 'info') {
+            if (!revisionStatusModal || !revisionStatusModalHeader || !revisionStatusModalTitle || !revisionStatusModalBody) {
+                return;
+            }
+            revisionStatusModalHeader.className = revisionStatusHeaderClasses[variant] || revisionStatusHeaderClasses.info;
+            revisionStatusModalTitle.textContent = title;
+            revisionStatusModalBody.textContent = message;
+            revisionStatusModal.show();
+        }
         
         // Revision upload handler with verbose logging
         document.getElementById('revisionUploadForm').addEventListener('submit', async (e) => {
@@ -559,7 +597,11 @@ $version_info = get_version_chain_info($conn, $submission_id);
                 } catch (parseError) {
                     console.error('JSON parse error:', parseError);
                     console.log('Response was not valid JSON. Raw response:', responseText.substring(0, 500));
-                    alert('Error: Server returned invalid response. Check console for details.');
+                    showRevisionStatusModal(
+                        'Upload Error',
+                        'Server returned invalid response. Check console for details.',
+                        'error'
+                    );
                     console.log('=== REVISION UPLOAD DEBUG END ===');
                     return;
                 }
@@ -568,17 +610,31 @@ $version_info = get_version_chain_info($conn, $submission_id);
                     console.log('Upload successful!');
                     console.log('New submission ID:', result.submission_id);
                     console.log('New version:', result.version);
-                    alert('Revised PDF uploaded successfully! Redirecting to new version...');
+                    showRevisionStatusModal(
+                        'Upload Complete',
+                        'Revised PDF uploaded successfully. Redirecting to new version...',
+                        'success'
+                    );
                     // Redirect to the NEW version instead of reloading current page
-                    window.location.href = 'student_pdf_view.php?submission_id=' + result.submission_id;
+                    setTimeout(() => {
+                        window.location.href = 'student_pdf_view.php?submission_id=' + result.submission_id;
+                    }, 1200);
                 } else {
                     console.error('Upload failed:', result.error || result.errors);
-                    alert('Error: ' + (result.error || JSON.stringify(result.errors) || 'Unknown error'));
+                    showRevisionStatusModal(
+                        'Upload Failed',
+                        'Error: ' + (result.error || JSON.stringify(result.errors) || 'Unknown error'),
+                        'error'
+                    );
                 }
             } catch (error) {
                 console.error('Fetch error:', error);
                 console.error('Error stack:', error.stack);
-                alert('Error uploading revised PDF: ' + error.message + '\nCheck console for details.');
+                showRevisionStatusModal(
+                    'Upload Failed',
+                    'Error uploading revised PDF: ' + error.message + '. Check console for details.',
+                    'error'
+                );
             }
             
             console.log('=== REVISION UPLOAD DEBUG END ===');

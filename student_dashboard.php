@@ -545,24 +545,6 @@ if ($pdfStmt = $conn->prepare($pdfSubmissionsSql)) {
     $pdfStmt->close();
 }
 
-// Fetch advisers for dropdown - get all users who have adviser-capable roles
-$advisersForPdf = [];
-$advisersSql = "
-    SELECT DISTINCT u.id, u.firstname, u.lastname, u.email
-    FROM users u
-    INNER JOIN user_roles ur ON ur.user_id = u.id
-    WHERE ur.role_code IN ('adviser', 'faculty', 'program_chairperson', 'committee_chairperson', 'committee_chair', 'panel')
-    ORDER BY u.firstname, u.lastname
-";
-if ($advStmt = $conn->prepare($advisersSql)) {
-    $advStmt->execute();
-    $advResult = $advStmt->get_result();
-    while ($row = $advResult->fetch_assoc()) {
-        $advisersForPdf[] = $row;
-    }
-    $advStmt->close();
-}
-
 $studentFullName = trim(($studentInfo['firstname'] ?? '') . ' ' . ($studentInfo['lastname'] ?? ''));
 if ($studentFullName === '') {
     $studentFullName = 'Student';
@@ -901,17 +883,20 @@ if ($studentFullName === '') {
                                     <small class="text-muted">Maximum file size: 50MB</small>
                                 </div>
                                 <div class="mb-3">
-                                    <label for="pdfAdviser" class="form-label">Select Adviser</label>
-                                    <select class="form-select" id="pdfAdviser" name="adviser_id" required>
-                                        <option value="">-- Choose an adviser --</option>
-                                        <?php foreach ($advisersForPdf as $adviser): ?>
-                                            <option value="<?php echo (int)$adviser['id']; ?>">
-                                                <?php echo htmlspecialchars($adviser['firstname'] . ' ' . $adviser['lastname']); ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
+                                    <label for="pdfAdviserName" class="form-label">Adviser</label>
+                                    <input
+                                        type="text"
+                                        class="form-control"
+                                        id="pdfAdviserName"
+                                        value="<?php echo htmlspecialchars($hasAdvisor ? trim(($advisor['firstname'] ?? '') . ' ' . ($advisor['lastname'] ?? '')) : 'Unassigned'); ?>"
+                                        readonly
+                                    >
+                                    <input type="hidden" name="adviser_id" value="<?php echo $hasAdvisor ? (int)$advisor['id'] : 0; ?>">
+                                    <?php if (!$hasAdvisor): ?>
+                                        <small class="text-muted">Your account has no adviser yet. Please contact the program chairperson before uploading.</small>
+                                    <?php endif; ?>
                                 </div>
-                                <button type="submit" class="btn btn-success">
+                                <button type="submit" class="btn btn-success" <?php echo $hasAdvisor ? '' : 'disabled'; ?>>
                                     <i class="bi bi-cloud-upload me-2"></i>Upload PDF
                                 </button>
                             </form>
