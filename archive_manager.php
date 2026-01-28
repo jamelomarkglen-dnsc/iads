@@ -228,7 +228,8 @@ function storeArchiveFile(?array $upload): ?string
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['archive_submission'])) {
     $submissionId = (int)($_POST['submission_id'] ?? 0);
     $publicationType = trim($_POST['publication_type'] ?? '');
-    $notes = trim($_POST['notes'] ?? '');
+    $archiveTitle = trim($_POST['archive_title'] ?? '');
+    $notes = '';
 
     if ($submissionId <= 0) {
         $message = 'Invalid submission reference.';
@@ -265,11 +266,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['archive_submission'])
                 $docType = $submission['type'] ?? 'Concept Paper';
                 $keywords = $submission['keywords'] ?? '';
                 $abstract = $submission['abstract'] ?? null;
+                $finalTitle = $archiveTitle !== '' ? $archiveTitle : ($submission['title'] ?? 'Research document');
                 $archiveStmt->bind_param(
                     'iisssssssi',
                     $submissionId,
                     $submission['student_id'],
-                    $submission['title'],
+                    $finalTitle,
                     $docType,
                     $publicationType,
                     $storedPath,
@@ -382,7 +384,8 @@ include 'sidebar.php';
                                         <option value="">Choose...</option>
                                         <?php foreach ($eligibleSubmissions as $submission): ?>
                                             <option value="<?= (int)$submission['id']; ?>"
-                                                data-archive-file="<?= htmlspecialchars($submission['archive_file_path'] ?? ''); ?>">
+                                                data-archive-file="<?= htmlspecialchars($submission['archive_file_path'] ?? ''); ?>"
+                                                data-title="<?= htmlspecialchars($submission['title'] ?? ''); ?>">
                                                 <?= htmlspecialchars($submission['title']); ?> (<?= htmlspecialchars($submission['student_name']); ?>)
                                             </option>
                                         <?php endforeach; ?>
@@ -394,6 +397,11 @@ include 'sidebar.php';
                                     </div>
                                 </div>
                                 <div class="mb-3">
+                                    <label class="form-label fw-semibold text-success">Title</label>
+                                    <input type="text" name="archive_title" id="archiveTitleInput" class="form-control" placeholder="Archive title" required>
+                                    <small class="text-muted d-block mt-1">Auto-filled from the selected submission.</small>
+                                </div>
+                                <div class="mb-3">
                                     <label class="form-label fw-semibold text-success">Publication Type</label>
                                     <input type="text" name="publication_type" class="form-control" placeholder="e.g., Journal, Hardbound, Capstone Book">
                                 </div>
@@ -401,10 +409,6 @@ include 'sidebar.php';
                                     <label class="form-label fw-semibold text-success">Upload Final Document (optional)</label>
                                     <input type="file" name="archive_file" class="form-control" accept=".pdf,.doc,.docx">
                                     <small class="text-muted d-block mt-1">Leave blank to reuse the student's final upload.</small>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold text-success">Notes</label>
-                                    <textarea name="notes" class="form-control" rows="3" placeholder="Remarks or routing instructions"></textarea>
                                 </div>
                                 <div class="d-grid">
                                     <button type="submit" class="btn btn-success"><i class="bi bi-archive me-1"></i>Archive Submission</button>
@@ -510,10 +514,12 @@ include 'sidebar.php';
 <script>
     const archiveSelect = document.getElementById('archiveSubmissionSelect');
     const archiveLink = document.getElementById('archiveFileLink');
-    if (archiveSelect && archiveLink) {
-        const updateArchiveLink = () => {
+    const archiveTitleInput = document.getElementById('archiveTitleInput');
+    if (archiveSelect && archiveLink && archiveTitleInput) {
+        const updateArchiveMeta = () => {
             const option = archiveSelect.options[archiveSelect.selectedIndex];
             const filePath = option ? option.getAttribute('data-archive-file') : '';
+            const title = option ? option.getAttribute('data-title') : '';
             if (filePath) {
                 archiveLink.href = filePath;
                 archiveLink.style.display = 'inline-block';
@@ -521,9 +527,10 @@ include 'sidebar.php';
                 archiveLink.href = '#';
                 archiveLink.style.display = 'none';
             }
+            archiveTitleInput.value = title || '';
         };
-        archiveSelect.addEventListener('change', updateArchiveLink);
-        updateArchiveLink();
+        archiveSelect.addEventListener('change', updateArchiveMeta);
+        updateArchiveMeta();
     }
 </script>
 </body>
