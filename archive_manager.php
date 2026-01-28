@@ -125,14 +125,15 @@ function fetchEligibleSubmissions(mysqli $conn): array
         SELECT s.id, s.student_id, s.title, s.type, s.status, s.keywords, s.file_path, s.abstract,
                CONCAT(u.firstname, ' ', u.lastname) AS student_name,
                fhs.id AS hardbound_submission_id,
-               fha.file_path AS archive_file_path,
-               fha.original_filename AS archive_original_filename
-        FROM submissions s
-        JOIN final_hardbound_submissions fhs ON fhs.submission_id = s.id
-        JOIN final_hardbound_archive_uploads fha ON fha.hardbound_submission_id = fhs.id
+               ifc.file_path AS archive_file_path,
+               ifc.original_filename AS archive_original_filename,
+               ifc.stored_at AS archive_stored_at
+        FROM institutional_final_copies ifc
+        JOIN final_hardbound_submissions fhs ON fhs.id = ifc.hardbound_submission_id
+        JOIN submissions s ON s.id = ifc.submission_id
         LEFT JOIN users u ON s.student_id = u.id
         WHERE fhs.status IN ('Passed','Verified')
-          AND fha.status = 'Pending'
+          AND ifc.stored_at <= DATE_SUB(NOW(), INTERVAL 5 YEAR)
           AND NOT EXISTS (
             SELECT 1
             FROM final_hardbound_submissions newer
@@ -142,7 +143,7 @@ function fetchEligibleSubmissions(mysqli $conn): array
           AND NOT EXISTS (
             SELECT 1 FROM research_archive ra WHERE ra.submission_id = s.id
           )
-        ORDER BY fhs.reviewed_at DESC, fhs.submitted_at DESC, s.created_at DESC
+        ORDER BY ifc.stored_at DESC, s.created_at DESC
         LIMIT 20
     ";
     $stmt = $conn->prepare($sql);
@@ -373,9 +374,10 @@ include 'sidebar.php';
                         <?php if (empty($eligibleSubmissions)): ?>
                             <div class="text-center text-muted py-4">
                                 <i class="bi bi-inboxes fs-2 mb-2"></i>
-                                <p class="mb-0">No approved submissions waiting for archiving.</p>
+                                <p class="mb-0">No submissions have reached the 5-year archive window yet.</p>
                             </div>
                         <?php else: ?>
+                            <p class="text-muted small mb-3">Entries appear here after 5 years in Institutional Final Research Copy.</p>
                             <form method="post" enctype="multipart/form-data">
                                 <input type="hidden" name="archive_submission" value="1">
                                 <div class="mb-3">
@@ -392,7 +394,7 @@ include 'sidebar.php';
                                     </select>
                                     <div class="mt-2">
                                         <a id="archiveFileLink" class="btn btn-sm btn-outline-success" href="#" target="_blank" style="display: none;">
-                                            View student archive upload
+                                            View institutional copy
                                         </a>
                                     </div>
                                 </div>

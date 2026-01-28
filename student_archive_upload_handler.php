@@ -139,6 +139,22 @@ if ($existing) {
     }
 }
 
+$institutional_copy = upsert_institutional_final_copy(
+    $conn,
+    $hardbound_id,
+    $submission_id,
+    $student_id,
+    $filePath,
+    $originalFilename,
+    $fileSize,
+    $mimeType
+);
+if (!$institutional_copy['success']) {
+    $_SESSION['final_hardbound_archive_upload_error'] = 'Archive PDF uploaded, but the institutional copy could not be stored. Please re-upload or contact the program chairperson.';
+    header('Location: student_final_hardbound_submission.php');
+    exit;
+}
+
 $studentName = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? '')) ?: 'A student';
 $chairIds = getProgramChairsForStudent($conn, $student_id);
 if (!empty($chairIds)) {
@@ -147,12 +163,12 @@ if (!empty($chairIds)) {
         $chairIds,
         'Archive copy uploaded',
         "{$studentName} uploaded the archive PDF after final hardbound endorsement.",
-        'archive_manager.php',
+        'institutional_final_research_copy.php',
         true
     );
 }
 
-$_SESSION['final_hardbound_archive_upload_success'] = 'Archive PDF uploaded successfully. Please wait for the program chairperson to archive it.';
+$_SESSION['final_hardbound_archive_upload_success'] = 'Archive PDF uploaded successfully and stored as the Institutional Final Research Copy. It becomes eligible for archiving after 5 years.';
 header('Location: student_final_hardbound_submission.php');
 exit;
 ?>

@@ -202,7 +202,7 @@ $archiveStatusBadge = $archive_upload
                                 </div>
                             <?php elseif ($archive_upload): ?>
                                 <div class="alert alert-info">
-                                    Your archive copy is on file and awaiting program chairperson archiving.
+                                    Your archive copy is stored as the Institutional Final Research Copy and will be eligible for archiving after 5 years.
                                 </div>
                             <?php endif; ?>
 

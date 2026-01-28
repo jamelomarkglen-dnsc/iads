@@ -13,6 +13,7 @@ define('FINAL_HARDBOUND_MAX_SIZE', 52428800);
 define('FINAL_HARDBOUND_ALLOWED_MIME', ['application/pdf']);
 define('FINAL_HARDBOUND_ALLOWED_EXT', ['pdf']);
 define('FINAL_HARDBOUND_ARCHIVE_UPLOAD_DIR', 'uploads/archive_submissions/');
+define('INSTITUTIONAL_FINAL_COPY_DIR', 'uploads/institutional_final_copies/');
 
 function ensure_final_hardbound_directories(): void
 {
@@ -31,6 +32,16 @@ function ensure_final_hardbound_archive_directories(): void
     }
     if (!is_writable(FINAL_HARDBOUND_ARCHIVE_UPLOAD_DIR)) {
         chmod(FINAL_HARDBOUND_ARCHIVE_UPLOAD_DIR, 0755);
+    }
+}
+
+function ensure_institutional_final_copy_directories(): void
+{
+    if (!is_dir(INSTITUTIONAL_FINAL_COPY_DIR)) {
+        mkdir(INSTITUTIONAL_FINAL_COPY_DIR, 0755, true);
+    }
+    if (!is_writable(INSTITUTIONAL_FINAL_COPY_DIR)) {
+        chmod(INSTITUTIONAL_FINAL_COPY_DIR, 0755);
     }
 }
 
@@ -98,6 +109,16 @@ function generate_final_hardbound_archive_filename(int $student_id, string $orig
     return "final_hardbound_archive_{$student_id}_{$timestamp}_{$random}_{$base_name}.pdf";
 }
 
+function generate_institutional_final_copy_filename(int $student_id, string $original_filename): string
+{
+    $timestamp = time();
+    $random = bin2hex(random_bytes(4));
+    $base_name = pathinfo($original_filename, PATHINFO_FILENAME);
+    $base_name = preg_replace('/[^a-zA-Z0-9_-]/', '_', $base_name);
+    $base_name = substr($base_name, 0, 30);
+    return "institutional_final_copy_{$student_id}_{$timestamp}_{$random}_{$base_name}.pdf";
+}
+
 function upload_final_hardbound_file(array $file_array, int $student_id): array
 {
     $validation = validate_final_hardbound_file($file_array);
@@ -154,6 +175,168 @@ function upload_final_hardbound_archive_file(array $file_array, int $student_id)
     ];
 }
 
+function ensureInstitutionalFinalCopyTable(mysqli $conn): void
+{
+    static $ensured = false;
+    if ($ensured) {
+        return;
+    }
+
+    $conn->query("
+        CREATE TABLE IF NOT EXISTS institutional_final_copies (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            hardbound_submission_id INT NOT NULL,
+            submission_id INT NOT NULL,
+            student_id INT NOT NULL,
+            file_path VARCHAR(255) NOT NULL,
+            original_filename VARCHAR(255) NOT NULL,
+            file_size INT NULL,
+            mime_type VARCHAR(100) NULL,
+            stored_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uniq_institutional_hardbound (hardbound_submission_id),
+            INDEX idx_institutional_submission (submission_id),
+            INDEX idx_institutional_student (student_id),
+            INDEX idx_institutional_stored (stored_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+
+    $ensured = true;
+}
+
+function fetch_institutional_final_copy_by_hardbound(mysqli $conn, int $hardbound_submission_id): ?array
+{
+    if ($hardbound_submission_id <= 0) {
+        return null;
+    }
+    $stmt = $conn->prepare("
+        SELECT *
+        FROM institutional_final_copies
+        WHERE hardbound_submission_id = ?
+        LIMIT 1
+    ");
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param('i', $hardbound_submission_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : null;
+    if ($result) {
+        $result->free();
+    }
+    $stmt->close();
+    return $row ?: null;
+}
+
+function fetch_institutional_final_copy_for_submission(mysqli $conn, int $submission_id): ?array
+{
+    if ($submission_id <= 0) {
+        return null;
+    }
+    $stmt = $conn->prepare("
+        SELECT ifc.*, fhs.id AS hardbound_submission_id
+        FROM institutional_final_copies ifc
+        JOIN final_hardbound_submissions fhs ON fhs.id = ifc.hardbound_submission_id
+        WHERE ifc.submission_id = ?
+        ORDER BY ifc.stored_at DESC, ifc.id DESC
+        LIMIT 1
+    ");
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param('i', $submission_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : null;
+    if ($result) {
+        $result->free();
+    }
+    $stmt->close();
+    return $row ?: null;
+}
+
+function upsert_institutional_final_copy(
+    mysqli $conn,
+    int $hardbound_submission_id,
+    int $submission_id,
+    int $student_id,
+    string $source_path,
+    string $original_filename,
+    int $file_size,
+    string $mime_type
+): array {
+    ensureInstitutionalFinalCopyTable($conn);
+    ensure_institutional_final_copy_directories();
+
+    if ($source_path === '' || !is_file($source_path)) {
+        return ['success' => false, 'error' => 'Source file not found for institutional copy.'];
+    }
+
+    $filename = generate_institutional_final_copy_filename($student_id, $original_filename);
+    $destination_path = INSTITUTIONAL_FINAL_COPY_DIR . $filename;
+
+    if (!copy($source_path, $destination_path)) {
+        return ['success' => false, 'error' => 'Unable to save institutional copy.'];
+    }
+
+    chmod($destination_path, 0644);
+
+    $existing = fetch_institutional_final_copy_by_hardbound($conn, $hardbound_submission_id);
+    if ($existing) {
+        $stmt = $conn->prepare("
+            UPDATE institutional_final_copies
+            SET file_path = ?, original_filename = ?, file_size = ?, mime_type = ?, stored_at = NOW()
+            WHERE id = ?
+        ");
+        if (!$stmt) {
+            @unlink($destination_path);
+            return ['success' => false, 'error' => 'Unable to update institutional copy.'];
+        }
+        $existingId = (int)$existing['id'];
+        $stmt->bind_param('ssisi', $destination_path, $original_filename, $file_size, $mime_type, $existingId);
+        $ok = $stmt->execute();
+        $stmt->close();
+        if (!$ok) {
+            @unlink($destination_path);
+            return ['success' => false, 'error' => 'Unable to update institutional copy.'];
+        }
+
+        $oldPath = (string)($existing['file_path'] ?? '');
+        if ($oldPath !== '' && $oldPath !== $destination_path && strpos($oldPath, INSTITUTIONAL_FINAL_COPY_DIR) === 0 && is_file($oldPath)) {
+            @unlink($oldPath);
+        }
+    } else {
+        $stmt = $conn->prepare("
+            INSERT INTO institutional_final_copies
+                (hardbound_submission_id, submission_id, student_id, file_path, original_filename, file_size, mime_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
+        if (!$stmt) {
+            @unlink($destination_path);
+            return ['success' => false, 'error' => 'Unable to create institutional copy.'];
+        }
+        $stmt->bind_param(
+            'iiissis',
+            $hardbound_submission_id,
+            $submission_id,
+            $student_id,
+            $destination_path,
+            $original_filename,
+            $file_size,
+            $mime_type
+        );
+        $ok = $stmt->execute();
+        $stmt->close();
+        if (!$ok) {
+            @unlink($destination_path);
+            return ['success' => false, 'error' => 'Unable to create institutional copy.'];
+        }
+    }
+
+    return ['success' => true, 'file_path' => $destination_path];
+}
+
 function hardbound_column_exists(mysqli $conn, string $table, string $column): bool
 {
     $tableEscaped = $conn->real_escape_string($table);
@@ -179,6 +362,7 @@ function ensureFinalHardboundTables(mysqli $conn): void
     ensureFinalRoutingHardboundTables($conn);
     ensureDefenseCommitteeRequestsTable($conn);
     ensureFinalHardboundArchiveUploadsTable($conn);
+    ensureInstitutionalFinalCopyTable($conn);
     if (!hardbound_column_exists($conn, 'final_routing_submissions', 'parent_submission_id')) {
         $conn->query("ALTER TABLE final_routing_submissions ADD COLUMN parent_submission_id INT NULL AFTER version_number");
     }

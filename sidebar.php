@@ -319,7 +319,7 @@ $facultyMenuPages = [
     'program_chair_final_endorsement.php',
 ];
 $studentMenuPages = ['create_student.php', 'student_directory.php', 'submissions.php', 'status_logs.php', 'notice_to_commence.php'];
-$recordsMenuPages = ['archive_manager.php', 'receive_payment.php'];
+$recordsMenuPages = ['institutional_final_research_copy.php', 'archive_manager.php', 'receive_payment.php'];
 $facultySectionOpen = in_array($currentPage, $facultyMenuPages, true);
 $studentSectionOpen = in_array($currentPage, $studentMenuPages, true);
 $recordsSectionOpen = in_array($currentPage, $recordsMenuPages, true);
@@ -489,6 +489,9 @@ if ($userLastLogin !== '') {
                             <i class="bi bi-chevron-down chevron"></i>
                         </button>
                         <div class="nav-section-links">
+                            <a href="institutional_final_research_copy.php" class="nav-sub-link <?php echo ($currentPage == 'institutional_final_research_copy.php') ? 'active' : ''; ?>">
+                                Institutional Final Research Copy
+                            </a>
                             <a href="archive_manager.php" class="nav-sub-link <?php echo ($currentPage == 'archive_manager.php') ? 'active' : ''; ?>">
                                 Archive Manager
                             </a>
