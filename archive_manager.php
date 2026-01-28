@@ -378,64 +378,7 @@ include 'sidebar.php';
             <div class="alert alert-<?= htmlspecialchars($messageType); ?>"><?= htmlspecialchars($message); ?></div>
         <?php endif; ?>
 
-        <div class="row g-4">
-            <div class="col-lg-5">
-                <div class="card archive-card h-100">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Ready for Archive</h5>
-                    </div>
-                    <div class="card-body">
-                        <?php if (empty($eligibleSubmissions)): ?>
-                            <div class="text-center text-muted py-4">
-                                <i class="bi bi-inboxes fs-2 mb-2"></i>
-                                <p class="mb-0">No submissions have reached the 5-year archive window yet.</p>
-                            </div>
-                        <?php else: ?>
-                            <p class="text-muted small mb-3">Entries appear here after 5 years in Institutional Final Research Copy.</p>
-                            <form method="post" enctype="multipart/form-data">
-                                <input type="hidden" name="archive_submission" value="1">
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold text-success">Select Submission</label>
-                                    <select name="submission_id" id="archiveSubmissionSelect" class="form-select" required>
-                                        <option value="">Choose...</option>
-                                        <?php foreach ($eligibleSubmissions as $submission): ?>
-                                            <option value="<?= (int)$submission['id']; ?>"
-                                                data-archive-file="<?= htmlspecialchars($submission['archive_file_path'] ?? ''); ?>"
-                                                data-title="<?= htmlspecialchars($submission['title'] ?? ''); ?>">
-                                                <?= htmlspecialchars($submission['title']); ?> (<?= htmlspecialchars($submission['student_name']); ?>)
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                    <div class="mt-2">
-                                        <a id="archiveFileLink" class="btn btn-sm btn-outline-success" href="#" target="_blank" style="display: none;">
-                                            View institutional copy
-                                        </a>
-                                    </div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold text-success">Title</label>
-                                    <input type="text" name="archive_title" id="archiveTitleInput" class="form-control" placeholder="Archive title" required>
-                                    <small class="text-muted d-block mt-1">Auto-filled from the selected submission.</small>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold text-success">Publication Type</label>
-                                    <input type="text" name="publication_type" class="form-control" placeholder="e.g., Journal, Hardbound, Capstone Book">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold text-success">Upload Final Document (optional)</label>
-                                    <input type="file" name="archive_file" class="form-control" accept=".pdf,.doc,.docx">
-                                    <small class="text-muted d-block mt-1">Leave blank to reuse the student's final upload.</small>
-                                </div>
-                                <div class="d-grid">
-                                    <button type="submit" class="btn btn-success"><i class="bi bi-archive me-1"></i>Archive Submission</button>
-                                </div>
-                            </form>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-lg-7">
+        
                 <div class="card filter-card mb-3">
                     <div class="card-body">
                         <form class="row g-3" method="get">
@@ -518,8 +461,6 @@ include 'sidebar.php';
                         <?php endif; ?>
                     </div>
                 </div>
-            </div>
-        </div>
     </div>
 </div>
 
@@ -545,27 +486,6 @@ include 'sidebar.php';
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    const archiveSelect = document.getElementById('archiveSubmissionSelect');
-    const archiveLink = document.getElementById('archiveFileLink');
-    const archiveTitleInput = document.getElementById('archiveTitleInput');
-    if (archiveSelect && archiveLink && archiveTitleInput) {
-        const updateArchiveMeta = () => {
-            const option = archiveSelect.options[archiveSelect.selectedIndex];
-            const filePath = option ? option.getAttribute('data-archive-file') : '';
-            const title = option ? option.getAttribute('data-title') : '';
-            if (filePath) {
-                archiveLink.href = filePath;
-                archiveLink.style.display = 'inline-block';
-            } else {
-                archiveLink.href = '#';
-                archiveLink.style.display = 'none';
-            }
-            archiveTitleInput.value = title || '';
-        };
-        archiveSelect.addEventListener('change', updateArchiveMeta);
-        updateArchiveMeta();
-    }
-
     const restoreModalEl = document.getElementById('restoreArchiveModal');
     if (restoreModalEl) {
         const restoreModal = new bootstrap.Modal(restoreModalEl);
