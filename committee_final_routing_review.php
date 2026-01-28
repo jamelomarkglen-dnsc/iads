@@ -179,20 +179,14 @@ $stats = get_final_routing_annotation_statistics($conn, $submission_id);
                     </h6>
 
                     <?php if (isset($_SESSION['final_routing_verdict_success'])): ?>
-                        <div class="alert alert-success alert-dismissible fade show small" role="alert">
-                            <i class="bi bi-check-circle-fill me-2"></i>
-                            <?php echo htmlspecialchars($_SESSION['final_routing_verdict_success']); ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
+                        <?php $finalVerdictModalMessage = (string)$_SESSION['final_routing_verdict_success']; ?>
+                        <?php $finalVerdictModalType = 'success'; ?>
                         <?php unset($_SESSION['final_routing_verdict_success']); ?>
                     <?php endif; ?>
 
                     <?php if (isset($_SESSION['final_routing_verdict_error'])): ?>
-                        <div class="alert alert-danger alert-dismissible fade show small" role="alert">
-                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                            <?php echo htmlspecialchars($_SESSION['final_routing_verdict_error']); ?>
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
+                        <?php $finalVerdictModalMessage = (string)$_SESSION['final_routing_verdict_error']; ?>
+                        <?php $finalVerdictModalType = 'danger'; ?>
                         <?php unset($_SESSION['final_routing_verdict_error']); ?>
                     <?php endif; ?>
 
@@ -222,7 +216,7 @@ $stats = get_final_routing_annotation_statistics($conn, $submission_id);
                                       placeholder="Provide detailed feedback and recommendations..."></textarea>
                         </div>
 
-                        <button type="submit" class="btn btn-warning btn-sm w-100">
+                        <button type="submit" class="btn btn-success btn-sm w-100">
                             <i class="bi bi-check-circle me-1"></i>Submit Verdict
                         </button>
                     </form>
@@ -232,6 +226,33 @@ $stats = get_final_routing_annotation_statistics($conn, $submission_id);
         </div>
     </div>
 </div>
+
+<?php
+    $finalVerdictModalMessage = $finalVerdictModalMessage ?? '';
+    $finalVerdictModalType = $finalVerdictModalType ?? '';
+    $finalVerdictModalTitle = $finalVerdictModalType === 'success' ? 'Verdict Submitted' : 'Verdict Error';
+    $finalVerdictModalHeaderClass = $finalVerdictModalType === 'success'
+        ? 'modal-header bg-success text-white'
+        : 'modal-header bg-danger text-white';
+?>
+<?php if ($finalVerdictModalMessage !== ''): ?>
+    <div class="modal fade" id="finalVerdictModal" tabindex="-1" aria-labelledby="finalVerdictModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="<?php echo $finalVerdictModalHeaderClass; ?>">
+                    <h5 class="modal-title" id="finalVerdictModalLabel"><?php echo htmlspecialchars($finalVerdictModalTitle); ?></h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <?php echo htmlspecialchars($finalVerdictModalMessage); ?>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
 
 <div class="annotation-dialog">
     <div class="annotation-dialog-header">
@@ -261,8 +282,19 @@ $stats = get_final_routing_annotation_statistics($conn, $submission_id);
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="pdf_viewer.js"></script>
 <script src="annotation_manager.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
+    <?php if (!empty($finalVerdictModalMessage)): ?>
+    window.addEventListener('load', () => {
+        const modalEl = document.getElementById('finalVerdictModal');
+        if (modalEl && window.bootstrap) {
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+    });
+    <?php endif; ?>
+
     const pdfViewer = new PDFViewer({
         pdfUrl: '<?php echo htmlspecialchars($submission['file_path']); ?>',
         containerId: 'pdf-canvas-container',
