@@ -1149,7 +1149,7 @@ if ($studentFullName === '') {
                     </div>
                 </div>
 
-                <div class="card mb-4">
+                <div class="card mb-4 d-none">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">Final Paper Status</h5>
                         <?php if ($finalPaperSubmission): ?>
@@ -1189,7 +1189,7 @@ if ($studentFullName === '') {
                     </div>
                 </div>
 
-                <div class="card mb-4">
+                <div class="card mb-4 d-none">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">Status Change Timeline</h5>
                         <span class="badge bg-light text-success"><?php echo number_format(count($statusTimeline)); ?> entries</span>
@@ -1253,7 +1253,7 @@ if ($studentFullName === '') {
                     </div>
                 </div>
 
-                <div class="card mb-4">
+                <div class="card mb-4 d-none">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">Upcoming Defense</h5>
                         <a href="view_defense_schedule.php" class="btn btn-outline-primary btn-sm">Full Schedule</a>
