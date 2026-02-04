@@ -2,14 +2,12 @@
 session_start();
 require_once 'db.php';
 require_once 'notifications_helper.php';
-require_once 'final_concept_helpers.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'student') {
     header("Location: login.php");
     exit;
 }
 
-ensureFinalConceptSubmissionTable($conn);
 
 function columnExists(mysqli $conn, string $table, string $column): bool
 {
@@ -318,7 +316,6 @@ function statusBadgeClass(string $status): string
 $student_id = (int)$_SESSION['user_id'];
 $studentExists = studentExists($conn, $student_id);
 $success = $error = '';
-$finalSuccess = $finalError = '';
 $formData = [
     'title' => '',
     'type' => '',
@@ -331,131 +328,13 @@ $conceptFiles = [
     'concept_file_2' => null,
     'concept_file_3' => null,
 ];
-$finalFormData = [
-    'final_title' => '',
-    'final_abstract' => '',
-    'final_keywords' => '',
-];
 $action = $_POST['action'] ?? '';
 
 $proposalColumns = ensureSubmissionProposalColumns($conn);
 $proposalFileColumns = ensureSubmissionProposalFileColumns($conn);
 $proposalFileColumns = ensureSubmissionProposalFileColumns($conn);
-$finalEligibleConcept = getEligibleConceptForFinalSubmission($conn, $student_id);
-$currentFinalSubmission = getLatestFinalConceptSubmission($conn, $student_id);
-$finalSubmissionStatus = $currentFinalSubmission['status'] ?? null;
-$finalResubmitAllowed = $finalEligibleConcept && (
-    !$currentFinalSubmission ||
-    in_array($finalSubmissionStatus, ['Returned'], true)
-);
-$finalFormEnabled = false;
-if ($finalEligibleConcept && !$currentFinalSubmission) {
-    $finalFormEnabled = true;
-    $finalFormData['final_title'] = $finalEligibleConcept['title'] ?? '';
-} elseif ($currentFinalSubmission && in_array($currentFinalSubmission['status'] ?? '', ['Returned'], true)) {
-    $finalFormEnabled = true;
-    $finalFormData['final_title'] = $currentFinalSubmission['final_title'] ?? ($finalEligibleConcept['title'] ?? '');
-    $finalFormData['final_abstract'] = $currentFinalSubmission['abstract'] ?? '';
-    $finalFormData['final_keywords'] = $currentFinalSubmission['keywords'] ?? '';
-}
-$finalStatusLabel = 'Waiting for Rankings';
-$finalStatusBadge = 'bg-secondary-subtle text-secondary';
-if ($currentFinalSubmission) {
-    $finalStatusLabel = $currentFinalSubmission['status'] ?? 'Pending';
-    $finalStatusBadge = finalConceptStatusClass($finalStatusLabel);
-} elseif ($finalEligibleConcept) {
-    $finalStatusLabel = 'Ready for Submission';
-    $finalStatusBadge = 'bg-info-subtle text-info';
-}
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['final_submit'])) {
-    if (!$studentExists) {
-        $finalError = "Your account record could not be found. Please log in again.";
-    } else {
-        $finalFormData['final_title'] = trim($_POST['final_title'] ?? '');
-        $finalFormData['final_abstract'] = trim($_POST['final_abstract'] ?? '');
-        $finalFormData['final_keywords'] = trim($_POST['final_keywords'] ?? '');
-        $targetConceptId = $finalEligibleConcept['concept_paper_id'] ?? ($currentFinalSubmission['concept_paper_id'] ?? 0);
-        $canSubmit = !$currentFinalSubmission || in_array(($currentFinalSubmission['status'] ?? 'Pending'), ['Returned'], true);
-
-        if (!$targetConceptId) {
-            $finalError = "Your concept titles are still under review. Please wait for an approved ranking before sending the final version.";
-        } elseif (!$canSubmit) {
-            // No error needed; the dashboard already shows the current status.
-        } elseif ($finalFormData['final_title'] === '' || $finalFormData['final_abstract'] === '' || $finalFormData['final_keywords'] === '') {
-            $finalError = "Final title, abstract, and keywords are all required.";
-        } else {
-            $file = $_FILES['final_document'] ?? null;
-            if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
-                $finalError = "Please upload the final concept document (PDF or DOC).";
-            } else {
-                $allowed = [
-                    'application/pdf',
-                    'application/msword',
-                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                ];
-                if (!in_array($file['type'], $allowed, true)) {
-                    $finalError = "Only PDF or Word documents are allowed for the final concept.";
-                } else {
-                    $uploadDir = "uploads/final_concepts/";
-                    if (!is_dir($uploadDir)) {
-                        mkdir($uploadDir, 0777, true);
-                    }
-                    $filename = uniqid('final_concept_', true) . "_" . basename($file['name']);
-                    $filePath = $uploadDir . $filename;
-                    if (!move_uploaded_file($file['tmp_name'], $filePath)) {
-                        $finalError = "Unable to upload the final concept file. Please try again.";
-                    } else {
-                        $stmt = $conn->prepare("
-                            INSERT INTO final_concept_submissions
-                            (student_id, concept_paper_id, final_title, abstract, keywords, file_path, status, remarks)
-                            VALUES (?, ?, ?, ?, ?, ?, 'Pending', NULL)
-                        ");
-                        if ($stmt) {
-                            $stmt->bind_param(
-                                'iissss',
-                                $student_id,
-                                $targetConceptId,
-                                $finalFormData['final_title'],
-                                $finalFormData['final_abstract'],
-                                $finalFormData['final_keywords'],
-                                $filePath
-                            );
-                            if ($stmt->execute()) {
-                                $finalSuccess = "Final concept title submitted successfully. The Program Chairperson will review it shortly.";
-                                $currentFinalSubmission = getLatestFinalConceptSubmission($conn, $student_id);
-                                $finalSubmissionStatus = $currentFinalSubmission['status'] ?? 'Pending';
-                                $finalResubmitAllowed = false;
-                                $finalFormEnabled = false;
-                                $finalFormData = ['final_title' => '', 'final_abstract' => '', 'final_keywords' => ''];
-
-                                $chairRecipients = getProgramChairsForStudent($conn, $student_id);
-                                if (!empty($chairRecipients)) {
-                                    foreach ($chairRecipients as $chairId) {
-                                        notify_user(
-                                            $conn,
-                                            $chairId,
-                                            'Final concept ready for approval',
-                                            'A student submitted the final concept title for review. Please check the Final Concept Submission panel.',
-                                            'program_chairperson.php'
-                                        );
-                                    }
-                                }
-                            } else {
-                                $finalError = "Unable to save the final concept submission right now.";
-                                @unlink($filePath);
-                            }
-                            $stmt->close();
-                        } else {
-                            $finalError = "Unable to prepare the final submission. Please try again later.";
-                            @unlink($filePath);
-                        }
-                    }
-                }
-            }
-        }
-    }
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
     $submissionId = (int)($_POST['submission_id'] ?? 0);
     if ($submissionId <= 0) {
         $error = "Invalid submission selected for removal.";
@@ -790,7 +669,6 @@ if (
     cleanupConceptProposalFiles($conceptFiles);
 }
 
-$finalSubmissionHistory = fetchFinalConceptSubmissionHistory($conn, $student_id);
 
 $submissionHistory = fetchStudentSubmissionHistory($conn, $student_id, 5);
 $statusCounts = [];
@@ -1155,186 +1033,6 @@ $latestSubmission = $submissionHistory[0] ?? null;
                   </div>
                 <?php endforeach; ?>
               <?php endif; ?>
-
-              <?php if (!empty($finalSubmissionHistory)): ?>
-                <hr class="my-4">
-                <h5 class="fw-semibold mb-3">Final Concept Submission History</h5>
-                <div class="table-responsive">
-                  <table class="table table-sm align-middle">
-                    <thead class="table-light">
-                      <tr>
-                        <th>Title</th>
-                        <th>Status</th>
-                        <th>Submitted</th>
-                        <th>Reviewed</th>
-                        <th>Remarks</th>
-                        <th>File</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <?php foreach ($finalSubmissionHistory as $finalRow): ?>
-                        <?php
-                          $historyStatus = $finalRow['status'] ?? 'Pending';
-                          $historyBadge = finalConceptStatusClass($historyStatus);
-                          $historySubmitted = formatHumanDate($finalRow['submitted_at'] ?? null);
-                          $historyReviewed = formatHumanDate($finalRow['reviewed_at'] ?? null);
-                        ?>
-                        <tr>
-                          <td><?= htmlspecialchars($finalRow['final_title'] ?? 'Untitled'); ?></td>
-                          <td><span class="badge <?= $historyBadge; ?>"><?= htmlspecialchars($historyStatus); ?></span></td>
-                          <td><?= htmlspecialchars($historySubmitted); ?></td>
-                          <td><?= htmlspecialchars($finalRow['reviewed_at'] ? $historyReviewed : '—'); ?></td>
-                          <td><?= htmlspecialchars($finalRow['remarks'] ?? '—'); ?></td>
-                          <td>
-                            <?php if (!empty($finalRow['file_path'])): ?>
-                              <a href="<?= htmlspecialchars($finalRow['file_path']); ?>" target="_blank" class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-file-earmark-arrow-down"></i>
-                              </a>
-                            <?php else: ?>
-                              —
-                            <?php endif; ?>
-                          </td>
-                        </tr>
-                      <?php endforeach; ?>
-                    </tbody>
-                  </table>
-                </div>
-              <?php endif; ?>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="row g-4 mt-1">
-        <div class="col-xl-7">
-          <div class="card submission-card h-100">
-            <div class="card-header">
-              <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
-                <div>
-                  <p class="text-uppercase small text-muted mb-1">Step 2</p>
-                  <h4 class="submission-card__title mb-0"><i class="bi bi-file-earmark-check me-2"></i>Final Concept Title Submission</h4>
-                </div>
-                <span class="badge <?= $finalStatusBadge; ?>">
-                  <i class="bi bi-flag-fill me-1"></i><?= htmlspecialchars($finalStatusLabel); ?>
-                </span>
-              </div>
-            </div>
-            <div class="card-body">
-              <?php if ($finalSuccess): ?>
-                <div class="alert alert-success alert-dismissible fade show" role="alert">
-                  <?= htmlspecialchars($finalSuccess); ?>
-                  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-              <?php elseif ($finalError): ?>
-                <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                  <?= htmlspecialchars($finalError); ?>
-                  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-              <?php endif; ?>
-
-              <?php if ($currentFinalSubmission): ?>
-                <?php
-                  $finalSubmittedAt = formatHumanDate($currentFinalSubmission['submitted_at'] ?? null);
-                  $finalRemarks = trim((string)($currentFinalSubmission['remarks'] ?? ''));
-                ?>
-                <div class="status-entry mb-4">
-                  <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                      <p class="fw-semibold mb-1">Latest Final Concept</p>
-                      <small class="text-muted">Submitted <?= htmlspecialchars($finalSubmittedAt); ?></small>
-                    </div>
-                    <span class="badge <?= finalConceptStatusClass($currentFinalSubmission['status'] ?? 'Pending'); ?>">
-                      <?= htmlspecialchars($currentFinalSubmission['status'] ?? 'Pending'); ?>
-                    </span>
-                  </div>
-                  <p class="mt-3 mb-2"><strong>Title:</strong> <?= htmlspecialchars($currentFinalSubmission['final_title'] ?? 'Untitled'); ?></p>
-                  <?php if ($finalRemarks !== ''): ?>
-                    <div class="alert alert-warning py-2 px-3 mb-3">
-                      <strong>Chair Remarks:</strong> <?= htmlspecialchars($finalRemarks); ?>
-                    </div>
-                  <?php endif; ?>
-                  <div class="d-flex flex-wrap gap-2">
-                    <?php if (!empty($currentFinalSubmission['file_path'])): ?>
-                      <a href="<?= htmlspecialchars($currentFinalSubmission['file_path']); ?>" target="_blank" class="btn btn-sm btn-outline-primary btn-icon-gap">
-                        <i class="bi bi-file-earmark-arrow-down"></i> Download Final Copy
-                      </a>
-                    <?php endif; ?>
-                    <a href="student_activity_log.php" class="btn btn-sm btn-outline-success btn-icon-gap">
-                      <i class="bi bi-lightning-charge"></i> View Activity Log
-                    </a>
-                  </div>
-                </div>
-              <?php endif; ?>
-
-              <?php if (!$finalFormEnabled): ?>
-                <div class="alert alert-info mb-0">
-                  <?php if (!$finalEligibleConcept && !$currentFinalSubmission): ?>
-                    Your advisers, committee chair, and panel are still ranking your concept proposals. You'll receive an alert here once a title is approved for final submission.
-                  <?php elseif ($currentFinalSubmission && !in_array($currentFinalSubmission['status'] ?? '', ['Returned'], true)): ?>
-                    Your final concept submission is currently <?= strtolower(htmlspecialchars($currentFinalSubmission['status'] ?? 'Pending')); ?>. Please wait for further updates from the Program Chairperson.
-                  <?php else: ?>
-                    Hang tight—your workspace is getting ready for the final upload.
-                  <?php endif; ?>
-                </div>
-              <?php else: ?>
-                <form method="POST" enctype="multipart/form-data" class="mt-2">
-                  <div class="mb-3">
-                    <label class="form-label fw-semibold">Final Concept Title <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" name="final_title" value="<?= htmlspecialchars($finalFormData['final_title']); ?>" required>
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label fw-semibold">Abstract <span class="text-danger">*</span></label>
-                    <textarea class="form-control" name="final_abstract" rows="5" required><?= htmlspecialchars($finalFormData['final_abstract']); ?></textarea>
-                  </div>
-                  <div class="mb-3">
-                    <label class="form-label fw-semibold">Keywords <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" name="final_keywords" placeholder="Separate keywords with commas" value="<?= htmlspecialchars($finalFormData['final_keywords']); ?>" required>
-                  </div>
-                  <div class="mb-4">
-                    <label class="form-label fw-semibold">Upload Final Concept Document <span class="text-danger">*</span></label>
-                    <input type="file" class="form-control" name="final_document" accept=".pdf,.doc,.docx" required>
-                    <small class="text-muted d-block mt-1">Upload the polished concept paper as PDF or Word (max 10MB).</small>
-                  </div>
-                  <div class="d-grid">
-                    <button type="submit" name="final_submit" value="1" class="btn btn-success btn-icon-gap">
-                      <i class="bi bi-send-check"></i> Submit Final Concept
-                    </button>
-                  </div>
-                </form>
-              <?php endif; ?>
-            </div>
-          </div>
-        </div>
-        <div class="col-xl-5">
-          <div class="card status-card h-100">
-            <div class="card-header">
-              <div class="d-flex justify-content-between align-items-center">
-                <div>
-                  <p class="text-uppercase small text-muted mb-1">Final concept timeline</p>
-                  <h5 class="mb-0">What's next?</h5>
-                </div>
-                <span class="badge bg-light text-success"><i class="bi bi-compass"></i></span>
-              </div>
-            </div>
-            <div class="card-body">
-              <ol class="list-group list-group-numbered list-group-flush">
-                <li class="list-group-item">
-                  <strong>Panel ranks your proposals</strong>
-                  <p class="small text-muted mb-0">Once a title hits Rank #1, the final submission gate unlocks.</p>
-                </li>
-                <li class="list-group-item">
-                  <strong>Upload the polished concept</strong>
-                  <p class="small text-muted mb-0">Include the refined abstract, updated keywords, and the signed document.</p>
-                </li>
-                <li class="list-group-item">
-                  <strong>Program Chair review</strong>
-                  <p class="small text-muted mb-0">You'll receive approval or revision notes directly in this panel.</p>
-                </li>
-              </ol>
-              <div class="alert alert-secondary mt-4 mb-0">
-                <i class="bi bi-info-circle me-2"></i>
-                Need help? Message your adviser or Program Chair before resubmitting.
-              </div>
             </div>
           </div>
         </div>

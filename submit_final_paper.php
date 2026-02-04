@@ -32,7 +32,7 @@ $memoStmt = $conn->prepare("
     FROM defense_committee_requests
     WHERE student_id = ?
     ORDER BY reviewed_at DESC, requested_at DESC
-    LIMIT 1
+    LIMIT 1 
 ");
 if ($memoStmt) {
     $memoStmt->bind_param('i', $studentId);
