@@ -316,6 +316,10 @@ function statusBadgeClass(string $status): string
 $student_id = (int)$_SESSION['user_id'];
 $studentExists = studentExists($conn, $student_id);
 $success = $error = '';
+if (!empty($_SESSION['flash_success'])) {
+    $success = (string)$_SESSION['flash_success'];
+    unset($_SESSION['flash_success']);
+}
 $formData = [
     'title' => '',
     'type' => '',
@@ -348,7 +352,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
                 $deleteStmt->bind_param('ii', $submissionId, $student_id);
                 if ($deleteStmt->execute()) {
                     deleteSubmissionFiles($submission);
-                    $success = "Submission removed successfully.";
+                    $_SESSION['flash_success'] = "Submission removed successfully.";
+                    header("Location: submit_paper.php");
+                    exit;
                 } else {
                     $error = "Unable to remove the submission right now. Please try again.";
                 }
@@ -490,8 +496,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
 
                 if ($stmt && bindStatementParams($stmt, $updateTypes, $updateValues)) {
                     if ($stmt->execute()) {
-                        $success = "Submission updated successfully.";
+                        $_SESSION['flash_success'] = "Submission updated successfully.";
                         cleanupConceptProposalFiles($filesToDelete);
+                        header("Location: submit_paper.php");
+                        exit;
                     } else {
                         $error = "Unable to update the submission right now. Please try again.";
                         cleanupConceptProposalFiles($newUploads);
@@ -619,9 +627,9 @@ $conceptProposals = [
         $insertSql = "INSERT INTO submissions (" . implode(', ', $insertColumns) . ") VALUES ({$placeholders})";
         $stmt = $conn->prepare($insertSql);
 
-        if ($stmt && bindStatementParams($stmt, $insertTypes, $insertValues)) {
-            if ($stmt->execute()) {
-                $success = "Your concept paper and proposals were submitted successfully. Track the live status on the right.";
+            if ($stmt && bindStatementParams($stmt, $insertTypes, $insertValues)) {
+                if ($stmt->execute()) {
+                $_SESSION['flash_success'] = "Your concept paper and proposals were submitted successfully. Track the live status on the right.";
                 $formData = array_map(fn() => '', $formData);
 
                 $nameStmt = $conn->prepare("SELECT firstname, lastname FROM users WHERE id = ?");
@@ -647,6 +655,8 @@ $conceptProposals = [
                     $message,
                     'submissions.php?view=all'
                 );
+                header("Location: submit_paper.php");
+                exit;
             } else {
                 $error = "Database error: " . $conn->error;
             }
@@ -917,6 +927,9 @@ $latestSubmission = $submissionHistory[0] ?? null;
                     $statusLabel = trim($submission['status'] ?? 'Submitted');
                     $badgeClass = statusBadgeClass($statusLabel);
                     $submittedAt = formatHumanDate($submission['created_at'] ?? null);
+                    $submissionTitle = $submission['title'] ?? '';
+                    $submissionType = $submission['type'] ?? '';
+                    $displayTitle = $submissionTitle ?: ($submissionType ? "Type: {$submissionType}" : 'Submission');
                     $proposals = array_filter([
                         $submission['concept_proposal_1'] ?? '',
                         $submission['concept_proposal_2'] ?? '',
@@ -926,14 +939,11 @@ $latestSubmission = $submissionHistory[0] ?? null;
                   <div class="status-entry">
                     <div class="d-flex justify-content-between align-items-start">
                       <div>
-                        <h6 class="mb-1"><?= htmlspecialchars($submission['title'] ?: 'Untitled Submission'); ?></h6>
+                        <h6 class="mb-1"><?= htmlspecialchars($displayTitle); ?></h6>
                         <small class="text-muted">Submitted <?= htmlspecialchars($submittedAt); ?></small>
                       </div>
                       <span class="badge <?= $badgeClass; ?>"><?= htmlspecialchars($statusLabel); ?></span>
                     </div>
-                    <?php if (!empty($submission['type'])): ?>
-                      <div class="small text-muted mt-2">Type: <strong><?= htmlspecialchars($submission['type']); ?></strong></div>
-                    <?php endif; ?>
                     <?php if (!empty($proposals)): ?>
                       <div class="mt-3">
                         <?php foreach ($proposals as $proposalIndex => $proposalText): ?>
@@ -1019,7 +1029,7 @@ $latestSubmission = $submissionHistory[0] ?? null;
                           <input type="hidden" name="action" value="delete_submission">
                           <input type="hidden" name="submission_id" value="<?= (int)$submission['id']; ?>">
                           <p class="mb-2">Are you sure you want to remove this concept paper submission?</p>
-                          <p class="fw-semibold mb-0"><?= htmlspecialchars($submission['title'] ?: 'Untitled Submission'); ?></p>
+                          <p class="fw-semibold mb-0"><?= htmlspecialchars($displayTitle); ?></p>
                           <small class="text-muted d-block mt-2">All uploaded PDFs tied to this submission will be deleted.</small>
                         </div>
                         <div class="modal-footer">
