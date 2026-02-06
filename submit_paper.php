@@ -526,15 +526,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
     $type = $formData['type'];
     $abstract = '';
     $keywords = '';
-$conceptProposals = [
+    $conceptProposals = [
         'concept_proposal_1' => $formData['concept_proposal_1'],
         'concept_proposal_2' => $formData['concept_proposal_2'],
         'concept_proposal_3' => $formData['concept_proposal_3'],
     ];
 
-    $providedConcepts = array_filter($conceptProposals, fn($value) => $value !== '');
-    if (empty($providedConcepts)) {
-        $error = "Please provide at least one concept proposal title.";
+    foreach ([1, 2, 3] as $index) {
+        $proposalKey = "concept_proposal_{$index}";
+        if (trim($conceptProposals[$proposalKey] ?? '') === '') {
+            $error = "Please provide a title for Concept Proposal {$index}.";
+            break;
+        }
     }
     if (!$error && hasDuplicateConceptValues($conceptProposals)) {
         $error = "Concept proposal titles must be unique.";
@@ -555,37 +558,36 @@ $conceptProposals = [
         mkdir($conceptUploadDir, 0777, true);
     }
 
-    foreach ($conceptFiles as $fileKey => $_) {
-        $index = (int)substr($fileKey, -1);
-        $proposalKey = "concept_proposal_{$index}";
-        $fileInfo = $_FILES[$fileKey] ?? null;
-        $proposalValue = trim($conceptProposals[$proposalKey] ?? '');
+    if (!$error) {
+        foreach ($conceptFiles as $fileKey => $_) {
+            $index = (int)substr($fileKey, -1);
+            $proposalKey = "concept_proposal_{$index}";
+            $fileInfo = $_FILES[$fileKey] ?? null;
+            $proposalValue = trim($conceptProposals[$proposalKey] ?? '');
 
-        if ($proposalValue === '') {
-            if ($fileInfo && $fileInfo['error'] === UPLOAD_ERR_OK) {
-                $error = "Please enter a title for Concept Proposal {$index} before uploading a document.";
+            if ($proposalValue === '') {
+                $error = "Please provide a title for Concept Proposal {$index}.";
                 break;
             }
-            continue;
-        }
 
-        if (!$fileInfo || $fileInfo['error'] !== UPLOAD_ERR_OK) {
-            $error = "Please upload a document for Concept Proposal {$index}.";
-            break;
-        }
+            if (!$fileInfo || $fileInfo['error'] !== UPLOAD_ERR_OK) {
+                $error = "Please upload a document for Concept Proposal {$index}.";
+                break;
+            }
 
-        if (!isPdfUpload($fileInfo)) {
-            $error = "Concept Proposal {$index} must be uploaded as a PDF file.";
-            break;
-        }
+            if (!isPdfUpload($fileInfo)) {
+                $error = "Concept Proposal {$index} must be uploaded as a PDF file.";
+                break;
+            }
 
-        $conceptFilename = uniqid("concept{$index}_", true) . "_" . basename($fileInfo['name']);
-        $conceptPath = $conceptUploadDir . $conceptFilename;
-        if (!move_uploaded_file($fileInfo['tmp_name'], $conceptPath)) {
-            $error = "Unable to upload the file for Concept Proposal {$index}. Please try again.";
-            break;
+            $conceptFilename = uniqid("concept{$index}_", true) . "_" . basename($fileInfo['name']);
+            $conceptPath = $conceptUploadDir . $conceptFilename;
+            if (!move_uploaded_file($fileInfo['tmp_name'], $conceptPath)) {
+                $error = "Unable to upload the file for Concept Proposal {$index}. Please try again.";
+                break;
+            }
+            $conceptFiles[$fileKey] = $conceptPath;
         }
-        $conceptFiles[$fileKey] = $conceptPath;
     }
 
     $primaryFilePath = $conceptFiles['concept_file_1'] ?? null;
@@ -849,7 +851,6 @@ $latestSubmission = $submissionHistory[0] ?? null;
                       <p class="fw-semibold mb-0">Concept Proposal Titles <span class="text-danger">*</span></p>
                       <small class="text-muted">List up to three concept proposals so reviewers can rank them.</small>
                     </div>
-                    <span class="badge bg-light text-success">3 slots available</span>
                   </div>
                   <div class="concept-proposal-stack">
                     <div class="proposal-column">
@@ -861,17 +862,17 @@ $latestSubmission = $submissionHistory[0] ?? null;
                     </div>
                     <div class="proposal-column">
                       <label class="form-label small text-muted">Concept Proposal 2</label>
-                      <input type="text" class="form-control" name="concept_proposal_2" value="<?= htmlspecialchars($formData['concept_proposal_2']); ?>">
-                      <label class="form-label small text-muted mt-3 mb-1">Upload Manuscript</label>
-                      <input type="file" class="form-control" name="concept_file_2" accept=".pdf">
-                      <small class="text-muted d-block mt-2">Add a PDF if this proposal is used.</small>
+                      <input type="text" class="form-control" name="concept_proposal_2" value="<?= htmlspecialchars($formData['concept_proposal_2']); ?>" required>
+                      <label class="form-label small text-muted mt-3 mb-1">Upload Manuscript <span class="text-danger">*</span></label>
+                      <input type="file" class="form-control" name="concept_file_2" accept=".pdf" required>
+                      <small class="text-muted d-block mt-2">Upload the manuscript for Proposal 2 (PDF only).</small>
                     </div>
                     <div class="proposal-column">
                       <label class="form-label small text-muted">Concept Proposal 3</label>
-                      <input type="text" class="form-control" name="concept_proposal_3" value="<?= htmlspecialchars($formData['concept_proposal_3']); ?>">
-                      <label class="form-label small text-muted mt-3 mb-1">Upload Manuscript</label>
-                      <input type="file" class="form-control" name="concept_file_3" accept=".pdf">
-                      <small class="text-muted d-block mt-2">Add a PDF if this proposal is used.</small>
+                      <input type="text" class="form-control" name="concept_proposal_3" value="<?= htmlspecialchars($formData['concept_proposal_3']); ?>" required>
+                      <label class="form-label small text-muted mt-3 mb-1">Upload Manuscript <span class="text-danger">*</span></label>
+                      <input type="file" class="form-control" name="concept_file_3" accept=".pdf" required>
+                      <small class="text-muted d-block mt-2">Upload the manuscript for Proposal 3 (PDF only).</small>
                     </div>
                   </div>
                 </div>

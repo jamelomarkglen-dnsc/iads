@@ -606,6 +606,16 @@ $isDraftExisting = isset($review['is_draft']) ? (int)$review['is_draft'] === 1 :
         .file-item .file-label {
             font-weight: 600;
         }
+        .file-item .file-label {
+            cursor: zoom-in;
+            text-decoration: underline;
+            text-decoration-color: transparent;
+            text-underline-offset: 3px;
+        }
+        .file-item:hover .file-label,
+        .file-item.active .file-label {
+            text-decoration-color: currentColor;
+        }
         .file-item small {
             display: block;
             color: inherit;
@@ -657,6 +667,13 @@ $isDraftExisting = isset($review['is_draft']) ? (int)$review['is_draft'] === 1 :
         }
         .preview-link:hover {
             text-decoration: underline;
+        }
+        .modal-preview-frame {
+            width: 100%;
+            height: 75vh;
+            border: none;
+            border-radius: 8px;
+            background: #fff;
         }
     </style>
 </head>
@@ -720,7 +737,7 @@ $isDraftExisting = isset($review['is_draft']) ? (int)$review['is_draft'] === 1 :
                                 <p class="meta-value"><?= htmlspecialchars($submittedTime); ?></p>
                             </div>
                             <div class="meta-item">
-                                <div class="meta-label">Paper Type</div>
+                                <div class="meta-label">Research Type</div>
                                 <p class="meta-value"><?= htmlspecialchars(ucwords($type)); ?></p>
                             </div>
                         </div>
@@ -759,15 +776,50 @@ $isDraftExisting = isset($review['is_draft']) ? (int)$review['is_draft'] === 1 :
             </div>
         </div>
     </div>
+    <div class="modal fade" id="pdfPreviewModal" tabindex="-1" aria-labelledby="pdfPreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-fullscreen-lg-down modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="pdfPreviewModalLabel">Large Preview</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="#" class="btn btn-sm btn-outline-success" id="pdfPreviewModalLink" target="_blank" rel="noopener">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>Open in new tab
+                        </a>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <iframe id="pdfPreviewModalFrame" class="modal-preview-frame" title="Large PDF preview"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         (function () {
             const fileItems = document.querySelectorAll('[data-preview-file]');
             const previewFrame = document.getElementById('pdfPreviewFrame');
             const previewLink = document.getElementById('previewExternalLink');
+            const modalElement = document.getElementById('pdfPreviewModal');
+            const modalFrame = document.getElementById('pdfPreviewModalFrame');
+            const modalLink = document.getElementById('pdfPreviewModalLink');
+            const previewModal = modalElement ? new bootstrap.Modal(modalElement) : null;
             if (!fileItems.length || !previewFrame) {
                 return;
             }
+
+            const openLargePreview = (file) => {
+                if (!file || !modalFrame) {
+                    return;
+                }
+                modalFrame.src = file;
+                if (modalLink) {
+                    modalLink.href = file;
+                }
+                if (previewModal) {
+                    previewModal.show();
+                }
+            };
 
             const setActiveFile = (target) => {
                 const file = target.getAttribute('data-preview-file');
@@ -783,7 +835,14 @@ $isDraftExisting = isset($review['is_draft']) ? (int)$review['is_draft'] === 1 :
             };
 
             fileItems.forEach((item) => {
-                item.addEventListener('click', () => setActiveFile(item));
+                item.addEventListener('click', (event) => {
+                    if (event.target.closest('.file-label')) {
+                        event.preventDefault();
+                        openLargePreview(item.getAttribute('data-preview-file'));
+                        return;
+                    }
+                    setActiveFile(item);
+                });
                 item.addEventListener('keypress', (event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault();
@@ -791,6 +850,12 @@ $isDraftExisting = isset($review['is_draft']) ? (int)$review['is_draft'] === 1 :
                     }
                 });
             });
+
+            if (modalElement && modalFrame) {
+                modalElement.addEventListener('hidden.bs.modal', () => {
+                    modalFrame.src = '';
+                });
+            }
         })();
     </script>
 </body>
