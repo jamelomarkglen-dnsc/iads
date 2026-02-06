@@ -759,8 +759,8 @@ $isDraftExisting = isset($review['is_draft']) ? (int)$review['is_draft'] === 1 :
                                         </div>
                                     <?php endforeach; ?>
                                     <div class="file-list-link preview-toolbar w-100">
-                                        <a href="<?= htmlspecialchars($activePreview, ENT_QUOTES); ?>" class="preview-link" id="previewExternalLink" target="_blank" rel="noopener">
-                                            <i class="bi bi-box-arrow-up-right me-1"></i>Open file in new tab
+                                        <a href="<?= htmlspecialchars($activePreview, ENT_QUOTES); ?>" class="preview-link" id="previewExternalLink">
+                                            <i class="bi bi-box-arrow-up-right me-1"></i>Open file
                                         </a>
                                     </div>
                                 </div>
@@ -782,8 +782,8 @@ $isDraftExisting = isset($review['is_draft']) ? (int)$review['is_draft'] === 1 :
                 <div class="modal-header">
                     <h5 class="modal-title" id="pdfPreviewModalLabel">Large Preview</h5>
                     <div class="d-flex align-items-center gap-2">
-                        <a href="#" class="btn btn-sm btn-outline-success" id="pdfPreviewModalLink" target="_blank" rel="noopener">
-                            <i class="bi bi-box-arrow-up-right me-1"></i>Open in new tab
+                        <a href="#" class="btn btn-sm btn-outline-success" id="pdfPreviewModalLink">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>Open file
                         </a>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
