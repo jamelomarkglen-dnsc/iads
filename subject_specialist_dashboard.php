@@ -1148,12 +1148,6 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                                     <option value="revise" <?= ($review['recommendation'] ?? '') === 'revise' ? 'selected' : ''; ?>>Needs Revision</option>
                                                                     <option value="reject" <?= ($review['recommendation'] ?? '') === 'reject' ? 'selected' : ''; ?>>Not Recommended</option>
                                                                 </select>
-                                                                <div class="form-check mt-2">
-                                                                    <input class="form-check-input" type="checkbox" name="is_preferred" id="preferred<?= (int)$item['assignment_id']; ?>" <?= !empty($review['is_preferred']) ? 'checked' : ''; ?>>
-                                                                    <label class="form-check-label small" for="preferred<?= (int)$item['assignment_id']; ?>">
-                                                                        Mark as preferred concept
-                                                                    </label>
-                                                                </div>
                                                             </div>
                                                         </div>
 
