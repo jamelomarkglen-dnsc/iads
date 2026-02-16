@@ -451,14 +451,14 @@ $rankingSql = "
         cp.created_at,
         CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, '')) AS student_name,
         u.email AS student_email,
-        SUM(CASE WHEN cr.rank_order = 1 THEN 1 ELSE 0 END) AS rank_one_votes,
+        SUM(CASE WHEN cr.rank_order = 1 OR (cr.rank_order IS NULL AND cr.is_preferred = 1) THEN 1 ELSE 0 END) AS rank_one_votes,
         SUM(CASE WHEN cr.rank_order = 2 THEN 1 ELSE 0 END) AS rank_two_votes,
         SUM(CASE WHEN cr.rank_order = 3 THEN 1 ELSE 0 END) AS rank_three_votes
     FROM concept_reviews cr
     JOIN concept_reviewer_assignments cra ON cra.id = cr.assignment_id
     JOIN concept_papers cp ON cp.id = cr.concept_paper_id
     LEFT JOIN users u ON u.id = cp.student_id
-    WHERE cr.rank_order IS NOT NULL
+    WHERE (cr.rank_order IS NOT NULL OR cr.is_preferred = 1)
 ";
 if ($conceptScopeWhere !== '') {
     $rankingSql .= "      AND ({$conceptScopeWhere} OR cra.assigned_by = {$programChairId})\n";
@@ -523,7 +523,7 @@ $progressSql = "
     SELECT
         cra.student_id,
         COUNT(DISTINCT cra.id) AS total_assignments,
-        COUNT(DISTINCT CASE WHEN cr.rank_order IN (1,2,3) THEN cra.id END) AS ranked_assignments
+        COUNT(DISTINCT CASE WHEN cr.rank_order IN (1,2,3) OR (cr.rank_order IS NULL AND cr.is_preferred = 1) THEN cra.id END) AS ranked_assignments
     FROM concept_reviewer_assignments cra
     LEFT JOIN concept_reviews cr ON cr.assignment_id = cra.id
     JOIN users u ON u.id = cra.student_id
@@ -558,6 +558,7 @@ $reviewerSql = "
         cp.title AS concept_title,
         cr.id AS review_id,
         cr.rank_order,
+        cr.is_preferred,
         cr.adviser_interest,
         CONCAT(COALESCE(r.firstname, ''), ' ', COALESCE(r.lastname, '')) AS reviewer_name
     FROM concept_reviewer_assignments cra
@@ -593,6 +594,9 @@ if ($reviewerResult) {
         }
         $entry =& $rankingBoardFull[$studentId]['reviewers'][$reviewerKey];
         $rankOrder = isset($row['rank_order']) ? (int)$row['rank_order'] : null;
+        if (($rankOrder === null || $rankOrder === 0) && (int)($row['is_preferred'] ?? 0) === 1) {
+            $rankOrder = 1;
+        }
         if ($rankOrder !== null && $rankOrder >= 1 && $rankOrder <= 3) {
             $entry['ranks'][$rankOrder] = [
                 'concept_id' => (int)($row['concept_id'] ?? 0),

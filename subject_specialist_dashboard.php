@@ -232,6 +232,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_rank_update'])) 
         $isPreferred = 1;
     } elseif ($rankOrder !== null && $rankOrder > 1) {
         $isPreferred = 0;
+    } elseif ($rankOrder === null && $isPreferred === 1) {
+        // Treat a preferred selection as the top rank so the Program Chair can see it.
+        $rankOrder = 1;
     }
     $commentSuggestions = trim($_POST['comment_suggestions'] ?? '');
     $notesInput = trim($_POST['notes'] ?? '');
@@ -1061,131 +1064,6 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                     </div>
                                     <span class="badge bg-light text-success"><?= count($student['items']); ?> concept titles</span>
                                 </div>
-                                <?php if (in_array($role, ['adviser', 'panel', 'committee_chair', 'committee_chairperson', 'faculty'], true)): ?>
-                                    <?php
-                                        $rankSelections = [];
-                                        foreach ($student['items'] as $item) {
-                                            $rankValue = (int)($item['review']['rank_order'] ?? 0);
-                                            if ($rankValue >= 1 && $rankValue <= 3) {
-                                                $rankSelections[(int)$item['assignment_id']] = $rankValue;
-                                            }
-                                        }
-                                        $rankMetaClass = $isAdviserView ? 'text-muted' : 'text-white-50';
-                                    ?>
-                                    <div class="rank-card mt-3 mb-4">
-                                        <form method="POST" data-rank-form>
-                                            <input type="hidden" name="bulk_rank_update" value="1">
-                                            <input type="hidden" name="student_id" value="<?= (int)$student['student_id']; ?>">
-                                            <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
-                                                <div>
-                                                    <p class="text-uppercase small mb-1 fw-semibold">Rank the student&#39;s titles</p>
-                                                    <small class="<?= $rankMetaClass; ?>">
-                                                        Use the numbered buttons beside each title. Each rank (1-3) can only be used once. Clear a selection if you need to reuse that rank.
-                                                    </small>
-                                                </div>
-                                                <button type="submit" class="btn btn-warning text-dark px-4 mt-2 mt-lg-0">
-                                                    <i class="bi bi-save me-1"></i> Save Ranking
-                                                </button>
-                                            </div>
-                                            <div class="table-responsive">
-                                                <table class="table table-borderless align-middle rank-table mb-0" data-rank-table>
-                                                    <thead>
-                                                        <tr>
-                                                            <th scope="col">Concept Title</th>
-                                                            <th scope="col" class="text-center">Rank 1</th>
-                                                            <th scope="col" class="text-center">Rank 2</th>
-                                                            <th scope="col" class="text-center">Rank 3</th>
-                                                            <th scope="col" class="text-center">Clear</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        <?php
-                                                            $maxRankSlots = 3;
-                                                            $rankableAssignments = array_values($student['items']);
-                                                            for ($slot = 0; $slot < $maxRankSlots; $slot++):
-                                                                $assignmentData = $rankableAssignments[$slot] ?? null;
-                                                                $assignmentId = $assignmentData ? (int)($assignmentData['assignment_id'] ?? 0) : 0;
-                                                                $currentRank = $assignmentId ? ($rankSelections[$assignmentId] ?? 0) : 0;
-                                                                $titleText = $assignmentData ? ($assignmentData['title'] ?? 'Untitled Concept') : '';
-                                                                $statusText = $assignmentData ? ucwords(str_replace('_', ' ', $assignmentData['status'] ?? 'pending')) : 'Awaiting assignment';
-                                                                $dueDisplay = ($assignmentData && !empty($assignmentData['due_at'])) ? formatReadableDate($assignmentData['due_at']) : null;
-                                                                $tablePreviewUrl = ($assignmentData && !empty($assignmentData['manuscript_available']))
-                                                                    ? ('reviewer_file.php?assignment_id=' . $assignmentId)
-                                                                    : '';
-                                                            ?>
-                                                            <tr <?= $assignmentId ? 'data-assignment-row="' . $assignmentId . '"' : ''; ?>>
-                                                                <td>
-                                                                    <div class="small text-uppercase <?= $rankMetaClass; ?>">Concept Title <?= $slot + 1; ?></div>
-                                                                    <?php if ($assignmentId): ?>
-                                                                        <div class="d-flex align-items-center gap-2 flex-wrap">
-                                                                            <div class="fw-semibold"><?= htmlspecialchars($titleText); ?></div>
-                                                                            <?php if ($tablePreviewUrl !== ''): ?>
-                                                                                <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#previewModal<?= $assignmentId; ?>">
-                                                                                    <i class="bi bi-eye"></i> Preview
-                                                                                </button>
-                                                                            <?php else: ?>
-                                                                                <span class="badge bg-light text-muted">No manuscript</span>
-                                                                            <?php endif; ?>
-                                                                        </div>
-                                                                        <div class="small <?= $rankMetaClass; ?>">
-                                                                            <?= htmlspecialchars($statusText); ?>
-                                                                            <?php if ($dueDisplay): ?>
-                                                                                &middot; Due <?= htmlspecialchars($dueDisplay); ?>
-                                                                            <?php endif; ?>
-                                                                            <?php if ($assignmentData && !empty($assignmentData['assigned_by_name'])): ?>
-                                                                                &middot; Assigned by <?= htmlspecialchars($assignmentData['assigned_by_name']); ?>
-                                                                            <?php endif; ?>
-                                                                        </div>
-                                                                    <?php else: ?>
-                                                                        <div class="text-muted small">Awaiting assignment from the Program Chairperson.</div>
-                                                                    <?php endif; ?>
-                                                                </td>
-                                                                <?php for ($rank = 1; $rank <= 3; $rank++): ?>
-                                                                    <td class="text-center">
-                                                                        <?php if ($assignmentId): ?>
-                                                                            <div class="form-check form-check-inline align-middle">
-                                                                                <input
-                                                                                    class="form-check-input rank-radio"
-                                                                                    type="radio"
-                                                                                    name="rank_assignments[<?= $assignmentId; ?>]"
-                                                                                    id="rank<?= $assignmentId; ?>_<?= $rank; ?>"
-                                                                                    value="<?= $rank; ?>"
-                                                                                    data-rank-value="<?= $rank; ?>"
-                                                                                    data-assignment="<?= $assignmentId; ?>"
-                                                                                    <?= $currentRank === $rank ? 'checked' : ''; ?>
-                                                                                >
-                                                                                <label class="form-check-label" for="rank<?= $assignmentId; ?>_<?= $rank; ?>"><?= $rank; ?></label>
-                                                                            </div>
-                                                                        <?php else: ?>
-                                                                            <div class="form-check form-check-inline align-middle <?= $rankMetaClass; ?>">
-                                                                                <input class="form-check-input rank-radio" type="radio" disabled>
-                                                                                <label class="form-check-label"><?= $rank; ?></label>
-                                                                            </div>
-                                                                        <?php endif; ?>
-                                                                    </td>
-                                                                <?php endfor; ?>
-                                                                <td class="text-center">
-                                                                    <?php if ($assignmentId): ?>
-                                                                        <div class="d-flex flex-column align-items-center gap-2">
-                                                                            <span class="rank-indicator<?= $currentRank ? ' active' : ''; ?>" data-rank-indicator>
-                                                                                <?= $currentRank ? 'Rank ' . $currentRank . ' selected' : 'No rank yet'; ?>
-                                                                            </span>
-                                                                        <button type="button" class="btn btn-sm btn-outline-light clear-rank-btn" data-clear-assignment="<?= $assignmentId; ?>" <?= $currentRank ? '' : 'disabled'; ?>>
-                                                                                <i class="bi bi-x-circle me-1"></i> Clear
-                                                                            </button>
-                                                                        </div>
-                                                                    <?php else: ?>
-                                                                        <span class="small <?= $rankMetaClass; ?>">Awaiting title</span>
-                                                                    <?php endif; ?>
-                                                                </td>
-                                                            </tr>
-                                                        <?php endfor; ?>
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </form>
-                                    </div>
-                                <?php endif; ?>
                                 <div class="mt-3">
                                     <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
                                         <?php foreach ($student['items'] as $item): ?>
