@@ -1130,17 +1130,6 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                             </div>
                                                         </div>
 
-                                                        <div class="mb-3">
-                                                            <label class="form-label fw-semibold small text-muted">Rank this concept</label>
-                                                            <select class="form-select form-select-sm" name="rank_order">
-                                                                <option value="">No rank</option>
-                                                                <option value="1" <?= $rankOrderValue === 1 ? 'selected' : ''; ?>>Rank 1 &middot; Top choice</option>
-                                                                <option value="2" <?= $rankOrderValue === 2 ? 'selected' : ''; ?>>Rank 2 &middot; Backup option</option>
-                                                                <option value="3" <?= $rankOrderValue === 3 ? 'selected' : ''; ?>>Rank 3 &middot; Third option</option>
-                                                            </select>
-                                                            <small class="text-muted d-block mt-1">Assign unique ranks 1-3 across this student's titles.</small>
-                                                        </div>
-
                                                         <div class="row g-2 mb-3">
                                                             <div class="col-sm-6">
                                                                 <label class="form-label fw-semibold small text-muted">Rating (1-5)</label>
