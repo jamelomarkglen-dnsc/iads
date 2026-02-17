@@ -1098,7 +1098,7 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                             <div>
                                                                 <p class="text-uppercase small text-muted mb-1">Concept title</p>
                                                                 <div class="concept-title-row">
-                                                                    <h5 class="mb-1 concept-title" title="<?= htmlspecialchars($item['title'] ?? 'Untitled Concept'); ?>">
+                                                                    <h5 class="mb-1 concept-title" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="<?= htmlspecialchars($item['title'] ?? 'Untitled Concept'); ?>">
                                                                         <?= htmlspecialchars($item['title'] ?? 'Untitled Concept'); ?>
                                                                     </h5>
                                                                 </div>
@@ -1282,6 +1282,13 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <?php if (in_array($role, ['adviser', 'panel', 'committee_chair', 'committee_chairperson', 'faculty'], true)): ?>
 <script>
+    (function() {
+        const tooltipTriggers = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggers.forEach((el) => {
+            new bootstrap.Tooltip(el);
+        });
+    })();
+
     (function() {
         const rankTables = document.querySelectorAll('[data-rank-table]');
         if (!rankTables.length) {
