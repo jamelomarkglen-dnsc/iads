@@ -510,6 +510,16 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
         .assignment-card .badge { font-size: 0.75rem; }
         .concept-mini { border: 1px solid rgba(22,86,44,.08); border-radius: 16px; padding: 1rem; background: #fff; box-shadow: 0 10px 28px rgba(22,86,44,.08); }
         .concept-mini .alert { border: 1px solid rgba(22,86,44,.18); background: #f6fff8; }
+        .concept-title {
+            display: block;
+            width: 100%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .concept-header { min-width: 0; }
+        .concept-title-row { width: 100%; }
+        .concept-actions { display: flex; align-items: center; gap: 0.5rem; }
         .preview-frame { width: 100%; height: 70vh; border: 0; }
         @media (max-width: 768px) { .preview-frame { height: 60vh; } }
         .rank-buttons .btn { font-size: 0.85rem; }
@@ -1084,11 +1094,15 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                     <input type="hidden" name="assignment_id" value="<?= (int)$item['assignment_id']; ?>">
                                                     <input type="hidden" name="concept_id" value="<?= (int)$item['concept_paper_id']; ?>">
                                                     <div class="concept-mini h-100 d-flex flex-column">
-                                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                                        <div class="mb-2 concept-header">
                                                             <div>
                                                                 <p class="text-uppercase small text-muted mb-1">Concept title</p>
-                                                                <div class="d-flex align-items-center gap-2 flex-wrap">
-                                                                    <h5 class="mb-1"><?= htmlspecialchars($item['title'] ?? 'Untitled Concept'); ?></h5>
+                                                                <div class="concept-title-row">
+                                                                    <h5 class="mb-1 concept-title" title="<?= htmlspecialchars($item['title'] ?? 'Untitled Concept'); ?>">
+                                                                        <?= htmlspecialchars($item['title'] ?? 'Untitled Concept'); ?>
+                                                                    </h5>
+                                                                </div>
+                                                                <div class="concept-actions mt-1">
                                                                     <?php if ($previewUrl !== ''): ?>
                                                                         <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#previewModal<?= (int)$item['assignment_id']; ?>">
                                                                             <i class="bi bi-eye"></i> Preview
