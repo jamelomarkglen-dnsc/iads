@@ -520,6 +520,19 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
         .concept-header { min-width: 0; }
         .concept-title-row { width: 100%; }
         .concept-actions { display: flex; align-items: center; gap: 0.5rem; }
+        .title-tooltip .tooltip-inner {
+            background: #ffffff;
+            color: #1f3b2b;
+            border: 1px solid rgba(31, 59, 43, 0.12);
+            box-shadow: 0 10px 24px rgba(31, 59, 43, 0.18);
+            font-weight: 600;
+            padding: 0.45rem 0.7rem;
+            border-radius: 0.6rem;
+            max-width: 320px;
+        }
+        .title-tooltip.bs-tooltip-top .tooltip-arrow::before {
+            border-top-color: #ffffff;
+        }
         .preview-frame { width: 100%; height: 70vh; border: 0; }
         @media (max-width: 768px) { .preview-frame { height: 60vh; } }
         .rank-buttons .btn { font-size: 0.85rem; }
@@ -1098,7 +1111,7 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                             <div>
                                                                 <p class="text-uppercase small text-muted mb-1">Concept title</p>
                                                                 <div class="concept-title-row">
-                                                                    <h5 class="mb-1 concept-title" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-title="<?= htmlspecialchars($item['title'] ?? 'Untitled Concept'); ?>">
+                                                                    <h5 class="mb-1 concept-title" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="title-tooltip" data-bs-title="<?= htmlspecialchars($item['title'] ?? 'Untitled Concept'); ?>">
                                                                         <?= htmlspecialchars($item['title'] ?? 'Untitled Concept'); ?>
                                                                     </h5>
                                                                 </div>
