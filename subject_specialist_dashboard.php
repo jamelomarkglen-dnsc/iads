@@ -1132,9 +1132,6 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                                         &middot; Due <?= htmlspecialchars(formatReadableDate($item['due_at'])); ?>
                                                                     <?php endif; ?>
                                                                 </small>
-                                                                <?php if (!empty($item['assigned_by_name'])): ?>
-                                                                    <small class="text-muted d-block">Assigned by <?= htmlspecialchars($item['assigned_by_name']); ?></small>
-                                                                <?php endif; ?>
                                                                 <?php if (!empty($item['instructions'])): ?>
                                                                     <div class="alert alert-success-subtle text-success py-2 px-3 mb-2 small">
                                                                         <strong>Chair Instructions:</strong> <?= nl2br(htmlspecialchars($item['instructions'])); ?>
