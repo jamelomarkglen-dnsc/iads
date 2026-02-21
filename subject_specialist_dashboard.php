@@ -635,6 +635,18 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
             color: #ffc107;
             border-color: rgba(255,193,7,0.4);
         }
+        .rating-list {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 0.45rem;
+        }
+        .rating-list .rating-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin: 0;
+        }
+        .rating-list .form-check-label { margin: 0; }
         .review-form select, .review-form textarea { font-size: 0.95rem; }
         .review-form textarea { resize: vertical; }
         .empty-state { text-align: center; padding: 2rem; color: #6c757d; }
@@ -1173,10 +1185,10 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                         <div class="row g-2 mb-3">
                                                             <div class="col-sm-6">
                                                                 <label class="form-label fw-semibold small text-muted">Rating (1-5)</label>
-                                                                <div class="d-flex flex-wrap gap-2">
+                                                                <div class="rating-list">
                                                                     <?php foreach ([1 => 'Poor', 2 => 'Fair', 3 => 'Good', 4 => 'Very Good', 5 => 'Excellent'] as $ratingValue => $ratingLabel): ?>
                                                                         <?php $ratingId = 'score' . (int)$item['assignment_id'] . '_' . (int)$ratingValue; ?>
-                                                                        <div class="form-check form-check-inline me-0">
+                                                                        <div class="form-check rating-item">
                                                                             <input class="form-check-input" type="radio" name="score" id="<?= $ratingId; ?>" value="<?= $ratingValue; ?>" <?= (int)($review['score'] ?? 0) === $ratingValue ? 'checked' : ''; ?>>
                                                                             <label class="form-check-label small" for="<?= $ratingId; ?>"><?= $ratingValue; ?> - <?= $ratingLabel; ?></label>
                                                                         </div>
