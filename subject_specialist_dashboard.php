@@ -268,6 +268,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_rank_update'])) 
     } else {
         $assignmentReviewRole = resolveAssignmentRole($role, $assignmentRow['reviewer_role'] ?? null);
         $studentIdForRank = (int)($assignmentRow['student_id'] ?? 0);
+        if ($isPreferred === 1 && $studentIdForRank > 0) {
+            $clearStmt = $conn->prepare("
+                UPDATE concept_reviews cr
+                JOIN concept_reviewer_assignments cra ON cra.id = cr.assignment_id
+                SET cr.is_preferred = 0,
+                    cr.rank_order = CASE WHEN cr.rank_order = 1 THEN NULL ELSE cr.rank_order END,
+                    cr.updated_at = CURRENT_TIMESTAMP
+                WHERE cr.reviewer_id = ? AND cra.student_id = ? AND cr.assignment_id <> ?
+                  AND (cr.is_preferred = 1 OR cr.rank_order = 1)
+            ");
+            if ($clearStmt) {
+                $clearStmt->bind_param('iii', $reviewerId, $studentIdForRank, $assignmentId);
+                $clearStmt->execute();
+                $clearStmt->close();
+            }
+        }
         $duplicateRank = false;
         if ($rankOrder !== null && $studentIdForRank > 0) {
             $dupeStmt = $conn->prepare("
@@ -1157,12 +1173,15 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                         <div class="row g-2 mb-3">
                                                             <div class="col-sm-6">
                                                                 <label class="form-label fw-semibold small text-muted">Rating (1-5)</label>
-                                                                <select class="form-select form-select-sm" name="score">
-                                                                    <option value="0">Select</option>
-                                                                    <?php for ($i = 1; $i <= 5; $i++): ?>
-                                                                        <option value="<?= $i; ?>" <?= (int)($review['score'] ?? 0) === $i ? 'selected' : ''; ?>><?= $i; ?> - <?= ['Poor','Fair','Good','Very Good','Excellent'][$i-1]; ?></option>
-                                                                    <?php endfor; ?>
-                                                                </select>
+                                                                <div class="d-flex flex-wrap gap-2">
+                                                                    <?php foreach ([1 => 'Poor', 2 => 'Fair', 3 => 'Good', 4 => 'Very Good', 5 => 'Excellent'] as $ratingValue => $ratingLabel): ?>
+                                                                        <?php $ratingId = 'score' . (int)$item['assignment_id'] . '_' . (int)$ratingValue; ?>
+                                                                        <div class="form-check form-check-inline me-0">
+                                                                            <input class="form-check-input" type="radio" name="score" id="<?= $ratingId; ?>" value="<?= $ratingValue; ?>" <?= (int)($review['score'] ?? 0) === $ratingValue ? 'checked' : ''; ?>>
+                                                                            <label class="form-check-label small" for="<?= $ratingId; ?>"><?= $ratingValue; ?> - <?= $ratingLabel; ?></label>
+                                                                        </div>
+                                                                    <?php endforeach; ?>
+                                                                </div>
                                                             </div>
                                                             <div class="col-sm-6">
                                                                 <label class="form-label fw-semibold small text-muted">Recommendation</label>
@@ -1174,6 +1193,17 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                                 </select>
                                                             </div>
                                                         </div>
+
+                                                        <?php
+                                                            $isPreferredChecked = !empty($review['is_preferred']) || (int)($review['rank_order'] ?? 0) === 1;
+                                                        ?>
+                                                        <div class="form-check form-switch mb-3">
+                                                            <input class="form-check-input" type="checkbox" role="switch" id="preferred<?= (int)$item['assignment_id']; ?>" name="is_preferred" value="1" data-preferred-toggle data-student-id="<?= (int)$student['student_id']; ?>" <?= $isPreferredChecked ? 'checked' : ''; ?>>
+                                                            <label class="form-check-label" for="preferred<?= (int)$item['assignment_id']; ?>">
+                                                                Recommended to Pursue (Top Choice)
+                                                            </label>
+                                                        </div>
+                                                        <small class="text-muted d-block mb-3">Only one title per student can be marked as top choice.</small>
 
                                                         <div class="mb-3">
                                                             <label class="form-label fw-semibold">Comments &amp; Suggestions</label>
@@ -1359,6 +1389,27 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                         radio.checked = false;
                     });
                     updateRowState(btn.closest('[data-assignment-row]'));
+                });
+            });
+        });
+    })();
+
+    (function() {
+        const preferredToggles = document.querySelectorAll('[data-preferred-toggle]');
+        if (!preferredToggles.length) {
+            return;
+        }
+
+        preferredToggles.forEach((toggle) => {
+            toggle.addEventListener('change', () => {
+                if (!toggle.checked) {
+                    return;
+                }
+                const studentId = toggle.getAttribute('data-student-id');
+                preferredToggles.forEach((other) => {
+                    if (other !== toggle && other.getAttribute('data-student-id') === studentId) {
+                        other.checked = false;
+                    }
                 });
             });
         });
