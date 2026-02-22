@@ -142,6 +142,73 @@ body.sidebar-collapsed .dashboard-shell {
     border-bottom: none;
 }
 
+.ranking-board-shell {
+    display: grid;
+    grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.ranking-board-list {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.ranking-board-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.ranking-student-list {
+    border: 1px solid rgba(22, 86, 44, 0.12);
+    border-radius: 0.85rem;
+    background: #fff;
+    overflow: hidden;
+    max-height: 620px;
+    overflow-y: auto;
+}
+
+.ranking-student-item {
+    border: none;
+    border-bottom: 1px solid rgba(22, 86, 44, 0.08);
+}
+
+.ranking-student-item:last-child {
+    border-bottom: none;
+}
+
+.ranking-student-item.active {
+    background: rgba(22, 86, 44, 0.08);
+    border-left: 4px solid #16562c;
+}
+
+.ranking-board-detail {
+    border: 1px solid rgba(22, 86, 44, 0.12);
+    border-radius: 1rem;
+    background: #fff;
+    padding: 1.25rem;
+    min-height: 360px;
+}
+
+.ranking-detail-empty {
+    text-align: center;
+    color: #6c757d;
+    padding: 2.5rem 1rem;
+}
+
+@media (max-width: 1200px) {
+    .ranking-board-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .ranking-student-list {
+        max-height: 320px;
+    }
+}
+
 .bg-success-subtle {
     background-color: rgba(22, 86, 44, 0.12) !important;
 }

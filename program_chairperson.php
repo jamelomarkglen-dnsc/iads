@@ -996,7 +996,7 @@ if ($endorsementStmt) {
         </div>
 
         <div class="dashboard-split dashboard-split--wide mb-4">
-            <section class="card shadow-sm border-0 h-100">
+                        <section class="card shadow-sm border-0 h-100">
                     <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
                         <div>
                             <h2 class="h6 fw-semibold mb-1">Concept Ranking Board</h2>
@@ -1007,161 +1007,230 @@ if ($endorsementStmt) {
                         </a>
                     </div>
                     <div class="card-body">
-                        <?php if (empty($rankingBoardDisplay)): ?>
+                        <?php if (empty($rankingBoardCollection)): ?>
                             <div class="text-center text-muted py-4">
                                 <i class="bi bi-bar-chart-line fs-2 d-block mb-2"></i>
                                 <p class="mb-0">Ranking data will appear once reviewers submit their evaluations.</p>
                             </div>
                         <?php else: ?>
-                            <?php $boardCount = count($rankingBoardDisplay); ?>
-                            <?php foreach ($rankingBoardDisplay as $index => $board): ?>
-                                <?php
-                                    $rankedAssignments = (int)($board['ranked_assignments'] ?? 0);
-                                    $totalAssignments = (int)($board['total_assignments'] ?? 0);
-                                    $rankingComplete = !empty($board['ranking_complete']);
-                                    $progressLabel = $totalAssignments > 0
-                                        ? "Ranked {$rankedAssignments} of {$totalAssignments} reviews"
-                                        : "No reviewer assignments yet";
-                                    $progressClass = $rankingComplete ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning';
-                                    $recommendationClass = $rankingComplete
-                                        ? 'alert alert-success-subtle border-success text-success'
-                                        : 'alert alert-warning-subtle border-warning text-warning';
-                                ?>
-                                <div class="<?= $index + 1 === $boardCount ? '' : 'border-bottom pb-4 mb-4'; ?>">
-                                    <div class="d-flex justify-content-between align-items-center mb-3">
-                                        <div>
-                                            <h5 class="mb-0 text-success"><?= htmlspecialchars($board['student_name']); ?></h5>
-                                            <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
-                                                <small class="text-muted"><?= number_format(count($board['concepts'] ?? [])); ?> titles ranked</small>
-                                                <span class="badge <?= $progressClass; ?>"><?= htmlspecialchars($progressLabel); ?></span>
-                                            </div>
+                            <div class="ranking-board-shell">
+                                <div class="ranking-board-list">
+                                    <div class="ranking-board-tools">
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                            <input type="text" class="form-control" placeholder="Search student" data-ranking-search>
                                         </div>
-                                        <span class="badge bg-success-subtle text-success">
-                                            <?= number_format($board['best_rank_one'] ?? 0); ?> total Rank&nbsp;1 votes
-                                        </span>
+                                        <select class="form-select form-select-sm" data-ranking-filter>
+                                            <option value="all">All statuses</option>
+                                            <option value="complete">Completed</option>
+                                            <option value="in_progress">In progress</option>
+                                            <option value="waiting">Waiting</option>
+                                            <option value="unassigned">No assignments</option>
+                                        </select>
                                     </div>
-                                    <div class="table-responsive">
-                                        <table class="table table-sm align-middle mb-3">
-                                            <thead class="table-light">
-                                                <tr>
-                                                    <th>Concept Title</th>
-                                                    <th class="text-center">Rank&nbsp;1</th>
-                                                    <th class="text-center">Rank&nbsp;2</th>
-                                                    <th class="text-center">Rank&nbsp;3</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($board['concepts'] as $concept): ?>
-                                                    <?php $isWinner = isset($board['final_concept']['concept_id']) && $board['final_concept']['concept_id'] === ($concept['concept_id'] ?? null); ?>
-                                                    <tr class="<?= $isWinner ? 'table-success-subtle' : ''; ?>">
-                                                        <td class="fw-semibold">
-                                                            <?= htmlspecialchars($concept['title']); ?>
-                                                            <?php if ($isWinner): ?>
-                                                                <span class="badge bg-success ms-2">Final pick</span>
-                                                            <?php endif; ?>
-                                                        </td>
-                                                        <td class="text-center"><span class="badge bg-success-subtle text-success"><?= number_format($concept['rank_one']); ?></span></td>
-                                                        <td class="text-center"><span class="badge bg-info-subtle text-info"><?= number_format($concept['rank_two']); ?></span></td>
-                                                        <td class="text-center"><span class="badge bg-secondary-subtle text-secondary"><?= number_format($concept['rank_three']); ?></span></td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
+                                    <div class="list-group ranking-student-list" data-ranking-list>
+                                        <?php foreach ($rankingBoardCollection as $board): ?>
+                                            <?php
+                                                $rankedAssignments = (int)($board['ranked_assignments'] ?? 0);
+                                                $totalAssignments = (int)($board['total_assignments'] ?? 0);
+                                                $rankingComplete = !empty($board['ranking_complete']);
+                                                $progressLabel = $totalAssignments > 0
+                                                    ? "Ranked {$rankedAssignments} of {$totalAssignments}"
+                                                    : "No reviewer assignments yet";
+                                                if ($totalAssignments <= 0) {
+                                                    $statusKey = 'unassigned';
+                                                    $statusLabel = 'No assignments';
+                                                    $statusClass = 'bg-secondary-subtle text-secondary';
+                                                } elseif ($rankingComplete) {
+                                                    $statusKey = 'complete';
+                                                    $statusLabel = 'Completed';
+                                                    $statusClass = 'bg-success-subtle text-success';
+                                                } elseif ($rankedAssignments > 0) {
+                                                    $statusKey = 'in_progress';
+                                                    $statusLabel = 'In progress';
+                                                    $statusClass = 'bg-warning-subtle text-warning';
+                                                } else {
+                                                    $statusKey = 'waiting';
+                                                    $statusLabel = 'Waiting';
+                                                    $statusClass = 'bg-info-subtle text-info';
+                                                }
+                                                $searchKey = strtolower(trim(($board['student_name'] ?? '') . ' ' . ($board['student_email'] ?? '')));
+                                            ?>
+                                            <button
+                                                type="button"
+                                                class="list-group-item list-group-item-action ranking-student-item"
+                                                data-student-id="<?= (int)($board['student_id'] ?? 0); ?>"
+                                                data-status="<?= htmlspecialchars($statusKey); ?>"
+                                                data-search="<?= htmlspecialchars($searchKey, ENT_QUOTES); ?>"
+                                            >
+                                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                                    <div>
+                                                        <div class="fw-semibold text-success"><?= htmlspecialchars($board['student_name']); ?></div>
+                                                        <div class="text-muted small"><?= htmlspecialchars($board['student_email'] ?? ''); ?></div>
+                                                    </div>
+                                                    <span class="badge <?= $statusClass; ?>"><?= htmlspecialchars($statusLabel); ?></span>
+                                                </div>
+                                                <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                                                    <small class="text-muted"><?= number_format(count($board['concepts'] ?? [])); ?> titles</small>
+                                                    <span class="badge bg-success-subtle text-success">R1: <?= number_format($board['best_rank_one'] ?? 0); ?></span>
+                                                    <small class="text-muted"><?= htmlspecialchars($progressLabel); ?></small>
+                                                </div>
+                                            </button>
+                                        <?php endforeach; ?>
                                     </div>
-                                    <?php if (!empty($board['final_concept'])): ?>
-                                        <div class="<?= $recommendationClass; ?>">
-                                            <strong>Recommended concept:</strong> <?= htmlspecialchars($board['final_concept']['title'] ?? ''); ?> (<?= number_format($board['final_concept']['rank_one'] ?? 0); ?> Rank&nbsp;1 vote<?= ($board['final_concept']['rank_one'] ?? 0) === 1 ? '' : 's'; ?>)
-                                            <?php if (!empty($board['has_tie_on_top'])): ?>
-                                                <span class="badge bg-warning-subtle text-warning ms-2">Tie on Rank&nbsp;1 votes</span>
-                                            <?php endif; ?>
-                                            <div class="small text-muted mb-0">
-                                                <?php if ($rankingComplete): ?>
-                                                    Basis: Highest number of Rank&nbsp;1 selections. Ties break via Rank&nbsp;2 then Rank&nbsp;3.
-                                                <?php else: ?>
-                                                    Preliminary result &mdash; waiting for remaining reviewer rankings.
-                                                <?php endif; ?>
+                                </div>
+                                <div class="ranking-board-detail">
+                                    <div class="ranking-detail-empty" data-ranking-empty>
+                                        Select a student to preview ranking details.
+                                    </div>
+                                    <?php foreach ($rankingBoardCollection as $board): ?>
+                                        <?php
+                                            $rankedAssignments = (int)($board['ranked_assignments'] ?? 0);
+                                            $totalAssignments = (int)($board['total_assignments'] ?? 0);
+                                            $rankingComplete = !empty($board['ranking_complete']);
+                                            $progressLabel = $totalAssignments > 0
+                                                ? "Ranked {$rankedAssignments} of {$totalAssignments} reviews"
+                                                : "No reviewer assignments yet";
+                                            $progressClass = $rankingComplete ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning';
+                                            $recommendationClass = $rankingComplete
+                                                ? 'alert alert-success-subtle border-success text-success'
+                                                : 'alert alert-warning-subtle border-warning text-warning';
+                                        ?>
+                                        <div class="ranking-detail-panel d-none" data-ranking-detail data-student-id="<?= (int)($board['student_id'] ?? 0); ?>">
+                                            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+                                                <div>
+                                                    <h5 class="mb-1 text-success"><?= htmlspecialchars($board['student_name']); ?></h5>
+                                                    <div class="text-muted small"><?= htmlspecialchars($board['student_email'] ?? ''); ?></div>
+                                                </div>
+                                                <div class="text-end">
+                                                    <span class="badge <?= $progressClass; ?>"><?= htmlspecialchars($progressLabel); ?></span>
+                                                    <div class="small text-muted mt-1"><?= number_format(count($board['concepts'] ?? [])); ?> titles ranked</div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    <?php endif; ?>
-                                    <div class="mt-3">
-                                        <h6 class="text-uppercase text-muted mb-3">Reviewer Breakdown</h6>
-                                        <?php if (!empty($board['reviewers'])): ?>
                                             <div class="table-responsive">
-                                                <table class="table table-striped table-sm align-middle">
-                                                    <thead>
+                                                <table class="table table-sm align-middle mb-3">
+                                                    <thead class="table-light">
                                                         <tr>
-                                                            <th>Reviewer</th>
-                                                            <th>Role</th>
-                                                            <th>Rank&nbsp;1</th>
-                                                            <th>Rank&nbsp;2</th>
-                                                            <th>Rank&nbsp;3</th>
-                                                            <th class="text-center">Mentor Interest</th>
+                                                            <th>Concept Title</th>
+                                                            <th class="text-center">Rank&nbsp;1</th>
+                                                            <th class="text-center">Rank&nbsp;2</th>
+                                                            <th class="text-center">Rank&nbsp;3</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        <?php foreach ($board['reviewers'] as $reviewer): ?>
-                                                            <?php
-                                                                $rankMap = [1 => '—', 2 => '—', 3 => '—'];
-                                                                foreach ($reviewer['ranks'] as $rankNumber => $rankData) {
-                                                                    $rankMap[$rankNumber] = htmlspecialchars($rankData['title']);
-                                                                }
-                                                            ?>
-                                                            <tr>
-                                                                <td class="fw-semibold"><?= htmlspecialchars($reviewer['reviewer_name']); ?></td>
-                                                                <td class="text-muted small text-capitalize"><?= htmlspecialchars(str_replace('_', ' ', $reviewer['reviewer_role'] ?? '')); ?></td>
-                                                                <td><?= $rankMap[1]; ?></td>
-                                                                <td><?= $rankMap[2]; ?></td>
-                                                                <td><?= $rankMap[3]; ?></td>
-                                                                <td class="text-center">
-                                                                    <?php if (!empty($reviewer['has_interest'])): ?>
-                                                                        <span class="badge bg-success-subtle text-success">Yes</span>
-                                                                    <?php else: ?>
-                                                                        <span class="text-muted">—</span>
+                                                        <?php foreach ($board['concepts'] as $concept): ?>
+                                                            <?php $isWinner = isset($board['final_concept']['concept_id']) && $board['final_concept']['concept_id'] === ($concept['concept_id'] ?? null); ?>
+                                                            <tr class="<?= $isWinner ? 'table-success-subtle' : ''; ?>">
+                                                                <td class="fw-semibold">
+                                                                    <?= htmlspecialchars($concept['title']); ?>
+                                                                    <?php if ($isWinner): ?>
+                                                                        <span class="badge bg-success ms-2">Final pick</span>
                                                                     <?php endif; ?>
                                                                 </td>
+                                                                <td class="text-center"><span class="badge bg-success-subtle text-success"><?= number_format($concept['rank_one']); ?></span></td>
+                                                                <td class="text-center"><span class="badge bg-info-subtle text-info"><?= number_format($concept['rank_two']); ?></span></td>
+                                                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary"><?= number_format($concept['rank_three']); ?></span></td>
                                                             </tr>
                                                         <?php endforeach; ?>
                                                     </tbody>
                                                 </table>
                                             </div>
-                                        <?php else: ?>
-                                            <p class="text-muted small mb-0">No reviewer submissions yet.</p>
-                                        <?php endif; ?>
-                                    </div>
-                                    <?php if (!empty($board['interested_reviewers'])): ?>
-                                        <div class="mt-3 p-3 bg-success-subtle border border-success-subtle rounded">
-                                            <h6 class="mb-2">Interested in Mentoring</h6>
-                                            <?php foreach ($board['interested_reviewers'] as $mentor): ?>
-                                                <div class="mb-3">
-                                                    <div class="fw-semibold mb-1"><?= htmlspecialchars($mentor['reviewer_name']); ?>
-                                                        <span class="text-muted small">(<?= htmlspecialchars(str_replace('_', ' ', $mentor['reviewer_role'] ?? '')); ?>)</span>
-                                                    </div>
-                                                    <small class="text-muted d-block mb-2">Prefers: <?= htmlspecialchars($mentor['concept_title']); ?></small>
-                                                    <?php if (($mentor['review_id'] ?? 0) > 0): ?>
-                                                        <form method="POST" class="mb-0">
-                                                            <input type="hidden" name="send_chair_feedback" value="1">
-                                                            <input type="hidden" name="feedback_target" value="mentor">
-                                                            <input type="hidden" name="concept_id" value="<?= (int)($mentor['concept_id'] ?? 0); ?>">
-                                                            <input type="hidden" name="assignment_id" value="<?= (int)($mentor['assignment_id'] ?? 0); ?>">
-                                                            <input type="hidden" name="target_review_id" value="<?= (int)($mentor['review_id'] ?? 0); ?>">
-                                                            <input type="hidden" name="student_id" value="<?= (int)($mentor['student_id'] ?? 0); ?>">
-                                                            <input type="hidden" name="reviewer_id" value="<?= (int)($mentor['reviewer_id'] ?? 0); ?>">
-                                                            <input type="hidden" name="student_name" value="<?= htmlspecialchars($board['student_name'], ENT_QUOTES); ?>">
-                                                            <input type="hidden" name="concept_title" value="<?= htmlspecialchars($mentor['concept_title'], ENT_QUOTES); ?>">
-                                                            <textarea class="form-control form-control-sm mb-2" name="chair_feedback_message" rows="2" placeholder="Send a quick note to <?= htmlspecialchars($mentor['reviewer_name']); ?>" required></textarea>
-                                                            <button type="submit" class="btn btn-sm btn-success">
-                                                                <i class="bi bi-send me-1"></i> Send Feedback
-                                                            </button>
-                                                        </form>
-                                                    <?php else: ?>
-                                                        <div class="text-muted small fst-italic">Awaiting this reviewer&rsquo;s submitted ranking.</div>
+                                            <?php if (!empty($board['final_concept'])): ?>
+                                                <div class="<?= $recommendationClass; ?>">
+                                                    <strong>Recommended concept:</strong> <?= htmlspecialchars($board['final_concept']['title'] ?? ''); ?> (<?= number_format($board['final_concept']['rank_one'] ?? 0); ?> Rank&nbsp;1 vote<?= ($board['final_concept']['rank_one'] ?? 0) === 1 ? '' : 's'; ?>)
+                                                    <?php if (!empty($board['has_tie_on_top'])): ?>
+                                                        <span class="badge bg-warning-subtle text-warning ms-2">Tie on Rank&nbsp;1 votes</span>
                                                     <?php endif; ?>
+                                                    <div class="small text-muted mb-0">
+                                                        <?php if ($rankingComplete): ?>
+                                                            Basis: Highest number of Rank&nbsp;1 selections. Ties break via Rank&nbsp;2 then Rank&nbsp;3.
+                                                        <?php else: ?>
+                                                            Preliminary result &mdash; waiting for remaining reviewer rankings.
+                                                        <?php endif; ?>
+                                                    </div>
                                                 </div>
-                                            <?php endforeach; ?>
+                                            <?php endif; ?>
+                                            <div class="mt-3">
+                                                <h6 class="text-uppercase text-muted mb-3">Reviewer Breakdown</h6>
+                                                <?php if (!empty($board['reviewers'])): ?>
+                                                    <div class="table-responsive">
+                                                        <table class="table table-striped table-sm align-middle">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Reviewer</th>
+                                                                    <th>Role</th>
+                                                                    <th>Rank&nbsp;1</th>
+                                                                    <th>Rank&nbsp;2</th>
+                                                                    <th>Rank&nbsp;3</th>
+                                                                    <th class="text-center">Mentor Interest</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <?php foreach ($board['reviewers'] as $reviewer): ?>
+                                                                    <?php
+                                                                        $rankMap = [1 => '&mdash;', 2 => '&mdash;', 3 => '&mdash;'];
+                                                                        foreach ($reviewer['ranks'] as $rankNumber => $rankData) {
+                                                                            $rankMap[$rankNumber] = htmlspecialchars($rankData['title']);
+                                                                        }
+                                                                    ?>
+                                                                    <tr>
+                                                                        <td class="fw-semibold"><?= htmlspecialchars($reviewer['reviewer_name']); ?></td>
+                                                                        <td class="text-muted small text-capitalize"><?= htmlspecialchars(str_replace('_', ' ', $reviewer['reviewer_role'] ?? '')); ?></td>
+                                                                        <td><?= $rankMap[1]; ?></td>
+                                                                        <td><?= $rankMap[2]; ?></td>
+                                                                        <td><?= $rankMap[3]; ?></td>
+                                                                        <td class="text-center">
+                                                                            <?php if (!empty($reviewer['has_interest'])): ?>
+                                                                                <span class="badge bg-success-subtle text-success">Yes</span>
+                                                                            <?php else: ?>
+                                                                                <span class="text-muted">&mdash;</span>
+                                                                            <?php endif; ?>
+                                                                        </td>
+                                                                    </tr>
+                                                                <?php endforeach; ?>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                <?php else: ?>
+                                                    <div class="text-muted small fst-italic">Awaiting this reviewer&rsquo;s submitted ranking.</div>
+                                                <?php endif; ?>
+                                            </div>
+                                            <?php if (!empty($board['interested_reviewers'])): ?>
+                                                <div class="mt-3 p-3 bg-success-subtle border border-success-subtle rounded">
+                                                    <h6 class="mb-2">Interested in Mentoring</h6>
+                                                    <?php foreach ($board['interested_reviewers'] as $mentor): ?>
+                                                        <div class="mb-3">
+                                                            <div class="fw-semibold mb-1"><?= htmlspecialchars($mentor['reviewer_name']); ?>
+                                                                <span class="text-muted small">(<?= htmlspecialchars(str_replace('_', ' ', $mentor['reviewer_role'] ?? '')); ?>)</span>
+                                                            </div>
+                                                            <small class="text-muted d-block mb-2">Prefers: <?= htmlspecialchars($mentor['concept_title']); ?></small>
+                                                            <?php if (($mentor['review_id'] ?? 0) > 0): ?>
+                                                                <form method="POST" class="mb-0">
+                                                                    <input type="hidden" name="send_chair_feedback" value="1">
+                                                                    <input type="hidden" name="feedback_target" value="mentor">
+                                                                    <input type="hidden" name="concept_id" value="<?= (int)($mentor['concept_id'] ?? 0); ?>">
+                                                                    <input type="hidden" name="assignment_id" value="<?= (int)($mentor['assignment_id'] ?? 0); ?>">
+                                                                    <input type="hidden" name="target_review_id" value="<?= (int)($mentor['review_id'] ?? 0); ?>">
+                                                                    <input type="hidden" name="student_id" value="<?= (int)($mentor['student_id'] ?? 0); ?>">
+                                                                    <input type="hidden" name="reviewer_id" value="<?= (int)($mentor['reviewer_id'] ?? 0); ?>">
+                                                                    <input type="hidden" name="student_name" value="<?= htmlspecialchars($board['student_name'], ENT_QUOTES); ?>">
+                                                                    <input type="hidden" name="concept_title" value="<?= htmlspecialchars($mentor['concept_title'], ENT_QUOTES); ?>">
+                                                                    <textarea class="form-control form-control-sm mb-2" name="chair_feedback_message" rows="2" placeholder="Send a quick note to <?= htmlspecialchars($mentor['reviewer_name']); ?>" required></textarea>
+                                                                    <button type="submit" class="btn btn-sm btn-success">
+                                                                        <i class="bi bi-send me-1"></i> Send Feedback
+                                                                    </button>
+                                                                </form>
+                                                            <?php else: ?>
+                                                                <div class="text-muted small fst-italic">Awaiting this reviewer&rsquo;s submitted ranking.</div>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            <?php endif; ?>
                                         </div>
-                                    <?php endif; ?>
+                                    <?php endforeach; ?>
                                 </div>
-                            <?php endforeach; ?>
+                            </div>
                         <?php endif; ?>
                     </div>
             </section>
@@ -1678,6 +1747,111 @@ if ($endorsementStmt) {
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    (function() {
+        const list = document.querySelector('[data-ranking-list]');
+        const panels = Array.from(document.querySelectorAll('[data-ranking-detail]'));
+        const emptyState = document.querySelector('[data-ranking-empty]');
+        const searchInput = document.querySelector('[data-ranking-search]');
+        const filterSelect = document.querySelector('[data-ranking-filter]');
+
+        if (!list || panels.length === 0) {
+            return;
+        }
+
+        const items = Array.from(list.querySelectorAll('.ranking-student-item'));
+
+        const showEmpty = (message) => {
+            if (!emptyState) {
+                return;
+            }
+            emptyState.textContent = message || 'Select a student to preview ranking details.';
+            emptyState.classList.remove('d-none');
+        };
+
+        const hideEmpty = () => {
+            if (!emptyState) {
+                return;
+            }
+            emptyState.classList.add('d-none');
+        };
+
+        const setActiveItem = (item) => {
+            items.forEach((entry) => entry.classList.remove('active'));
+            if (item) {
+                item.classList.add('active');
+            }
+        };
+
+        const showPanel = (studentId) => {
+            let found = false;
+            panels.forEach((panel) => {
+                const match = panel.dataset.studentId === studentId;
+                panel.classList.toggle('d-none', !match);
+                if (match) {
+                    found = true;
+                }
+            });
+            if (found) {
+                hideEmpty();
+            } else {
+                showEmpty('Select a student to preview ranking details.');
+            }
+        };
+
+        const handleSelect = (item) => {
+            if (!item) {
+                return;
+            }
+            const studentId = item.dataset.studentId || '';
+            if (!studentId) {
+                return;
+            }
+            setActiveItem(item);
+            showPanel(studentId);
+        };
+
+        const selectFirstVisible = () => {
+            const firstVisible = items.find((item) => !item.classList.contains('d-none'));
+            if (firstVisible) {
+                handleSelect(firstVisible);
+            } else {
+                panels.forEach((panel) => panel.classList.add('d-none'));
+                showEmpty('No students match your filter.');
+            }
+        };
+
+        const applyFilters = () => {
+            const query = (searchInput?.value || '').trim().toLowerCase();
+            const status = filterSelect?.value || 'all';
+            items.forEach((item) => {
+                const searchKey = (item.dataset.search || '').toLowerCase();
+                const itemStatus = item.dataset.status || 'all';
+                const matchesQuery = !query || searchKey.includes(query);
+                const matchesStatus = status === 'all' || itemStatus === status;
+                item.classList.toggle('d-none', !(matchesQuery && matchesStatus));
+            });
+
+            const activeVisible = items.find((item) => item.classList.contains('active') && !item.classList.contains('d-none'));
+            if (!activeVisible) {
+                selectFirstVisible();
+            }
+        };
+
+        items.forEach((item) => {
+            item.addEventListener('click', () => handleSelect(item));
+        });
+
+        if (searchInput) {
+            searchInput.addEventListener('input', applyFilters);
+        }
+        if (filterSelect) {
+            filterSelect.addEventListener('change', applyFilters);
+        }
+
+        selectFirstVisible();
+    })();
+</script>
+<script>
     const feedbackModal = document.getElementById('chairFeedbackModal');
     if (feedbackModal) {
         const feedbackForm = feedbackModal.querySelector('form');
@@ -1858,3 +2032,4 @@ if ($endorsementStmt) {
 </script>
 </body>
 </html>
+
