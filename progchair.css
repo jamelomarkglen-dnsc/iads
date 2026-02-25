@@ -185,6 +185,10 @@ body.sidebar-collapsed .dashboard-shell {
     border-left: 4px solid #16562c;
 }
 
+.ranking-board-shell--compact .ranking-student-list {
+    max-height: 360px;
+}
+
 .ranking-board-detail {
     border: 1px solid rgba(22, 86, 44, 0.12);
     border-radius: 1rem;
