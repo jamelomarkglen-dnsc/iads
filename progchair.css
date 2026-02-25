@@ -181,8 +181,13 @@ body.sidebar-collapsed .dashboard-shell {
 }
 
 .ranking-student-item.active {
-    background: rgba(22, 86, 44, 0.08);
+    background: transparent;
     border-left: 4px solid #16562c;
+}
+
+.ranking-student-item:hover,
+.ranking-student-item:focus {
+    background: transparent;
 }
 
 .ranking-board-shell--compact .ranking-student-list {

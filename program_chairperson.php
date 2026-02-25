@@ -1096,7 +1096,7 @@ if ($endorsementStmt) {
                             <h2 class="h6 fw-semibold mb-1">Concept Ranking Board</h2>
                             <p class="text-muted small mb-0">See where reviewers agree on the best titles per student.</p>
                         </div>
-                        <div class="d-flex flex-wrap gap-2">
+                        <div class="d-flex flex-row flex-nowrap gap-2">
                             <a href="completed_rankings.php" class="btn btn-sm btn-outline-secondary">
                                 <i class="bi bi-list-check me-1"></i> Completed Directory
                             </a>
@@ -1115,13 +1115,9 @@ if ($endorsementStmt) {
                             <div class="ranking-board-shell">
                                 <div class="ranking-board-list">
                                     <div class="ranking-board-tools">
-                                        <div class="input-group input-group-sm">
-                                            <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                                            <input type="text" class="form-control" placeholder="Search student" data-ranking-search>
-                                        </div>
                                         <select class="form-select form-select-sm" data-ranking-filter>
-                                            <option value="all">All statuses</option>
-                                            <option value="complete">Completed</option>
+                                            <option value="all">All</option>
+                                            <option value="complete">Ready for final pick</option>
                                             <option value="in_progress">In progress</option>
                                             <option value="waiting">Waiting</option>
                                             <option value="unassigned">No assignments</option>

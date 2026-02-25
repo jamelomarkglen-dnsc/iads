@@ -1,4 +1,4 @@
-
+﻿
 <?php
 session_start();
 include 'db.php';
@@ -422,7 +422,7 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
                             <div class="ranking-board-tools">
                                 <div class="input-group input-group-sm">
                                     <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                                    <input type="text" class="form-control" placeholder="Search student" data-directory-search>
+                                    <input type="text" class="form-control" placeholder="Search name or final title" data-directory-search>
                                 </div>
                                 <form method="GET" class="d-flex gap-2 align-items-center">
                                     <?php foreach ($_GET as $key => $value): ?>
@@ -446,7 +446,8 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
                                         $sentAtLabel = !empty($sentInfo['sent_at'])
                                             ? date('M d, Y g:i A', strtotime((string)$sentInfo['sent_at']))
                                             : 'Not recorded';
-                                        $searchKey = strtolower(trim(($board['student_name'] ?? '') . ' ' . ($board['student_email'] ?? '')));
+                                        $finalTitle = $sentInfo['final_title'] ?? ($board['final_concept']['title'] ?? '');
+                                        $searchKey = strtolower(trim(($board['student_name'] ?? '') . ' ' . $finalTitle));
                                     ?>
                                     <button
                                         type="button"
@@ -484,7 +485,7 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
                                                 <a class="page-link" href="<?= buildCompletedPageUrl(1); ?>">1</a>
                                             </li>
                                             <?php if ($startPage > 2): ?>
-                                                <li class="page-item disabled"><span class="page-link">�</span></li>
+                                                <li class="page-item disabled"><span class="page-link">Ã¢â‚¬Â¦</span></li>
                                             <?php endif; ?>
                                         <?php endif; ?>
                                         <?php for ($page = $startPage; $page <= $endPage; $page++): ?>
@@ -494,7 +495,7 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
                                         <?php endfor; ?>
                                         <?php if ($endPage < $completedPages): ?>
                                             <?php if ($endPage < ($completedPages - 1)): ?>
-                                                <li class="page-item disabled"><span class="page-link">�</span></li>
+                                                <li class="page-item disabled"><span class="page-link">Ã¢â‚¬Â¦</span></li>
                                             <?php endif; ?>
                                             <li class="page-item">
                                                 <a class="page-link" href="<?= buildCompletedPageUrl($completedPages); ?>"><?= $completedPages; ?></a>
@@ -580,7 +581,7 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
                                                     <tbody>
                                                         <?php foreach ($board['reviewers'] as $reviewer): ?>
                                                             <?php
-                                                                $rankMap = [1 => '�', 2 => '�', 3 => '�'];
+                                                                $rankMap = [1 => 'Ã¢â‚¬â€', 2 => 'Ã¢â‚¬â€', 3 => 'Ã¢â‚¬â€'];
                                                                 foreach ($reviewer['ranks'] as $rankNumber => $rankData) {
                                                                     $rankMap[$rankNumber] = htmlspecialchars($rankData['title']);
                                                                 }
@@ -595,7 +596,7 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
                                                                     <?php if (!empty($reviewer['has_interest'])): ?>
                                                                         <span class="badge bg-success-subtle text-success">Yes</span>
                                                                     <?php else: ?>
-                                                                        <span class="text-muted">�</span>
+                                                                        <span class="text-muted">Ã¢â‚¬â€</span>
                                                                     <?php endif; ?>
                                                                 </td>
                                                             </tr>
@@ -719,3 +720,6 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
 </script>
 </body>
 </html>
+
+
+
