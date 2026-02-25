@@ -578,17 +578,17 @@ $progressSql = "
     SELECT
         reviewer_progress.student_id,
         COUNT(DISTINCT reviewer_progress.reviewer_id) AS total_assignments,
-        COUNT(DISTINCT CASE WHEN reviewer_progress.reviewer_complete = 1 THEN reviewer_progress.reviewer_id END) AS ranked_assignments
+        COUNT(DISTINCT CASE WHEN reviewer_progress.reviewer_started = 1 THEN reviewer_progress.reviewer_id END) AS ranked_assignments
     FROM (
         SELECT
             cra.student_id,
             cra.reviewer_id,
             COUNT(DISTINCT cra.id) AS total_review_assignments,
+            COUNT(DISTINCT CASE WHEN cr.id IS NOT NULL THEN cra.id END) AS reviewed_assignments,
             COUNT(DISTINCT CASE WHEN cr.rank_order IN (1,2,3) OR (cr.rank_order IS NULL AND cr.is_preferred = 1) THEN cra.id END) AS ranked_review_assignments,
             CASE
-                WHEN COUNT(DISTINCT cra.id) > 0
-                 AND COUNT(DISTINCT CASE WHEN cr.rank_order IN (1,2,3) OR (cr.rank_order IS NULL AND cr.is_preferred = 1) THEN cra.id END) >= COUNT(DISTINCT cra.id)
-                THEN 1 ELSE 0 END AS reviewer_complete
+                WHEN COUNT(DISTINCT CASE WHEN cr.id IS NOT NULL THEN cra.id END) > 0
+                THEN 1 ELSE 0 END AS reviewer_started
         FROM concept_reviewer_assignments cra
         LEFT JOIN concept_reviews cr ON cr.assignment_id = cra.id
         JOIN users u ON u.id = cra.student_id
