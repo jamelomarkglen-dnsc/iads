@@ -262,6 +262,61 @@ body.sidebar-collapsed .dashboard-shell {
     color: #fff;
 }
 
+.mentor-interest-card {
+    border: 1px solid rgba(22, 86, 44, 0.12);
+    border-radius: 0.85rem;
+    padding: 0.75rem 0.9rem;
+    background: #fff;
+}
+
+.mentor-interest-table thead th {
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6b7c85;
+    border-bottom: 1px solid rgba(22, 86, 44, 0.08);
+}
+
+.mentor-interest-table tbody td {
+    vertical-align: middle;
+    border-top: 1px solid rgba(22, 86, 44, 0.06);
+}
+
+.mentor-title {
+    max-width: 320px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.reviewer-feedback-card {
+    border: 1px solid rgba(24, 90, 188, 0.12);
+    border-radius: 0.85rem;
+    padding: 0.75rem 0.9rem;
+    background: #fff;
+}
+
+.reviewer-feedback-table thead th {
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #6b7c85;
+    border-bottom: 1px solid rgba(24, 90, 188, 0.08);
+}
+
+.reviewer-feedback-table tbody td {
+    vertical-align: middle;
+    border-top: 1px solid rgba(24, 90, 188, 0.06);
+}
+
+.feedback-note {
+    max-width: 360px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
 .role-switch-columns {
     display: flex;
     flex-direction: column;

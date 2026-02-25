@@ -16,6 +16,7 @@ $chairScope = get_program_chair_scope($conn, $programChairId);
 ensureConceptReviewTables($conn);
 syncConceptPapersFromSubmissions($conn);
 ensureReviewerInviteFeedbackTable($conn);
+ensureConceptReviewMessagesTable($conn);
 ensureFinalConceptSubmissionTable($conn);
 ensureFinalPickMessagesTable($conn);
 ensureEndorsementRequestsTable($conn);
@@ -23,6 +24,7 @@ ensureEndorsementRequestsTable($conn);
 $chairFeedbackAlert = null;
 $finalPickAlert = null;
 $endorsementAlert = null;
+$reviewerMessageAlert = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_final_pick_message'])) {
     $studentId = (int)($_POST['student_id'] ?? 0);
@@ -629,6 +631,9 @@ $reviewerSql = "
         cr.rank_order,
         cr.is_preferred,
         cr.adviser_interest,
+        cr.comment_suggestions,
+        cr.notes AS review_notes,
+        cr.updated_at AS review_updated_at,
         CONCAT(COALESCE(r.firstname, ''), ' ', COALESCE(r.lastname, '')) AS reviewer_name
     FROM concept_reviewer_assignments cra
     LEFT JOIN concept_reviews cr ON cr.assignment_id = cra.id
@@ -640,6 +645,8 @@ if ($conceptScopeWhere !== '') {
     $reviewerSql .= "    WHERE ({$conceptScopeWhere} OR cra.assigned_by = {$programChairId})\n";
 }
 $reviewerSql .= "    ORDER BY u.lastname, u.firstname, r.lastname, r.firstname\n";
+$reviewerAssignmentMeta = [];
+$reviewerAssignmentIds = [];
 $reviewerResult = $conn->query($reviewerSql);
 if ($reviewerResult) {
     while ($row = $reviewerResult->fetch_assoc()) {
@@ -690,9 +697,34 @@ if ($reviewerResult) {
                 $rankingBoardFull[$studentId]['interest_keys'][$interestKey] = true;
             }
         }
+
+        $assignmentId = (int)($row['assignment_id'] ?? 0);
+        if ($assignmentId > 0) {
+            $reviewerAssignmentIds[] = $assignmentId;
+            $comment = trim((string)($row['comment_suggestions'] ?? ''));
+            $notes = trim((string)($row['review_notes'] ?? ''));
+            if ($comment === '' && $notes !== '') {
+                $comment = $notes;
+            }
+            $reviewerAssignmentMeta[$studentId][] = [
+                'assignment_id' => $assignmentId,
+                'concept_id' => (int)($row['concept_id'] ?? 0),
+                'concept_title' => $row['concept_title'] ?? 'Untitled Concept',
+                'student_id' => $studentId,
+                'reviewer_id' => $reviewerId,
+                'reviewer_name' => trim($row['reviewer_name'] ?? 'Reviewer'),
+                'reviewer_role' => $row['reviewer_role'] ?? '',
+                'comment' => $comment,
+                'has_interest' => $interestFlag,
+                'review_updated_at' => $row['review_updated_at'] ?? null,
+            ];
+        }
     }
     $reviewerResult->free();
 }
+
+$reviewerAssignmentIds = array_values(array_unique(array_filter($reviewerAssignmentIds)));
+$conversationLookup = fetchConceptReviewMessagesByAssignments($conn, $reviewerAssignmentIds);
 
 foreach ($rankingBoardFull as $studentId => &$board) {
     $progress = $rankingProgress[$studentId] ?? null;
@@ -729,6 +761,66 @@ foreach ($rankingBoardFull as $studentId => &$board) {
         $board['final_concept'] = null;
         $board['has_tie_on_top'] = false;
     }
+    $feedbackEntries = [];
+    foreach (($reviewerAssignmentMeta[$studentId] ?? []) as $assignmentMeta) {
+        $assignmentId = (int)($assignmentMeta['assignment_id'] ?? 0);
+        $reviewerId = (int)($assignmentMeta['reviewer_id'] ?? 0);
+        $commentText = trim((string)($assignmentMeta['comment'] ?? ''));
+        $messages = $conversationLookup[$assignmentId] ?? [];
+        $reviewerMessageCount = 0;
+        $lastReviewerMessageAt = null;
+        $lastReviewerMessageText = '';
+        foreach ($messages as $message) {
+            if ((int)($message['sender_id'] ?? 0) === $reviewerId) {
+                $reviewerMessageCount++;
+                $createdAt = $message['created_at'] ?? null;
+                if ($createdAt && (!$lastReviewerMessageAt || strtotime($createdAt) > strtotime($lastReviewerMessageAt))) {
+                    $lastReviewerMessageAt = $createdAt;
+                    $lastReviewerMessageText = (string)($message['message'] ?? '');
+                }
+            }
+        }
+        $hasReviewerMessage = $reviewerMessageCount > 0;
+        $hasComment = $commentText !== '';
+        $hasInterest = !empty($assignmentMeta['has_interest']);
+        if (!$hasReviewerMessage && !$hasComment && !$hasInterest) {
+            continue;
+        }
+        $lastActivity = null;
+        $reviewUpdated = $assignmentMeta['review_updated_at'] ?? null;
+        if ($lastReviewerMessageAt && $reviewUpdated) {
+            $lastActivity = strtotime($lastReviewerMessageAt) >= strtotime($reviewUpdated) ? $lastReviewerMessageAt : $reviewUpdated;
+        } elseif ($lastReviewerMessageAt) {
+            $lastActivity = $lastReviewerMessageAt;
+        } elseif ($reviewUpdated) {
+            $lastActivity = $reviewUpdated;
+        }
+        $feedbackEntries[] = [
+            'assignment_id' => $assignmentId,
+            'concept_id' => (int)($assignmentMeta['concept_id'] ?? 0),
+            'concept_title' => $assignmentMeta['concept_title'] ?? 'Untitled Concept',
+            'student_id' => (int)($assignmentMeta['student_id'] ?? 0),
+            'reviewer_id' => $reviewerId,
+            'reviewer_name' => $assignmentMeta['reviewer_name'] ?? 'Reviewer',
+            'reviewer_role' => $assignmentMeta['reviewer_role'] ?? '',
+            'comment' => $commentText,
+            'has_interest' => $hasInterest,
+            'reviewer_message_count' => $reviewerMessageCount,
+            'last_reviewer_message' => $lastReviewerMessageText,
+            'last_activity' => $lastActivity,
+        ];
+    }
+    if (!empty($feedbackEntries)) {
+        usort($feedbackEntries, function ($a, $b) {
+            $timeA = $a['last_activity'] ? strtotime($a['last_activity']) : 0;
+            $timeB = $b['last_activity'] ? strtotime($b['last_activity']) : 0;
+            if ($timeA === $timeB) {
+                return strcmp($a['reviewer_name'] ?? '', $b['reviewer_name'] ?? '');
+            }
+            return $timeB <=> $timeA;
+        });
+    }
+    $board['reviewer_feedback_entries'] = $feedbackEntries;
     $board['reviewers'] = array_values($board['reviewers']);
     unset($board['interest_keys']);
 }
@@ -776,6 +868,64 @@ if (!empty($rankingStudentIds)) {
             $finalPickSentResult->free();
         }
         $finalPickSentStmt->close();
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_reviewer_message'])) {
+    $assignmentId = (int)($_POST['assignment_id'] ?? 0);
+    $conceptId = (int)($_POST['concept_id'] ?? 0);
+    $studentIdInput = (int)($_POST['student_id'] ?? 0);
+    $reviewerIdInput = (int)($_POST['reviewer_id'] ?? 0);
+    $messageText = trim(strip_tags((string)($_POST['reviewer_message'] ?? '')));
+
+    if ($assignmentId <= 0 || $conceptId <= 0) {
+        $reviewerMessageAlert = ['type' => 'danger', 'message' => 'Missing assignment details for the reviewer message.'];
+    } elseif ($messageText === '') {
+        $reviewerMessageAlert = ['type' => 'warning', 'message' => 'Please enter a message before sending.'];
+    } else {
+        $assignmentStmt = $conn->prepare("
+            SELECT cra.id, cra.concept_paper_id, cra.student_id, cra.reviewer_id
+            FROM concept_reviewer_assignments cra
+            WHERE cra.id = ?
+            LIMIT 1
+        ");
+        $assignmentRow = null;
+        if ($assignmentStmt) {
+            $assignmentStmt->bind_param('i', $assignmentId);
+            $assignmentStmt->execute();
+            $assignmentResult = $assignmentStmt->get_result();
+            $assignmentRow = $assignmentResult ? $assignmentResult->fetch_assoc() : null;
+            $assignmentStmt->close();
+        }
+
+        $studentId = (int)($assignmentRow['student_id'] ?? 0);
+        $assignmentConceptId = (int)($assignmentRow['concept_paper_id'] ?? 0);
+        $assignmentReviewerId = (int)($assignmentRow['reviewer_id'] ?? 0);
+
+        if (
+            !$assignmentRow ||
+            ($conceptId > 0 && $assignmentConceptId !== $conceptId) ||
+            ($studentIdInput > 0 && $studentId !== $studentIdInput) ||
+            ($reviewerIdInput > 0 && $assignmentReviewerId !== $reviewerIdInput)
+        ) {
+            $reviewerMessageAlert = ['type' => 'danger', 'message' => 'Unable to send that reviewer message. Please refresh and try again.'];
+        } elseif ($studentId <= 0 || !student_matches_scope($conn, $studentId, $chairScope)) {
+            $reviewerMessageAlert = ['type' => 'danger', 'message' => 'You can only message reviewers for students in your scope.'];
+        } else {
+            $saved = saveConceptReviewMessage($conn, [
+                'assignment_id' => $assignmentId,
+                'concept_paper_id' => $assignmentConceptId,
+                'student_id' => $studentId,
+                'sender_id' => $programChairId,
+                'sender_role' => 'program_chairperson',
+                'message' => $messageText,
+            ]);
+            if ($saved) {
+                $reviewerMessageAlert = ['type' => 'success', 'message' => 'Message sent to the reviewer.'];
+            } else {
+                $reviewerMessageAlert = ['type' => 'danger', 'message' => 'Unable to send the reviewer message right now.'];
+            }
+        }
     }
 }
 
@@ -1017,6 +1167,11 @@ if ($endorsementStmt) {
         <?php if ($chairFeedbackAlert): ?>
             <div class="alert alert-<?= htmlspecialchars($chairFeedbackAlert['type']); ?> border-0 shadow-sm">
                 <?= htmlspecialchars($chairFeedbackAlert['message']); ?>
+            </div>
+        <?php endif; ?>
+        <?php if ($reviewerMessageAlert): ?>
+            <div class="alert alert-<?= htmlspecialchars($reviewerMessageAlert['type']); ?> border-0 shadow-sm">
+                <?= htmlspecialchars($reviewerMessageAlert['message']); ?>
             </div>
         <?php endif; ?>
         <?php if ($endorsementAlert): ?>
@@ -1296,35 +1451,166 @@ if ($endorsementStmt) {
                                                 <?php endif; ?>
                                             </div>
                                             <?php if (!empty($board['interested_reviewers'])): ?>
-                                                <div class="mt-3 p-3 bg-success-subtle border border-success-subtle rounded">
-                                                    <h6 class="mb-2">Interested in Mentoring</h6>
-                                                    <?php foreach ($board['interested_reviewers'] as $mentor): ?>
-                                                        <div class="mb-3">
-                                                            <div class="fw-semibold mb-1"><?= htmlspecialchars($mentor['reviewer_name']); ?>
-                                                                <span class="text-muted small">(<?= htmlspecialchars(str_replace('_', ' ', $mentor['reviewer_role'] ?? '')); ?>)</span>
-                                                            </div>
-                                                            <small class="text-muted d-block mb-2">Prefers: <?= htmlspecialchars($mentor['concept_title']); ?></small>
-                                                            <?php if (($mentor['review_id'] ?? 0) > 0): ?>
-                                                                <form method="POST" class="mb-0">
-                                                                    <input type="hidden" name="send_chair_feedback" value="1">
-                                                                    <input type="hidden" name="feedback_target" value="mentor">
-                                                                    <input type="hidden" name="concept_id" value="<?= (int)($mentor['concept_id'] ?? 0); ?>">
-                                                                    <input type="hidden" name="assignment_id" value="<?= (int)($mentor['assignment_id'] ?? 0); ?>">
-                                                                    <input type="hidden" name="target_review_id" value="<?= (int)($mentor['review_id'] ?? 0); ?>">
-                                                                    <input type="hidden" name="student_id" value="<?= (int)($mentor['student_id'] ?? 0); ?>">
-                                                                    <input type="hidden" name="reviewer_id" value="<?= (int)($mentor['reviewer_id'] ?? 0); ?>">
-                                                                    <input type="hidden" name="student_name" value="<?= htmlspecialchars($board['student_name'], ENT_QUOTES); ?>">
-                                                                    <input type="hidden" name="concept_title" value="<?= htmlspecialchars($mentor['concept_title'], ENT_QUOTES); ?>">
-                                                                    <textarea class="form-control form-control-sm mb-2" name="chair_feedback_message" rows="2" placeholder="Send a quick note to <?= htmlspecialchars($mentor['reviewer_name']); ?>" required></textarea>
-                                                                    <button type="submit" class="btn btn-sm btn-success">
-                                                                        <i class="bi bi-send me-1"></i> Send Feedback
-                                                                    </button>
-                                                                </form>
-                                                            <?php else: ?>
-                                                                <div class="text-muted small fst-italic">Awaiting this reviewer&rsquo;s submitted ranking.</div>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                    <?php endforeach; ?>
+                                                <div class="mt-3 mentor-interest-card">
+                                                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                                                        <h6 class="text-uppercase text-muted mb-0">Interested in Mentoring</h6>
+                                                        <span class="badge bg-success-subtle text-success">
+                                                            <?= number_format(count($board['interested_reviewers'])); ?> reviewer<?= count($board['interested_reviewers']) !== 1 ? 's' : ''; ?>
+                                                        </span>
+                                                    </div>
+                                                    <div class="table-responsive">
+                                                        <table class="table table-sm align-middle mb-0 mentor-interest-table">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Reviewer</th>
+                                                                    <th>Role</th>
+                                                                    <th>Preferred Title</th>
+                                                                    <th>Status</th>
+                                                                    <th class="text-end">Action</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <?php foreach ($board['interested_reviewers'] as $mentor): ?>
+                                                                    <?php
+                                                                        $hasReview = (int)($mentor['review_id'] ?? 0) > 0;
+                                                                        $roleLabel = trim(str_replace('_', ' ', (string)($mentor['reviewer_role'] ?? '')));
+                                                                        if ($roleLabel === '') {
+                                                                            $roleLabel = 'Reviewer';
+                                                                        }
+                                                                    ?>
+                                                                    <tr>
+                                                                        <td class="fw-semibold"><?= htmlspecialchars($mentor['reviewer_name']); ?></td>
+                                                                        <td class="text-muted small text-capitalize"><?= htmlspecialchars($roleLabel); ?></td>
+                                                                        <td class="text-muted mentor-title"><?= htmlspecialchars($mentor['concept_title']); ?></td>
+                                                                        <td>
+                                                                            <?php if ($hasReview): ?>
+                                                                                <span class="badge bg-success-subtle text-success">Ready for feedback</span>
+                                                                            <?php else: ?>
+                                                                                <span class="badge bg-secondary-subtle text-secondary">Awaiting ranking</span>
+                                                                            <?php endif; ?>
+                                                                        </td>
+                                                                        <td class="text-end">
+                                                                            <?php if ($hasReview): ?>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    class="btn btn-sm btn-outline-success feedback-btn"
+                                                                                    data-bs-toggle="modal"
+                                                                                    data-bs-target="#chairFeedbackModal"
+                                                                                    data-feedback-target="mentor"
+                                                                                    data-assignment-id="<?= (int)($mentor['assignment_id'] ?? 0); ?>"
+                                                                                    data-concept-id="<?= (int)($mentor['concept_id'] ?? 0); ?>"
+                                                                                    data-student-id="<?= (int)($mentor['student_id'] ?? 0); ?>"
+                                                                                    data-reviewer-id="<?= (int)($mentor['reviewer_id'] ?? 0); ?>"
+                                                                                    data-student-name="<?= htmlspecialchars($mentor['reviewer_name'], ENT_QUOTES); ?>"
+                                                                                    data-concept-title="<?= htmlspecialchars($mentor['concept_title'], ENT_QUOTES); ?>"
+                                                                                    data-adviser-name="<?= htmlspecialchars($roleLabel, ENT_QUOTES); ?>"
+                                                                                    data-rank-order=""
+                                                                                    data-status-label="Interested in mentoring"
+                                                                                    data-updated-label=""
+                                                                                >
+                                                                                    Send feedback
+                                                                                </button>
+                                                                            <?php else: ?>
+                                                                                <button type="button" class="btn btn-sm btn-outline-secondary" disabled>
+                                                                                    Waiting rankings
+                                                                                </button>
+                                                                            <?php endif; ?>
+                                                                        </td>
+                                                                    </tr>
+                                                                <?php endforeach; ?>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php if (!empty($board['reviewer_feedback_entries'])): ?>
+                                                <div class="mt-3 reviewer-feedback-card">
+                                                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                                                        <h6 class="text-uppercase text-muted mb-0">Reviewer Messages &amp; Suggestions</h6>
+                                                        <span class="badge bg-info-subtle text-info">
+                                                            <?= number_format(count($board['reviewer_feedback_entries'])); ?> item<?= count($board['reviewer_feedback_entries']) !== 1 ? 's' : ''; ?>
+                                                        </span>
+                                                    </div>
+                                                    <div class="table-responsive">
+                                                        <table class="table table-sm align-middle mb-0 reviewer-feedback-table">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Reviewer</th>
+                                                                    <th>Role</th>
+                                                                    <th>Concept</th>
+                                                                    <th>Trigger</th>
+                                                                    <th class="text-end">Action</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <?php foreach ($board['reviewer_feedback_entries'] as $entry): ?>
+                                                                    <?php
+                                                                        $roleLabel = trim(str_replace('_', ' ', (string)($entry['reviewer_role'] ?? '')));
+                                                                        if ($roleLabel === '') {
+                                                                            $roleLabel = 'Reviewer';
+                                                                        }
+                                                                        $commentPreview = trim((string)($entry['comment'] ?? ''));
+                                                                        if ($commentPreview !== '') {
+                                                                            $commentPreview = preg_replace('/\s+/', ' ', $commentPreview);
+                                                                        }
+                                                                        $messagePreview = trim((string)($entry['last_reviewer_message'] ?? ''));
+                                                                        if ($messagePreview !== '') {
+                                                                            $messagePreview = preg_replace('/\s+/', ' ', $messagePreview);
+                                                                        }
+                                                                        $messageCount = (int)($entry['reviewer_message_count'] ?? 0);
+                                                                        $hasComment = $commentPreview !== '';
+                                                                        $hasMentorInterest = !empty($entry['has_interest']);
+                                                                    ?>
+                                                                    <tr>
+                                                                        <td class="fw-semibold"><?= htmlspecialchars($entry['reviewer_name']); ?></td>
+                                                                        <td class="text-muted small text-capitalize"><?= htmlspecialchars($roleLabel); ?></td>
+                                                                        <td>
+                                                                            <div class="fw-semibold"><?= htmlspecialchars($entry['concept_title']); ?></div>
+                                                                            <?php if ($hasComment): ?>
+                                                                                <div class="small text-muted feedback-note" title="<?= htmlspecialchars($commentPreview); ?>">
+                                                                                    Comment: <?= htmlspecialchars($commentPreview); ?>
+                                                                                </div>
+                                                                            <?php endif; ?>
+                                                                            <?php if ($messagePreview !== ''): ?>
+                                                                                <div class="small text-muted feedback-note" title="<?= htmlspecialchars($messagePreview); ?>">
+                                                                                    Message: <?= htmlspecialchars($messagePreview); ?>
+                                                                                </div>
+                                                                            <?php endif; ?>
+                                                                        </td>
+                                                                        <td>
+                                                                            <?php if ($messageCount > 0): ?>
+                                                                                <span class="badge bg-info-subtle text-info">Message<?= $messageCount > 1 ? " ({$messageCount})" : ''; ?></span>
+                                                                            <?php endif; ?>
+                                                                            <?php if ($hasComment): ?>
+                                                                                <span class="badge bg-secondary-subtle text-secondary">Comment</span>
+                                                                            <?php endif; ?>
+                                                                            <?php if ($hasMentorInterest): ?>
+                                                                                <span class="badge bg-success-subtle text-success">Mentor interest</span>
+                                                                            <?php endif; ?>
+                                                                        </td>
+                                                                        <td class="text-end">
+                                                                            <button
+                                                                                type="button"
+                                                                                class="btn btn-sm btn-outline-success reviewer-message-btn"
+                                                                                data-bs-toggle="modal"
+                                                                                data-bs-target="#reviewerMessageModal"
+                                                                                data-assignment-id="<?= (int)($entry['assignment_id'] ?? 0); ?>"
+                                                                                data-concept-id="<?= (int)($entry['concept_id'] ?? 0); ?>"
+                                                                                data-student-id="<?= (int)($entry['student_id'] ?? 0); ?>"
+                                                                                data-reviewer-id="<?= (int)($entry['reviewer_id'] ?? 0); ?>"
+                                                                                data-reviewer-name="<?= htmlspecialchars($entry['reviewer_name'], ENT_QUOTES); ?>"
+                                                                                data-reviewer-role="<?= htmlspecialchars($roleLabel, ENT_QUOTES); ?>"
+                                                                                data-concept-title="<?= htmlspecialchars($entry['concept_title'], ENT_QUOTES); ?>"
+                                                                                data-context-label="<?= $messageCount > 0 ? 'Reviewer sent a message' : ($hasComment ? 'Reviewer left comments' : 'Reviewer interest noted'); ?>"
+                                                                            >
+                                                                                Message reviewer
+                                                                            </button>
+                                                                        </td>
+                                                                    </tr>
+                                                                <?php endforeach; ?>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
                                                 </div>
                                             <?php endif; ?>
                                         </div>
@@ -1753,11 +2039,12 @@ if ($endorsementStmt) {
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <form method="POST" class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title text-success">Message Student</h5>
+                <h5 class="modal-title text-success">Send Feedback</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
             <div class="modal-body">
                 <input type="hidden" name="send_chair_feedback" value="1">
+                <input type="hidden" name="feedback_target" id="feedbackTargetInput" value="student">
                 <input type="hidden" name="assignment_id" id="feedbackAssignmentId">
                 <input type="hidden" name="concept_id" id="feedbackConceptId">
                 <input type="hidden" name="student_id" id="feedbackStudentId">
@@ -1765,33 +2052,75 @@ if ($endorsementStmt) {
                 <input type="hidden" name="student_name" id="feedbackStudentNameInput">
                 <input type="hidden" name="concept_title" id="feedbackConceptTitleInput">
                 <div class="mb-3">
-                    <label class="form-label text-muted small" for="feedbackStudentNameDisplay">Student</label>
+                    <label class="form-label text-muted small" for="feedbackStudentNameDisplay" id="feedbackRecipientLabel">Recipient</label>
                     <input type="text" class="form-control" id="feedbackStudentNameDisplay" readonly>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label text-muted small" for="feedbackConceptTitleDisplay">Concept Title</label>
+                    <label class="form-label text-muted small" for="feedbackConceptTitleDisplay" id="feedbackTopicLabel">Concept Title</label>
                     <input type="text" class="form-control" id="feedbackConceptTitleDisplay" readonly>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label text-muted small" for="feedbackAdviserNameDisplay">Adviser</label>
+                    <label class="form-label text-muted small" for="feedbackAdviserNameDisplay" id="feedbackRoleLabel">Role</label>
                     <input type="text" class="form-control" id="feedbackAdviserNameDisplay" readonly>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label text-muted small" for="feedbackConceptRankDisplay">Rank Result</label>
+                    <label class="form-label text-muted small" for="feedbackConceptRankDisplay" id="feedbackStatusLabel">Status</label>
                     <input type="text" class="form-control" id="feedbackConceptRankDisplay" readonly>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label text-muted small" for="feedbackUpdatedDisplay">Last Updated</label>
+                    <label class="form-label text-muted small" for="feedbackUpdatedDisplay" id="feedbackUpdatedLabel">Last Updated</label>
                     <input type="text" class="form-control" id="feedbackUpdatedDisplay" readonly>
                 </div>
                 <div class="mb-3">
                     <label class="form-label fw-semibold" for="feedbackMessageTextarea">Message</label>
-                    <textarea class="form-control" name="chair_feedback_message" id="feedbackMessageTextarea" rows="4" placeholder="Congratulate the student, share reminders, or request revisions." required></textarea>
+                    <textarea class="form-control" name="chair_feedback_message" id="feedbackMessageTextarea" rows="4" placeholder="Write a concise note with next steps or guidance." required></textarea>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="submit" class="btn btn-success">Send Feedback</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="reviewerMessageModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <form method="POST" class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title text-success">Message Reviewer</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="send_reviewer_message" value="1">
+                <input type="hidden" name="assignment_id" id="reviewerMessageAssignmentId">
+                <input type="hidden" name="concept_id" id="reviewerMessageConceptId">
+                <input type="hidden" name="student_id" id="reviewerMessageStudentId">
+                <input type="hidden" name="reviewer_id" id="reviewerMessageReviewerId">
+                <div class="mb-3">
+                    <label class="form-label text-muted small" for="reviewerMessageReviewerName">Reviewer</label>
+                    <input type="text" class="form-control" id="reviewerMessageReviewerName" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted small" for="reviewerMessageReviewerRole">Role</label>
+                    <input type="text" class="form-control" id="reviewerMessageReviewerRole" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted small" for="reviewerMessageConceptTitle">Concept Title</label>
+                    <input type="text" class="form-control" id="reviewerMessageConceptTitle" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted small" for="reviewerMessageContext">Context</label>
+                    <input type="text" class="form-control" id="reviewerMessageContext" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold" for="reviewerMessageTextarea">Message</label>
+                    <textarea class="form-control" name="reviewer_message" id="reviewerMessageTextarea" rows="4" placeholder="Write a concise reply to the reviewer." required></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-success">Send Message</button>
             </div>
         </form>
     </div>
@@ -1927,9 +2256,42 @@ if ($endorsementStmt) {
 </script>
 
 <script>
-    const feedbackModal = document.getElementById('chairFeedbackModal');
+        const feedbackModal = document.getElementById('chairFeedbackModal');
     if (feedbackModal) {
         const feedbackForm = feedbackModal.querySelector('form');
+        const feedbackTargetInput = feedbackModal.querySelector('#feedbackTargetInput');
+        const recipientLabel = feedbackModal.querySelector('#feedbackRecipientLabel');
+        const topicLabel = feedbackModal.querySelector('#feedbackTopicLabel');
+        const roleLabel = feedbackModal.querySelector('#feedbackRoleLabel');
+        const statusLabelEl = feedbackModal.querySelector('#feedbackStatusLabel');
+        const updatedLabelEl = feedbackModal.querySelector('#feedbackUpdatedLabel');
+
+        const labelMap = {
+            student: {
+                recipient: 'Student',
+                topic: 'Concept Title',
+                role: 'Adviser',
+                status: 'Rank Result',
+                updated: 'Last Updated'
+            },
+            mentor: {
+                recipient: 'Reviewer',
+                topic: 'Preferred Title',
+                role: 'Reviewer Role',
+                status: 'Interest Status',
+                updated: 'Last Updated'
+            }
+        };
+
+        const applyFeedbackLabels = (target) => {
+            const labels = labelMap[target] || labelMap.student;
+            if (recipientLabel) recipientLabel.textContent = labels.recipient;
+            if (topicLabel) topicLabel.textContent = labels.topic;
+            if (roleLabel) roleLabel.textContent = labels.role;
+            if (statusLabelEl) statusLabelEl.textContent = labels.status;
+            if (updatedLabelEl) updatedLabelEl.textContent = labels.updated;
+        };
+
         const applyFeedbackDetails = (details = {}) => {
             const {
                 assignmentId = '',
@@ -1941,7 +2303,9 @@ if ($endorsementStmt) {
                 existingFeedback = '',
                 rankOrder = '',
                 adviserName = 'Not assigned',
-                updatedLabel = 'Not recorded'
+                updatedLabel = 'Not recorded',
+                feedbackTarget = 'student',
+                statusLabel = ''
             } = details;
 
             feedbackForm.dataset.currentConcept = conceptId;
@@ -1950,6 +2314,12 @@ if ($endorsementStmt) {
             feedbackForm.dataset.currentReviewer = reviewerId;
             feedbackForm.dataset.currentAdviserName = adviserName;
             feedbackForm.dataset.currentUpdated = updatedLabel;
+            feedbackForm.dataset.currentFeedbackTarget = feedbackTarget;
+
+            if (feedbackTargetInput) {
+                feedbackTargetInput.value = feedbackTarget;
+            }
+            applyFeedbackLabels(feedbackTarget);
 
             feedbackModal.querySelector('#feedbackAssignmentId').value = assignmentId;
             feedbackModal.querySelector('#feedbackConceptId').value = conceptId;
@@ -1960,12 +2330,14 @@ if ($endorsementStmt) {
             feedbackModal.querySelector('#feedbackStudentNameDisplay').value = studentName;
             feedbackModal.querySelector('#feedbackConceptTitleDisplay').value = conceptTitle;
             feedbackModal.querySelector('#feedbackAdviserNameDisplay').value = adviserName;
-            feedbackModal.querySelector('#feedbackConceptRankDisplay').value = rankOrder ? `Rank #${rankOrder}` : 'Not ranked yet';
+            feedbackModal.querySelector('#feedbackConceptRankDisplay').value = statusLabel || (rankOrder ? `Rank #${rankOrder}` : 'Not ranked yet');
             feedbackModal.querySelector('#feedbackUpdatedDisplay').value = updatedLabel || 'Not recorded';
 
             const textarea = feedbackModal.querySelector('#feedbackMessageTextarea');
             if (existingFeedback) {
                 textarea.value = existingFeedback;
+            } else if (feedbackTarget === 'mentor') {
+                textarea.value = `Hi ${studentName}, thank you for your mentoring interest in "${conceptTitle}". We'll coordinate the next steps soon.`;
             } else if (rankOrder) {
                 textarea.value = `Hi ${studentName}, your adviser marked "${conceptTitle}" as Rank #${rankOrder}. Let's continue refining this title for your research work.`;
             } else {
@@ -1987,7 +2359,9 @@ if ($endorsementStmt) {
                     existingFeedback: button.getAttribute('data-existing-feedback') || '',
                     rankOrder: button.getAttribute('data-rank-order') || '',
                     adviserName: button.getAttribute('data-adviser-name') || 'Not assigned',
-                    updatedLabel: button.getAttribute('data-updated-label') || 'Not recorded'
+                    updatedLabel: button.getAttribute('data-updated-label') || 'Not recorded',
+                    feedbackTarget: button.getAttribute('data-feedback-target') || 'student',
+                    statusLabel: button.getAttribute('data-status-label') || ''
                 };
                 applyFeedbackDetails(payload);
             });
@@ -2007,7 +2381,9 @@ if ($endorsementStmt) {
                 existingFeedback: feedbackModal.querySelector('#feedbackMessageTextarea').value || '',
                 rankOrder: (feedbackModal.querySelector('#feedbackConceptRankDisplay').value || '').replace(/\D/g, '') || '',
                 adviserName: feedbackForm.dataset.currentAdviserName || 'Not assigned',
-                updatedLabel: feedbackForm.dataset.currentUpdated || 'Not recorded'
+                updatedLabel: feedbackForm.dataset.currentUpdated || 'Not recorded',
+                feedbackTarget: feedbackForm.dataset.currentFeedbackTarget || 'student',
+                statusLabel: feedbackModal.querySelector('#feedbackConceptRankDisplay').value || ''
             });
         });
 
@@ -2016,6 +2392,52 @@ if ($endorsementStmt) {
             if (!conceptField.value && feedbackForm.dataset.currentConcept) {
                 conceptField.value = feedbackForm.dataset.currentConcept;
             }
+        });
+    }
+
+    const reviewerMessageModal = document.getElementById('reviewerMessageModal');
+    if (reviewerMessageModal) {
+        const applyReviewerMessageDetails = (details = {}) => {
+            const {
+                assignmentId = '',
+                conceptId = '',
+                studentId = '',
+                reviewerId = '',
+                reviewerName = 'Reviewer',
+                reviewerRole = 'Reviewer',
+                conceptTitle = 'Concept Title',
+                contextLabel = 'Reviewer feedback'
+            } = details;
+
+            reviewerMessageModal.querySelector('#reviewerMessageAssignmentId').value = assignmentId;
+            reviewerMessageModal.querySelector('#reviewerMessageConceptId').value = conceptId;
+            reviewerMessageModal.querySelector('#reviewerMessageStudentId').value = studentId;
+            reviewerMessageModal.querySelector('#reviewerMessageReviewerId').value = reviewerId;
+            reviewerMessageModal.querySelector('#reviewerMessageReviewerName').value = reviewerName;
+            reviewerMessageModal.querySelector('#reviewerMessageReviewerRole').value = reviewerRole;
+            reviewerMessageModal.querySelector('#reviewerMessageConceptTitle').value = conceptTitle;
+            reviewerMessageModal.querySelector('#reviewerMessageContext').value = contextLabel;
+
+            const textarea = reviewerMessageModal.querySelector('#reviewerMessageTextarea');
+            if (textarea) {
+                textarea.value = '';
+            }
+        };
+
+        document.querySelectorAll('.reviewer-message-btn').forEach((button) => {
+            button.addEventListener('click', () => {
+                const payload = {
+                    assignmentId: button.getAttribute('data-assignment-id') || '',
+                    conceptId: button.getAttribute('data-concept-id') || '',
+                    studentId: button.getAttribute('data-student-id') || '',
+                    reviewerId: button.getAttribute('data-reviewer-id') || '',
+                    reviewerName: button.getAttribute('data-reviewer-name') || 'Reviewer',
+                    reviewerRole: button.getAttribute('data-reviewer-role') || 'Reviewer',
+                    conceptTitle: button.getAttribute('data-concept-title') || 'Concept Title',
+                    contextLabel: button.getAttribute('data-context-label') || 'Reviewer feedback'
+                };
+                applyReviewerMessageDetails(payload);
+            });
         });
     }
 
