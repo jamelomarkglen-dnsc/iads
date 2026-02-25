@@ -317,6 +317,50 @@ body.sidebar-collapsed .dashboard-shell {
     overflow: hidden;
 }
 
+.reviewer-thread-shell {
+    border: 1px solid rgba(38, 50, 56, 0.12);
+    border-radius: 0.75rem;
+    background: #f8faf9;
+    padding: 0.75rem;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.reviewer-thread {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.reviewer-thread-msg {
+    border: 1px solid rgba(38, 50, 56, 0.12);
+    border-radius: 0.7rem;
+    background: #fff;
+    padding: 0.5rem 0.6rem;
+}
+
+.reviewer-thread-msg.is-reviewer {
+    border-color: rgba(24, 90, 188, 0.2);
+    background: #f7f9ff;
+}
+
+.reviewer-thread-meta {
+    font-size: 0.75rem;
+    color: #6b7c85;
+    margin-bottom: 0.25rem;
+}
+
+.reviewer-thread-body {
+    font-size: 0.9rem;
+    color: #263238;
+}
+
+.reviewer-thread-empty {
+    text-align: center;
+    color: #6c757d;
+    font-size: 0.85rem;
+    padding: 0.5rem 0;
+}
+
 .role-switch-columns {
     display: flex;
     flex-direction: column;

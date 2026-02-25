@@ -1602,9 +1602,37 @@ if ($endorsementStmt) {
                                                                                 data-reviewer-role="<?= htmlspecialchars($roleLabel, ENT_QUOTES); ?>"
                                                                                 data-concept-title="<?= htmlspecialchars($entry['concept_title'], ENT_QUOTES); ?>"
                                                                                 data-context-label="<?= $messageCount > 0 ? 'Reviewer sent a message' : ($hasComment ? 'Reviewer left comments' : 'Reviewer interest noted'); ?>"
+                                                                                data-thread-target="reviewerThread<?= (int)($entry['assignment_id'] ?? 0); ?>"
                                                                             >
                                                                                 Message reviewer
                                                                             </button>
+                                                                            <template id="reviewerThread<?= (int)($entry['assignment_id'] ?? 0); ?>">
+                                                                                <div class="reviewer-thread">
+                                                                                    <?php $threadMessages = $conversationLookup[(int)($entry['assignment_id'] ?? 0)] ?? []; ?>
+                                                                                    <?php if (empty($threadMessages)): ?>
+                                                                                        <div class="reviewer-thread-empty">No messages yet.</div>
+                                                                                    <?php else: ?>
+                                                                                        <?php foreach ($threadMessages as $threadMessage): ?>
+                                                                                            <?php
+                                                                                                $senderId = (int)($threadMessage['sender_id'] ?? 0);
+                                                                                                $isReviewerMessage = $senderId === (int)($entry['reviewer_id'] ?? 0);
+                                                                                                $senderName = trim((string)($threadMessage['sender_name'] ?? ''));
+                                                                                                if ($senderName === '') {
+                                                                                                    $senderName = $isReviewerMessage ? 'Reviewer' : 'Program Chair';
+                                                                                                }
+                                                                                                $createdAt = $threadMessage['created_at'] ?? '';
+                                                                                                $createdLabel = $createdAt ? date('M j, Y g:i A', strtotime($createdAt)) : 'Not recorded';
+                                                                                            ?>
+                                                                                            <div class="reviewer-thread-msg<?= $isReviewerMessage ? ' is-reviewer' : ''; ?>">
+                                                                                                <div class="reviewer-thread-meta">
+                                                                                                    <?= htmlspecialchars($senderName); ?> &middot; <?= htmlspecialchars($createdLabel); ?>
+                                                                                                </div>
+                                                                                                <div class="reviewer-thread-body"><?= nl2br(htmlspecialchars((string)($threadMessage['message'] ?? ''))); ?></div>
+                                                                                            </div>
+                                                                                        <?php endforeach; ?>
+                                                                                    <?php endif; ?>
+                                                                                </div>
+                                                                            </template>
                                                                         </td>
                                                                     </tr>
                                                                 <?php endforeach; ?>
@@ -2114,6 +2142,10 @@ if ($endorsementStmt) {
                     <input type="text" class="form-control" id="reviewerMessageContext" readonly>
                 </div>
                 <div class="mb-3">
+                    <label class="form-label text-muted small" for="reviewerMessageThread">Conversation</label>
+                    <div class="reviewer-thread-shell" id="reviewerMessageThread"></div>
+                </div>
+                <div class="mb-3">
                     <label class="form-label fw-semibold" for="reviewerMessageTextarea">Message</label>
                     <textarea class="form-control" name="reviewer_message" id="reviewerMessageTextarea" rows="4" placeholder="Write a concise reply to the reviewer." required></textarea>
                 </div>
@@ -2406,7 +2438,8 @@ if ($endorsementStmt) {
                 reviewerName = 'Reviewer',
                 reviewerRole = 'Reviewer',
                 conceptTitle = 'Concept Title',
-                contextLabel = 'Reviewer feedback'
+                contextLabel = 'Reviewer feedback',
+                threadTarget = ''
             } = details;
 
             reviewerMessageModal.querySelector('#reviewerMessageAssignmentId').value = assignmentId;
@@ -2417,6 +2450,16 @@ if ($endorsementStmt) {
             reviewerMessageModal.querySelector('#reviewerMessageReviewerRole').value = reviewerRole;
             reviewerMessageModal.querySelector('#reviewerMessageConceptTitle').value = conceptTitle;
             reviewerMessageModal.querySelector('#reviewerMessageContext').value = contextLabel;
+
+            const threadContainer = reviewerMessageModal.querySelector('#reviewerMessageThread');
+            if (threadContainer) {
+                if (threadTarget) {
+                    const template = document.getElementById(threadTarget);
+                    threadContainer.innerHTML = template ? template.innerHTML : '<div class="reviewer-thread-empty">No messages yet.</div>';
+                } else {
+                    threadContainer.innerHTML = '<div class="reviewer-thread-empty">No messages yet.</div>';
+                }
+            }
 
             const textarea = reviewerMessageModal.querySelector('#reviewerMessageTextarea');
             if (textarea) {
@@ -2434,7 +2477,8 @@ if ($endorsementStmt) {
                     reviewerName: button.getAttribute('data-reviewer-name') || 'Reviewer',
                     reviewerRole: button.getAttribute('data-reviewer-role') || 'Reviewer',
                     conceptTitle: button.getAttribute('data-concept-title') || 'Concept Title',
-                    contextLabel: button.getAttribute('data-context-label') || 'Reviewer feedback'
+                    contextLabel: button.getAttribute('data-context-label') || 'Reviewer feedback',
+                    threadTarget: button.getAttribute('data-thread-target') || ''
                 };
                 applyReviewerMessageDetails(payload);
             });
