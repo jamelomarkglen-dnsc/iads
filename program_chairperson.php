@@ -1114,15 +1114,6 @@ if ($endorsementStmt) {
                         <?php else: ?>
                             <div class="ranking-board-shell">
                                 <div class="ranking-board-list">
-                                    <div class="ranking-board-tools">
-                                        <select class="form-select form-select-sm" data-ranking-filter>
-                                            <option value="all">All</option>
-                                            <option value="complete">Ready for final pick</option>
-                                            <option value="in_progress">In progress</option>
-                                            <option value="waiting">Waiting</option>
-                                            <option value="unassigned">No assignments</option>
-                                        </select>
-                                    </div>
                                     <div class="list-group ranking-student-list" data-ranking-list>
                                         <?php foreach ($activeRankingBoards as $board): ?>
                                             <?php
@@ -1847,9 +1838,6 @@ if ($endorsementStmt) {
         const list = document.querySelector('[data-ranking-list]');
         const panels = Array.from(document.querySelectorAll('[data-ranking-detail]'));
         const emptyState = document.querySelector('[data-ranking-empty]');
-        const searchInput = document.querySelector('[data-ranking-search]');
-        const filterSelect = document.querySelector('[data-ranking-filter]');
-
         if (!list || panels.length === 0) {
             return;
         }
@@ -1916,33 +1904,9 @@ if ($endorsementStmt) {
             }
         };
 
-        const applyFilters = () => {
-            const query = (searchInput?.value || '').trim().toLowerCase();
-            const status = filterSelect?.value || 'all';
-            items.forEach((item) => {
-                const searchKey = (item.dataset.search || '').toLowerCase();
-                const itemStatus = item.dataset.status || 'all';
-                const matchesQuery = !query || searchKey.includes(query);
-                const matchesStatus = status === 'all' || itemStatus === status;
-                item.classList.toggle('d-none', !(matchesQuery && matchesStatus));
-            });
-
-            const activeVisible = items.find((item) => item.classList.contains('active') && !item.classList.contains('d-none'));
-            if (!activeVisible) {
-                selectFirstVisible();
-            }
-        };
-
         items.forEach((item) => {
             item.addEventListener('click', () => handleSelect(item));
         });
-
-        if (searchInput) {
-            searchInput.addEventListener('input', applyFilters);
-        }
-        if (filterSelect) {
-            filterSelect.addEventListener('change', applyFilters);
-        }
 
         selectFirstVisible();
     })();
