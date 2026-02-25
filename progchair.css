@@ -180,8 +180,10 @@ body.sidebar-collapsed .dashboard-shell {
     border-bottom: none;
 }
 
-.ranking-student-item.active {
-    background: transparent;
+.ranking-student-item.active,
+.ranking-student-item.is-active {
+    background-color: #fff !important;
+    color: inherit !important;
     border-left: 4px solid #16562c;
 }
 

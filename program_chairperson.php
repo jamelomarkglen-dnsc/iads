@@ -576,17 +576,31 @@ if ($rankingResult) {
 $rankingProgress = [];
 $progressSql = "
     SELECT
-        cra.student_id,
-        COUNT(DISTINCT cra.id) AS total_assignments,
-        COUNT(DISTINCT CASE WHEN cr.rank_order IN (1,2,3) OR (cr.rank_order IS NULL AND cr.is_preferred = 1) THEN cra.id END) AS ranked_assignments
-    FROM concept_reviewer_assignments cra
-    LEFT JOIN concept_reviews cr ON cr.assignment_id = cra.id
-    JOIN users u ON u.id = cra.student_id
+        reviewer_progress.student_id,
+        COUNT(DISTINCT reviewer_progress.reviewer_id) AS total_assignments,
+        COUNT(DISTINCT CASE WHEN reviewer_progress.reviewer_complete = 1 THEN reviewer_progress.reviewer_id END) AS ranked_assignments
+    FROM (
+        SELECT
+            cra.student_id,
+            cra.reviewer_id,
+            COUNT(DISTINCT cra.id) AS total_review_assignments,
+            COUNT(DISTINCT CASE WHEN cr.rank_order IN (1,2,3) OR (cr.rank_order IS NULL AND cr.is_preferred = 1) THEN cra.id END) AS ranked_review_assignments,
+            CASE
+                WHEN COUNT(DISTINCT cra.id) > 0
+                 AND COUNT(DISTINCT CASE WHEN cr.rank_order IN (1,2,3) OR (cr.rank_order IS NULL AND cr.is_preferred = 1) THEN cra.id END) >= COUNT(DISTINCT cra.id)
+                THEN 1 ELSE 0 END AS reviewer_complete
+        FROM concept_reviewer_assignments cra
+        LEFT JOIN concept_reviews cr ON cr.assignment_id = cra.id
+        JOIN users u ON u.id = cra.student_id
 ";
 if ($conceptScopeWhere !== '') {
     $progressSql .= " WHERE ({$conceptScopeWhere} OR cra.assigned_by = {$programChairId})\n";
 }
-$progressSql .= " GROUP BY cra.student_id";
+$progressSql .= "
+        GROUP BY cra.student_id, cra.reviewer_id
+    ) AS reviewer_progress
+    GROUP BY reviewer_progress.student_id
+";
 $progressResult = $conn->query($progressSql);
 if ($progressResult) {
     while ($row = $progressResult->fetch_assoc()) {
@@ -1121,7 +1135,7 @@ if ($endorsementStmt) {
                                                 $totalAssignments = (int)($board['total_assignments'] ?? 0);
                                                 $rankingComplete = !empty($board['ranking_complete']);
                                                 $progressLabel = $totalAssignments > 0
-                                                    ? "Ranked {$rankedAssignments} of {$totalAssignments}"
+                                                    ? "Ranked {$rankedAssignments} of {$totalAssignments} reviewers"
                                                     : "No reviewer assignments yet";
                                                 if ($totalAssignments <= 0) {
                                                     $statusKey = 'unassigned';
@@ -1175,7 +1189,7 @@ if ($endorsementStmt) {
                                             $totalAssignments = (int)($board['total_assignments'] ?? 0);
                                             $rankingComplete = !empty($board['ranking_complete']);
                                             $progressLabel = $totalAssignments > 0
-                                                ? "Ranked {$rankedAssignments} of {$totalAssignments} reviews"
+                                                ? "Ranked {$rankedAssignments} of {$totalAssignments} reviewers"
                                                 : "No reviewer assignments yet";
                                             $progressClass = $rankingComplete ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning';
                                             $recommendationClass = $rankingComplete
@@ -1467,7 +1481,7 @@ if ($endorsementStmt) {
                                                 $totalAssignments = (int)($pick['total_assignments'] ?? 0);
                                                 if (!$rankingComplete) {
                                                     $statusLabel = $totalAssignments > 0
-                                                        ? "Awaiting rankings ({$rankedAssignments}/{$totalAssignments})"
+                                                        ? "Awaiting rankings ({$rankedAssignments}/{$totalAssignments} reviewers)"
                                                         : 'Awaiting rankings';
                                                     $statusClass = 'bg-warning-subtle text-warning';
                                                 } else {
@@ -1499,7 +1513,7 @@ if ($endorsementStmt) {
                                                     <?php else: ?>
                                                         <div class="fw-semibold text-muted">Awaiting final ranking</div>
                                                         <?php if ($totalAssignments > 0): ?>
-                                                            <small class="text-muted">Ranked <?= number_format($rankedAssignments); ?> of <?= number_format($totalAssignments); ?> reviews</small>
+                                                            <small class="text-muted">Ranked <?= number_format($rankedAssignments); ?> of <?= number_format($totalAssignments); ?> reviewers</small>
                                                         <?php endif; ?>
                                                     <?php endif; ?>
                                                 </td>
@@ -1860,9 +1874,9 @@ if ($endorsementStmt) {
         };
 
         const setActiveItem = (item) => {
-            items.forEach((entry) => entry.classList.remove('active'));
+            items.forEach((entry) => entry.classList.remove('is-active'));
             if (item) {
-                item.classList.add('active');
+                item.classList.add('is-active');
             }
         };
 
