@@ -782,7 +782,39 @@ $completedRankingBoards = array_values(array_filter(
     static fn($board) => !empty($finalPickSentLookup[(int)($board['student_id'] ?? 0)])
 ));
 
-$completedTotal = count($completedRankingBoards);
+$completedRange = $_GET['completed_range'] ?? 'all';
+$completedFilterStart = null;
+switch ($completedRange) {
+    case '7d':
+        $completedFilterStart = strtotime('-7 days');
+        break;
+    case '30d':
+        $completedFilterStart = strtotime('-30 days');
+        break;
+    case '90d':
+        $completedFilterStart = strtotime('-90 days');
+        break;
+    default:
+        $completedRange = 'all';
+        break;
+}
+
+$completedFilteredBoards = array_values(array_filter(
+    $completedRankingBoards,
+    static function ($board) use ($finalPickSentLookup, $completedFilterStart) {
+        if ($completedFilterStart === null) {
+            return true;
+        }
+        $studentId = (int)($board['student_id'] ?? 0);
+        $sentAt = $finalPickSentLookup[$studentId]['sent_at'] ?? null;
+        if (!$sentAt) {
+            return false;
+        }
+        return strtotime((string)$sentAt) >= $completedFilterStart;
+    }
+));
+
+$completedTotal = count($completedFilteredBoards);
 $completedPerPage = 12;
 $completedPages = max(1, (int)ceil($completedTotal / $completedPerPage));
 $completedPage = max(1, (int)($_GET['completed_page'] ?? 1));
@@ -790,7 +822,7 @@ if ($completedPage > $completedPages) {
     $completedPage = $completedPages;
 }
 $completedOffset = ($completedPage - 1) * $completedPerPage;
-$completedDirectoryPage = array_slice($completedRankingBoards, $completedOffset, $completedPerPage);
+$completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset, $completedPerPage);
 
 $finalPickHighlights = [];
 foreach ($activeRankingBoards as $board) {
@@ -1365,8 +1397,10 @@ if ($endorsementStmt) {
                             <span class="badge bg-success-subtle text-success"><?= number_format(count($completedRankingBoards)); ?> total</span>
                         </div>
                         <div class="card-body">
-                            <?php if (empty($completedRankingBoards)): ?>
-                                <p class="text-muted mb-0">No finalized rankings yet.</p>
+                            <?php if ($completedTotal === 0): ?>
+                                <p class="text-muted mb-0">
+                                    <?= empty($completedRankingBoards) ? 'No finalized rankings yet.' : 'No finalized rankings match this filter.'; ?>
+                                </p>
                             <?php else: ?>
                                 <div class="ranking-board-shell ranking-board-shell--compact">
                                     <div class="ranking-board-list">
@@ -1375,6 +1409,19 @@ if ($endorsementStmt) {
                                                 <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
                                                 <input type="text" class="form-control" placeholder="Search student" data-directory-search>
                                             </div>
+                                            <form method="GET" class="d-flex gap-2 align-items-center">
+                                                <?php foreach ($_GET as $key => $value): ?>
+                                                    <?php if (in_array($key, ['completed_range', 'completed_page'], true)) { continue; } ?>
+                                                    <input type="hidden" name="<?= htmlspecialchars($key); ?>" value="<?= htmlspecialchars((string)$value, ENT_QUOTES); ?>">
+                                                <?php endforeach; ?>
+                                                <input type="hidden" name="completed_page" value="1">
+                                                <select class="form-select form-select-sm" name="completed_range" onchange="this.form.submit()">
+                                                    <option value="all" <?= $completedRange === 'all' ? 'selected' : ''; ?>>All time</option>
+                                                    <option value="7d" <?= $completedRange === '7d' ? 'selected' : ''; ?>>Last 7 days</option>
+                                                    <option value="30d" <?= $completedRange === '30d' ? 'selected' : ''; ?>>Last 30 days</option>
+                                                    <option value="90d" <?= $completedRange === '90d' ? 'selected' : ''; ?>>Last 90 days</option>
+                                                </select>
+                                            </form>
                                         </div>
                                         <div class="list-group ranking-student-list" data-directory-list>
                                             <?php foreach ($completedDirectoryPage as $board): ?>
