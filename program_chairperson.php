@@ -1618,14 +1618,41 @@ if ($endorsementStmt) {
                                                                                                 $isReviewerMessage = $senderId === (int)($entry['reviewer_id'] ?? 0);
                                                                                                 $senderName = trim((string)($threadMessage['sender_name'] ?? ''));
                                                                                                 if ($senderName === '') {
-                                                                                                    $senderName = $isReviewerMessage ? 'Reviewer' : 'Program Chair';
+                                                                                                    $senderName = $isReviewerMessage ? ($entry['reviewer_name'] ?? 'Reviewer') : 'Program Chairperson';
                                                                                                 }
+                                                                                                $reviewerRoleLabel = trim(str_replace('_', ' ', (string)($entry['reviewer_role'] ?? 'Reviewer')));
+                                                                                                if ($reviewerRoleLabel === '') {
+                                                                                                    $reviewerRoleLabel = 'Reviewer';
+                                                                                                }
+                                                                                                $roleLabelMap = [
+                                                                                                    'faculty' => 'Faculty Reviewer',
+                                                                                                    'panel' => 'Panel Reviewer',
+                                                                                                    'committee chair' => 'Committee Chair',
+                                                                                                    'committee chairperson' => 'Committee Chair',
+                                                                                                    'adviser' => 'Adviser',
+                                                                                                ];
+                                                                                                $reviewerRoleLabel = $roleLabelMap[$reviewerRoleLabel] ?? $reviewerRoleLabel;
+                                                                                                $senderRoleRaw = strtolower(trim((string)($threadMessage['sender_role'] ?? '')));
+                                                                                                $isChairMessage = ($senderRoleRaw === 'program_chairperson') || ($senderId === (int)$programChairId);
+                                                                                                $roleBadge = $isChairMessage ? 'Chair' : $reviewerRoleLabel;
+                                                                                                $bubbleStyle = $isChairMessage
+                                                                                                    ? 'border:1px solid rgba(22,86,44,0.25); background:#f7fbf8;'
+                                                                                                    : 'border:1px solid rgba(24,90,188,0.25); background:#f7f9ff;';
+                                                                                                $roleStyle = $isChairMessage
+                                                                                                    ? 'background:rgba(22,86,44,0.12); color:#16562c;'
+                                                                                                    : 'background:rgba(24,90,188,0.12); color:#185abc;';
                                                                                                 $createdAt = $threadMessage['created_at'] ?? '';
                                                                                                 $createdLabel = $createdAt ? date('M j, Y g:i A', strtotime($createdAt)) : 'Not recorded';
                                                                                             ?>
-                                                                                            <div class="reviewer-thread-msg<?= $isReviewerMessage ? ' is-reviewer' : ''; ?>">
+                                                                                            <div class="reviewer-thread-msg<?= $isChairMessage ? ' is-chair' : ' is-reviewer'; ?>" style="<?= $bubbleStyle; ?>">
                                                                                                 <div class="reviewer-thread-meta">
-                                                                                                    <?= htmlspecialchars($senderName); ?> &middot; <?= htmlspecialchars($createdLabel); ?>
+                                                                                                    <span class="reviewer-thread-name"><?= htmlspecialchars($senderName); ?></span>
+                                                                                                    <span class="reviewer-thread-sep">&middot;</span>
+                                                                                                    <span class="reviewer-thread-role <?= $isChairMessage ? 'chair' : 'reviewer'; ?>" style="display:inline-block; padding:2px 8px; border-radius:999px; font-size:0.7rem; <?= $roleStyle; ?>">
+                                                                                                        <?= htmlspecialchars($roleBadge); ?>
+                                                                                                    </span>
+                                                                                                    <span class="reviewer-thread-sep">&middot;</span>
+                                                                                                    <span class="reviewer-thread-time"><?= htmlspecialchars($createdLabel); ?></span>
                                                                                                 </div>
                                                                                                 <div class="reviewer-thread-body"><?= nl2br(htmlspecialchars((string)($threadMessage['message'] ?? ''))); ?></div>
                                                                                             </div>
