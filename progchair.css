@@ -361,6 +361,26 @@ body.sidebar-collapsed .dashboard-shell {
     padding: 0.5rem 0;
 }
 
+.reviewer-message-modal {
+    width: 720px;
+    max-width: calc(100vw - 2rem);
+}
+
+@media (max-width: 820px) {
+    .reviewer-message-modal {
+        width: 100%;
+    }
+}
+
+.reviewer-message-modal .modal-content {
+    height: 72vh;
+    max-height: 72vh;
+}
+
+.reviewer-message-body {
+    overflow-y: auto;
+}
+
 .role-switch-columns {
     display: flex;
     flex-direction: column;

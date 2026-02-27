@@ -2113,13 +2113,13 @@ if ($endorsementStmt) {
 </div>
 
 <div class="modal fade" id="reviewerMessageModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable reviewer-message-modal">
         <form method="POST" class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title text-success">Message Reviewer</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body reviewer-message-body">
                 <input type="hidden" name="send_reviewer_message" value="1">
                 <input type="hidden" name="assignment_id" id="reviewerMessageAssignmentId">
                 <input type="hidden" name="concept_id" id="reviewerMessageConceptId">
