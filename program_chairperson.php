@@ -1757,7 +1757,7 @@ if ($endorsementStmt) {
                                                         $statusLabel = $finalStatus;
                                                         $statusClass = finalConceptStatusClass($finalStatus);
                                                     } else {
-                                                        $statusLabel = 'Ready for final submission';
+                                                        $statusLabel = 'Recommended';
                                                         $statusClass = 'bg-info-subtle text-info';
                                                     }
                                                 }
