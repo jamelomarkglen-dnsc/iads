@@ -1736,7 +1736,6 @@ if ($endorsementStmt) {
                                             <th>Student</th>
                                             <th>Email</th>
                                             <th>Final Pick Title</th>
-                                            <th class="text-center">Final Pick Basis</th>
                                             <th>Status</th>
                                             <th></th>
                                         </tr>
@@ -1783,15 +1782,6 @@ if ($endorsementStmt) {
                                                         <?php if ($totalAssignments > 0): ?>
                                                             <small class="text-muted">Ranked <?= number_format($rankedAssignments); ?> of <?= number_format($totalAssignments); ?> reviewers</small>
                                                         <?php endif; ?>
-                                                    <?php endif; ?>
-                                                </td>
-                                                <td class="text-center">
-                                                    <?php if ($rankingComplete): ?>
-                                                        <span class="badge bg-success-subtle text-success">R1: <?= number_format($pick['rank_one']); ?></span>
-                                                        <span class="badge bg-info-subtle text-info">R2: <?= number_format($pick['rank_two']); ?></span>
-                                                        <span class="badge bg-secondary-subtle text-secondary">R3: <?= number_format($pick['rank_three']); ?></span>
-                                                    <?php else: ?>
-                                                        <span class="text-muted">Pending</span>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
@@ -2141,10 +2131,6 @@ if ($endorsementStmt) {
                     <input type="text" class="form-control" id="finalPickTitleDisplay" readonly>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label text-muted small" for="finalPickBasisDisplay">Final Pick Basis</label>
-                    <input type="text" class="form-control" id="finalPickBasisDisplay" readonly>
-                </div>
-                <div class="mb-3">
                     <label class="form-label text-muted small" for="finalPickTieDisplay">Tie on Rank 1</label>
                     <input type="text" class="form-control" id="finalPickTieDisplay" readonly>
                 </div>
@@ -2476,7 +2462,6 @@ if ($endorsementStmt) {
             finalPickModal.querySelector('#finalPickStudentNameDisplay').value = studentName;
             finalPickModal.querySelector('#finalPickStudentEmailDisplay').value = studentEmail;
             finalPickModal.querySelector('#finalPickTitleDisplay').value = finalTitle;
-            finalPickModal.querySelector('#finalPickBasisDisplay').value = `R1: ${rankOne} | R2: ${rankTwo} | R3: ${rankThree}`;
             finalPickModal.querySelector('#finalPickTieDisplay').value = hasTie === '1' ? 'Yes' : 'No';
 
             const textarea = finalPickModal.querySelector('#finalPickMessageTextarea');
