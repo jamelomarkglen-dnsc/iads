@@ -1740,7 +1740,7 @@ if ($endorsementStmt) {
                                         <tr>
                                             <th>Student</th>
                                             <th>Email</th>
-                                            <th>Final Pick Title</th>
+                                            <th>Title</th>
                                             <th>Status</th>
                                             <th></th>
                                         </tr>
@@ -2132,7 +2132,7 @@ if ($endorsementStmt) {
                     <input type="text" class="form-control" id="finalPickStudentEmailDisplay" readonly>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label text-muted small" for="finalPickTitleDisplay">Final Pick Title</label>
+                    <label class="form-label text-muted small" for="finalPickTitleDisplay">Title</label>
                     <input type="text" class="form-control" id="finalPickTitleDisplay" readonly>
                 </div>
                 <div class="mb-3">
@@ -2470,7 +2470,7 @@ if ($endorsementStmt) {
             finalPickModal.querySelector('#finalPickTieDisplay').value = hasTie === '1' ? 'Yes' : 'No';
 
             const textarea = finalPickModal.querySelector('#finalPickMessageTextarea');
-            textarea.value = `Hi ${studentName}, based on the concept ranking board, the recommended title to pursue is "${finalTitle}". Rank breakdown: R1 ${rankOne}, R2 ${rankTwo}, R3 ${rankThree}. Please proceed with this title for your final submission.`;
+            textarea.value = `Hi ${studentName}, based on the concept ranking board, the recommended title to pursue is "${finalTitle}". Rank breakdown: Rank 1 votes: ${rankOne}, Rank 2 votes: ${rankTwo}, Rank 3 votes: ${rankThree}. Your title is recommended.`;
         };
 
         document.querySelectorAll('.final-pick-btn').forEach((button) => {
