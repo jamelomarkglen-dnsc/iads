@@ -144,7 +144,7 @@ body.sidebar-collapsed .dashboard-shell {
 
 .ranking-board-shell {
     display: grid;
-    grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+    grid-template-columns: 1fr;
     gap: 1.25rem;
     align-items: start;
 }

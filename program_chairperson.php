@@ -1146,7 +1146,7 @@ if ($endorsementStmt) {
     <title>Program Chairperson Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="progchair.css">
+    <link rel="stylesheet" href="progchair.css?v=20260301">
 </head>
 <body class="bg-light program-chair-layout">
 <?php include 'header.php'; ?>
@@ -1154,6 +1154,11 @@ if ($endorsementStmt) {
 <?php include 'sidebar.php'; ?>
 
 <main class="content dashboard-content" role="main">
+    <style>
+        .ranking-board-shell {
+            grid-template-columns: 1fr !important;
+        }
+    </style>
     <div class="container-fluid py-4">
         <div class="mb-4">
             <h1 class="h4 fw-semibold text-success mb-1">Program Chairperson Dashboard</h1>
