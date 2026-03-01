@@ -943,6 +943,10 @@ foreach ($activeRankingBoards as $board) {
     $rankedAssignments = (int)($board['ranked_assignments'] ?? 0);
     $rankingComplete = $totalAssignments > 0 && $rankedAssignments >= $totalAssignments;
 
+    $rankedConceptTitles = array_values(array_filter(array_map(
+        static fn($concept) => trim((string)($concept['title'] ?? '')),
+        array_slice($board['concepts'] ?? [], 0, 3)
+    )));
     $finalPickHighlights[] = [
         'student_id' => (int)($board['student_id'] ?? 0),
         'student_name' => $board['student_name'] ?? 'Student',
@@ -952,6 +956,9 @@ foreach ($activeRankingBoards as $board) {
         'rank_one' => $rankingComplete ? (int)($board['final_concept']['rank_one'] ?? 0) : 0,
         'rank_two' => $rankingComplete ? (int)($board['final_concept']['rank_two'] ?? 0) : 0,
         'rank_three' => $rankingComplete ? (int)($board['final_concept']['rank_three'] ?? 0) : 0,
+        'rank_one_title' => $rankingComplete ? ($rankedConceptTitles[0] ?? '') : '',
+        'rank_two_title' => $rankingComplete ? ($rankedConceptTitles[1] ?? '') : '',
+        'rank_three_title' => $rankingComplete ? ($rankedConceptTitles[2] ?? '') : '',
         'has_tie_on_top' => $rankingComplete && !empty($board['has_tie_on_top']),
         'ranking_complete' => $rankingComplete,
         'ranked_assignments' => $rankedAssignments,
@@ -1807,6 +1814,9 @@ if ($endorsementStmt) {
                                                             data-rank-one="<?= (int)$pick['rank_one']; ?>"
                                                             data-rank-two="<?= (int)$pick['rank_two']; ?>"
                                                             data-rank-three="<?= (int)$pick['rank_three']; ?>"
+                                                            data-rank-one-title="<?= htmlspecialchars($pick['rank_one_title'] ?? '', ENT_QUOTES); ?>"
+                                                            data-rank-two-title="<?= htmlspecialchars($pick['rank_two_title'] ?? '', ENT_QUOTES); ?>"
+                                                            data-rank-three-title="<?= htmlspecialchars($pick['rank_three_title'] ?? '', ENT_QUOTES); ?>"
                                                             data-has-tie="<?= !empty($pick['has_tie_on_top']) ? '1' : '0'; ?>"
                                                         >
                                                             Message student
@@ -2443,6 +2453,9 @@ if ($endorsementStmt) {
                 rankOne = '0',
                 rankTwo = '0',
                 rankThree = '0',
+                rankOneTitle = '',
+                rankTwoTitle = '',
+                rankThreeTitle = '',
                 hasTie = '0'
             } = details;
 
@@ -2454,6 +2467,9 @@ if ($endorsementStmt) {
             finalPickForm.dataset.currentRankOne = rankOne;
             finalPickForm.dataset.currentRankTwo = rankTwo;
             finalPickForm.dataset.currentRankThree = rankThree;
+            finalPickForm.dataset.currentRankOneTitle = rankOneTitle;
+            finalPickForm.dataset.currentRankTwoTitle = rankTwoTitle;
+            finalPickForm.dataset.currentRankThreeTitle = rankThreeTitle;
             finalPickForm.dataset.currentHasTie = hasTie;
 
             finalPickModal.querySelector('#finalPickStudentId').value = studentId;
@@ -2470,7 +2486,11 @@ if ($endorsementStmt) {
             finalPickModal.querySelector('#finalPickTieDisplay').value = hasTie === '1' ? 'Yes' : 'No';
 
             const textarea = finalPickModal.querySelector('#finalPickMessageTextarea');
-            textarea.value = `Hi ${studentName}, based on the concept ranking board, the recommended title to pursue is "${finalTitle}". Rank breakdown: Rank 1 votes: ${rankOne}, Rank 2 votes: ${rankTwo}, Rank 3 votes: ${rankThree}. Your title is recommended.`;
+            const normalizeRankTitle = (value) => (value && value.trim() ? value : 'Not ranked yet');
+            const rankOneLabel = normalizeRankTitle(rankOneTitle);
+            const rankTwoLabel = normalizeRankTitle(rankTwoTitle);
+            const rankThreeLabel = normalizeRankTitle(rankThreeTitle);
+            textarea.value = `Hi ${studentName}, based on the concept ranking board, the recommended title to pursue is "${finalTitle}". Ranked titles: Rank 1 — ${rankOneLabel}, Rank 2 — ${rankTwoLabel}, Rank 3 — ${rankThreeLabel}. Your title is recommended.`;
         };
 
         document.querySelectorAll('.final-pick-btn').forEach((button) => {
@@ -2484,6 +2504,9 @@ if ($endorsementStmt) {
                     rankOne: button.getAttribute('data-rank-one') || '0',
                     rankTwo: button.getAttribute('data-rank-two') || '0',
                     rankThree: button.getAttribute('data-rank-three') || '0',
+                    rankOneTitle: button.getAttribute('data-rank-one-title') || '',
+                    rankTwoTitle: button.getAttribute('data-rank-two-title') || '',
+                    rankThreeTitle: button.getAttribute('data-rank-three-title') || '',
                     hasTie: button.getAttribute('data-has-tie') || '0'
                 };
                 applyFinalPickDetails(payload);
@@ -2503,6 +2526,9 @@ if ($endorsementStmt) {
                 rankOne: finalPickForm.dataset.currentRankOne || '0',
                 rankTwo: finalPickForm.dataset.currentRankTwo || '0',
                 rankThree: finalPickForm.dataset.currentRankThree || '0',
+                rankOneTitle: finalPickForm.dataset.currentRankOneTitle || '',
+                rankTwoTitle: finalPickForm.dataset.currentRankTwoTitle || '',
+                rankThreeTitle: finalPickForm.dataset.currentRankThreeTitle || '',
                 hasTie: finalPickForm.dataset.currentHasTie || '0'
             });
         });
