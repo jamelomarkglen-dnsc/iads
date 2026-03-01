@@ -2486,7 +2486,7 @@ if ($endorsementStmt) {
             finalPickModal.querySelector('#finalPickTieDisplay').value = hasTie === '1' ? 'Yes' : 'No';
 
             const textarea = finalPickModal.querySelector('#finalPickMessageTextarea');
-            const normalizeRankTitle = (value) => (value && value.trim() ? value : 'Not ranked yet');
+            const normalizeRankTitle = (value) => (value && value.trim() ? value : 'No additional ranked title available');
             const rankOneLabel = normalizeRankTitle(rankOneTitle);
             const rankTwoLabel = normalizeRankTitle(rankTwoTitle);
             const rankThreeLabel = normalizeRankTitle(rankThreeTitle);
