@@ -287,6 +287,31 @@ if ($finalPickMessageStmt) {
     }
     $finalPickMessageStmt->close();
 }
+
+$hasFinalPickRecommendation = !empty($latestFinalPickMessage);
+$latestFinalPickAt = $hasFinalPickRecommendation ? ($latestFinalPickMessage['created_at'] ?? null) : null;
+$hasFinalPickMessageTable = columnExists($conn, 'final_pick_messages', 'id');
+if ($hasFinalPickMessageTable) {
+    $finalPickInfoStmt = $conn->prepare("
+        SELECT sent_at
+        FROM final_pick_messages
+        WHERE student_id = ?
+        ORDER BY sent_at DESC
+        LIMIT 1
+    ");
+    if ($finalPickInfoStmt) {
+        $finalPickInfoStmt->bind_param('i', $studentId);
+        if ($finalPickInfoStmt->execute()) {
+            $finalPickInfoResult = $finalPickInfoStmt->get_result();
+            $finalPickInfoRow = $finalPickInfoResult ? $finalPickInfoResult->fetch_assoc() : null;
+            if (!empty($finalPickInfoRow['sent_at'])) {
+                $hasFinalPickRecommendation = true;
+                $latestFinalPickAt = $finalPickInfoRow['sent_at'];
+            }
+        }
+        $finalPickInfoStmt->close();
+    }
+}
 $chairFeedbackFeed = [];
 $chairFeedbackSql = "
     SELECT
@@ -689,13 +714,18 @@ if ($studentFullName === '') {
                         <div class="mt-3 small">
                             <span class="text-white-50">Latest submission:</span>
                             <strong><?php echo htmlspecialchars($latestSubmission['title'] ?? 'Untitled'); ?></strong>
-                            <?php if ($submissionHasStatus && !empty($latestSubmission['status'])): ?>
+                            <?php if ($hasFinalPickRecommendation): ?>
+                                <span class="badge bg-light text-success ms-2">Final Pick Recommended</span>
+                            <?php elseif ($submissionHasStatus && !empty($latestSubmission['status'])): ?>
                                 <span class="badge bg-light text-success ms-2 text-capitalize"><?php echo htmlspecialchars($latestSubmission['status']); ?></span>
                             <?php endif; ?>
                             <div class="text-white-50">
                                 <?php echo formatTimestamp($latestSubmission['created_at'] ?? null, 'Not yet submitted'); ?>
                                 <?php if ($submissionHasType && !empty($latestSubmission['type'])): ?>
                                     &bull; <?php echo htmlspecialchars($latestSubmission['type']); ?>
+                                <?php endif; ?>
+                                <?php if ($hasFinalPickRecommendation && $latestFinalPickAt): ?>
+                                    &bull; Final pick <?php echo formatTimestamp($latestFinalPickAt, 'just now'); ?>
                                 <?php endif; ?>
                             </div>
                         </div>
