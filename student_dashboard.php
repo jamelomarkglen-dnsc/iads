@@ -715,7 +715,7 @@ if ($studentFullName === '') {
                             <span class="text-white-50">Latest submission:</span>
                             <strong><?php echo htmlspecialchars($latestSubmission['title'] ?? 'Untitled'); ?></strong>
                             <?php if ($hasFinalPickRecommendation): ?>
-                                <span class="badge bg-light text-success ms-2">Final Pick Recommended</span>
+                                <span class="badge bg-light text-success ms-2">Final concept recommended</span>
                             <?php elseif ($submissionHasStatus && !empty($latestSubmission['status'])): ?>
                                 <span class="badge bg-light text-success ms-2 text-capitalize"><?php echo htmlspecialchars($latestSubmission['status']); ?></span>
                             <?php endif; ?>
