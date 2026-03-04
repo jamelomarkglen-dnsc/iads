@@ -556,7 +556,7 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
                                                                 <tbody>
                                                                     <?php foreach ($board['reviewers'] as $reviewer): ?>
                                                                         <?php
-                                                                            $rankMap = [1 => 'Ã¢â‚¬â€', 2 => 'Ã¢â‚¬â€', 3 => 'Ã¢â‚¬â€'];
+                                                                            $rankMap = [1 => 'Not ranked', 2 => 'Not ranked', 3 => 'Not ranked'];
                                                                             foreach ($reviewer['ranks'] as $rankNumber => $rankData) {
                                                                                 $rankMap[$rankNumber] = htmlspecialchars($rankData['title']);
                                                                             }
@@ -571,7 +571,7 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
                                                                                 <?php if (!empty($reviewer['has_interest'])): ?>
                                                                                     <span class="badge bg-success-subtle text-success">Yes</span>
                                                                                 <?php else: ?>
-                                                                                    <span class="text-muted">Ã¢â‚¬â€</span>
+                                                                                    <span class="text-muted">Not ranked</span>
                                                                                 <?php endif; ?>
                                                                             </td>
                                                                         </tr>
