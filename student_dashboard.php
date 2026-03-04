@@ -784,45 +784,55 @@ if ($studentFullName === '') {
             <div class="col-lg-7">
                 <div class="card mb-4">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">Submission Feedback</h5>
-                        <?php if (!empty($submissionFeedbackFeed)): ?>
-                            <span class="badge bg-success-subtle text-success"><?php echo count($submissionFeedbackFeed); ?> notes</span>
+                        <h5 class="mb-0">Final Pick Recommendation</h5>
+                        <?php if ($finalPick): ?>
+                            <span class="badge bg-success-subtle text-success">Confirmed</span>
+                        <?php else: ?>
+                            <span class="badge bg-warning-subtle text-warning">Pending</span>
                         <?php endif; ?>
                     </div>
                     <div class="card-body">
-                        <?php if (empty($submissionFeedbackFeed)): ?>
+                        <?php if (!$finalPick): ?>
                             <div class="text-center text-muted py-3">
-                                <i class="bi bi-inbox fs-1 mb-2"></i>
-                                <p class="mb-0">No notes from the Program Chair yet.</p>
+                                <i class="bi bi-flag fs-1 mb-2"></i>
+                                <p class="mb-0">Final pick will appear once reviewers submit rankings.</p>
                             </div>
                         <?php else: ?>
-                            <ul class="list-unstyled mb-0">
-                                <?php foreach ($submissionFeedbackFeed as $feedback): ?>
-                                    <?php
-                                        $submissionTitle = trim((string)($feedback['submission_title'] ?? 'Concept Submission'));
-                                        $chairName = trim((string)($feedback['chair_name'] ?? 'Program Chair'));
-                                        $feedbackTimestamp = formatTimestamp($feedback['created_at'] ?? null, 'Awaiting post');
-                                    ?>
-                                    <li class="mb-3 pb-3 border-bottom border-light">
-                                        <div class="d-flex justify-content-between align-items-start gap-3">
-                                            <div>
-                                                <div class="fw-semibold text-success mb-1">
-                                                    <?php echo htmlspecialchars($submissionTitle); ?>
-                                                </div>
-                                                <p class="mb-2 text-dark">
-                                                    <?php echo nl2br(htmlspecialchars($feedback['message'] ?? '')); ?>
-                                                </p>
-                                                <div class="text-muted small">
-                                                    <i class="bi bi-person-badge me-1"></i><?php echo htmlspecialchars($chairName); ?>
-                                                </div>
-                                            </div>
-                                            <div class="text-end small text-muted">
-                                                <i class="bi bi-clock me-1"></i><?php echo $feedbackTimestamp; ?>
-                                            </div>
-                                        </div>
-                                    </li>
-                                <?php endforeach; ?>
-                            </ul>
+                            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                                <div>
+                                    <div class="text-uppercase small text-muted">Recommended Title</div>
+                                    <div class="fw-semibold text-success mb-2"><?php echo htmlspecialchars($finalPick['title'] ?? ''); ?></div>
+                                    <div class="d-flex flex-wrap gap-2 mb-3">
+                                        <span class="badge bg-success-subtle text-success">R1: <?php echo number_format((int)($finalPick['rank_one_votes'] ?? 0)); ?></span>
+                                        <span class="badge bg-info-subtle text-info">R2: <?php echo number_format((int)($finalPick['rank_two_votes'] ?? 0)); ?></span>
+                                        <span class="badge bg-secondary-subtle text-secondary">R3: <?php echo number_format((int)($finalPick['rank_three_votes'] ?? 0)); ?></span>
+                                        <?php if ($finalPickTie): ?>
+                                            <span class="badge bg-warning-subtle text-warning">Tie on Rank 1</span>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <div class="text-muted small mb-1">Final submission status</div>
+                                    <span class="<?php echo $finalPickStatusClass; ?> text-capitalize"><?php echo htmlspecialchars($finalPickStatusDisplay); ?></span>
+                                    <?php if ($finalSubmissionTitle !== ''): ?>
+                                        <div class="text-muted small mt-2">Submitted title: <?php echo htmlspecialchars($finalSubmissionTitle); ?></div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <?php if (!empty($latestFinalPickMessage['message'])): ?>
+                                <div class="final-pick-message mt-3">
+                                    <div class="message-title">Message from the Program Chairperson</div>
+                                    <div class="text-success"><?php echo nl2br(htmlspecialchars($latestFinalPickMessage['message'])); ?></div>
+                                    <div class="text-muted small mt-2">
+                                        <i class="bi bi-clock me-1"></i><?php echo formatTimestamp($latestFinalPickMessage['created_at'] ?? null, 'Just now'); ?>
+                                    </div>
+                                </div>
+                            <?php elseif ($finalPick): ?>
+                                <div class="final-pick-message mt-3">
+                                    <div class="message-title">Message from the Program Chairperson</div>
+                                    <div class="text-muted">No message yet. The Program Chairperson will send the final pick note here.</div>
+                                </div>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -1079,55 +1089,45 @@ if ($studentFullName === '') {
 
                 <div class="card mb-4">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">Final Pick Recommendation</h5>
-                        <?php if ($finalPick): ?>
-                            <span class="badge bg-success-subtle text-success">Confirmed</span>
-                        <?php else: ?>
-                            <span class="badge bg-warning-subtle text-warning">Pending</span>
+                        <h5 class="mb-0">Submission Feedback</h5>
+                        <?php if (!empty($submissionFeedbackFeed)): ?>
+                            <span class="badge bg-success-subtle text-success"><?php echo count($submissionFeedbackFeed); ?> notes</span>
                         <?php endif; ?>
                     </div>
                     <div class="card-body">
-                        <?php if (!$finalPick): ?>
+                        <?php if (empty($submissionFeedbackFeed)): ?>
                             <div class="text-center text-muted py-3">
-                                <i class="bi bi-flag fs-1 mb-2"></i>
-                                <p class="mb-0">Final pick will appear once reviewers submit rankings.</p>
+                                <i class="bi bi-inbox fs-1 mb-2"></i>
+                                <p class="mb-0">No notes from the Program Chair yet.</p>
                             </div>
                         <?php else: ?>
-                            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-                                <div>
-                                    <div class="text-uppercase small text-muted">Recommended Title</div>
-                                    <div class="fw-semibold text-success mb-2"><?php echo htmlspecialchars($finalPick['title'] ?? ''); ?></div>
-                                    <div class="d-flex flex-wrap gap-2 mb-3">
-                                        <span class="badge bg-success-subtle text-success">R1: <?php echo number_format((int)($finalPick['rank_one_votes'] ?? 0)); ?></span>
-                                        <span class="badge bg-info-subtle text-info">R2: <?php echo number_format((int)($finalPick['rank_two_votes'] ?? 0)); ?></span>
-                                        <span class="badge bg-secondary-subtle text-secondary">R3: <?php echo number_format((int)($finalPick['rank_three_votes'] ?? 0)); ?></span>
-                                        <?php if ($finalPickTie): ?>
-                                            <span class="badge bg-warning-subtle text-warning">Tie on Rank 1</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                                <div class="text-end">
-                                    <div class="text-muted small mb-1">Final submission status</div>
-                                    <span class="<?php echo $finalPickStatusClass; ?> text-capitalize"><?php echo htmlspecialchars($finalPickStatusDisplay); ?></span>
-                                    <?php if ($finalSubmissionTitle !== ''): ?>
-                                        <div class="text-muted small mt-2">Submitted title: <?php echo htmlspecialchars($finalSubmissionTitle); ?></div>
-                                    <?php endif; ?>
-                                </div>
-                            </div>
-                            <?php if (!empty($latestFinalPickMessage['message'])): ?>
-                                <div class="final-pick-message mt-3">
-                                    <div class="message-title">Message from the Program Chairperson</div>
-                                    <div class="text-success"><?php echo nl2br(htmlspecialchars($latestFinalPickMessage['message'])); ?></div>
-                                    <div class="text-muted small mt-2">
-                                        <i class="bi bi-clock me-1"></i><?php echo formatTimestamp($latestFinalPickMessage['created_at'] ?? null, 'Just now'); ?>
-                                    </div>
-                                </div>
-                            <?php elseif ($finalPick): ?>
-                                <div class="final-pick-message mt-3">
-                                    <div class="message-title">Message from the Program Chairperson</div>
-                                    <div class="text-muted">No message yet. The Program Chairperson will send the final pick note here.</div>
-                                </div>
-                            <?php endif; ?>
+                            <ul class="list-unstyled mb-0">
+                                <?php foreach ($submissionFeedbackFeed as $feedback): ?>
+                                    <?php
+                                        $submissionTitle = trim((string)($feedback['submission_title'] ?? 'Concept Submission'));
+                                        $chairName = trim((string)($feedback['chair_name'] ?? 'Program Chair'));
+                                        $feedbackTimestamp = formatTimestamp($feedback['created_at'] ?? null, 'Awaiting post');
+                                    ?>
+                                    <li class="mb-3 pb-3 border-bottom border-light">
+                                        <div class="d-flex justify-content-between align-items-start gap-3">
+                                            <div>
+                                                <div class="fw-semibold text-success mb-1">
+                                                    <?php echo htmlspecialchars($submissionTitle); ?>
+                                                </div>
+                                                <p class="mb-2 text-dark">
+                                                    <?php echo nl2br(htmlspecialchars($feedback['message'] ?? '')); ?>
+                                                </p>
+                                                <div class="text-muted small">
+                                                    <i class="bi bi-person-badge me-1"></i><?php echo htmlspecialchars($chairName); ?>
+                                                </div>
+                                            </div>
+                                            <div class="text-end small text-muted">
+                                                <i class="bi bi-clock me-1"></i><?php echo $feedbackTimestamp; ?>
+                                            </div>
+                                        </div>
+                                    </li>
+                                <?php endforeach; ?>
+                            </ul>
                         <?php endif; ?>
                     </div>
                 </div>
