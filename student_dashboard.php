@@ -671,7 +671,16 @@ if ($studentFullName === '') {
         <div class="hero-card mb-4">
             <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between">
                 <div>
-                    <div class="badge bg-light text-success mb-2 fw-semibold">Student Portal</div>
+                    <?php if (($hasStudentIdColumn && !empty($studentInfo['student_id'])) || ($hasProgramColumn && !empty($studentInfo['program']))): ?>
+                        <div class="d-flex flex-wrap gap-2 mb-2">
+                            <?php if ($hasStudentIdColumn && !empty($studentInfo['student_id'])): ?>
+                                <div class="badge bg-light text-success fw-semibold">Student ID: <?php echo htmlspecialchars($studentInfo['student_id']); ?></div>
+                            <?php endif; ?>
+                            <?php if ($hasProgramColumn && !empty($studentInfo['program'])): ?>
+                                <div class="badge bg-success-subtle text-success fw-semibold">Program: <?php echo htmlspecialchars($studentInfo['program']); ?></div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
                     <h1 class="h3 fw-semibold mb-1">Hello, <?php echo htmlspecialchars($studentFullName); ?>!</h1>
                     <p class="mb-0 text-white-50">
                         Track your submissions, stay updated with notifications, and coordinate with your adviser.
@@ -692,14 +701,7 @@ if ($studentFullName === '') {
                         </div>
                     <?php endif; ?>
                 </div>
-                <div class="text-md-end mt-3 mt-md-0">
-                    <?php if ($hasStudentIdColumn && !empty($studentInfo['student_id'])): ?>
-                        <div class="badge bg-light text-success mb-2">Student ID: <?php echo htmlspecialchars($studentInfo['student_id']); ?></div>
-                    <?php endif; ?>
-                    <?php if ($hasProgramColumn && !empty($studentInfo['program'])): ?>
-                        <div class="badge bg-success-subtle text-success">Program: <?php echo htmlspecialchars($studentInfo['program']); ?></div>
-                    <?php endif; ?>
-                </div>
+                <div class="text-md-end mt-3 mt-md-0"></div>
             </div>
         </div>
         <div class="row g-4 mb-4">
