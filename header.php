@@ -9,7 +9,7 @@ require_once __DIR__ . '/notifications_helper.php';
 $userId = $_SESSION['user_id'] ?? null;
 $userRole = $_SESSION['role'] ?? null;
 
-$notifications = fetch_user_notifications($conn, $userId, $userRole, 8);
+$notifications = fetch_user_notifications($conn, $userId, $userRole, 25);
 $unreadCount = count_unread_notifications($conn, $userId, $userRole);
 
 // Determine dashboard link based on role.
@@ -215,7 +215,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function fetchNotifications() {
-        fetch('notifications_api.php?action=list')
+        fetch('notifications_api.php?action=list&limit=25')
             .then(function (res) { return res.json(); })
             .then(function (payload) {
                 if (payload && !payload.error) {

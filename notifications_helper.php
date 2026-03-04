@@ -331,7 +331,7 @@ if (!function_exists('fetch_user_notifications')) {
             SELECT id, user_id, role, title, message, link, is_read, created_at
             FROM notifications
             WHERE $where
-            ORDER BY is_read ASC, created_at DESC
+            ORDER BY created_at DESC
             LIMIT ?
         ";
 
