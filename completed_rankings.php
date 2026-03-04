@@ -438,7 +438,9 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
                                     </select>
                                 </form>
                             </div>
-                            <div class="list-group ranking-student-list" data-directory-list>
+                            <div class="ranking-accordion-list" data-directory-list>
+                                <div class="text-muted small fst-italic d-none" data-directory-empty>No students match your search.</div>
+                                <div class="accordion" id="completedRankingAccordion">
                                 <?php foreach ($completedDirectoryPage as $board): ?>
                                     <?php
                                         $studentId = (int)($board['student_id'] ?? 0);
@@ -449,25 +451,121 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
                                         $finalTitle = $sentInfo['final_title'] ?? ($board['final_concept']['title'] ?? '');
                                         $searchKey = strtolower(trim(($board['student_name'] ?? '') . ' ' . $finalTitle));
                                     ?>
-                                    <button
-                                        type="button"
-                                        class="list-group-item list-group-item-action ranking-student-item"
-                                        data-directory-student-id="<?= $studentId; ?>"
-                                        data-search="<?= htmlspecialchars($searchKey, ENT_QUOTES); ?>"
-                                    >
-                                        <div class="d-flex justify-content-between align-items-start gap-2">
-                                            <div>
-                                                <div class="fw-semibold text-success"><?= htmlspecialchars($board['student_name']); ?></div>
-                                                <div class="text-muted small"><?= htmlspecialchars($board['student_email'] ?? ''); ?></div>
+                                    <?php
+                                        $headingId = "completedHeading{$studentId}";
+                                        $collapseId = "completedCollapse{$studentId}";
+                                    ?>
+                                    <div class="accordion-item ranking-student-item" data-directory-item data-search="<?= htmlspecialchars($searchKey, ENT_QUOTES); ?>">
+                                        <h2 class="accordion-header" id="<?= $headingId; ?>">
+                                            <button
+                                                class="accordion-button collapsed"
+                                                type="button"
+                                                data-bs-toggle="collapse"
+                                                data-bs-target="#<?= $collapseId; ?>"
+                                                aria-expanded="false"
+                                                aria-controls="<?= $collapseId; ?>"
+                                            >
+                                                <span class="fw-semibold text-success"><?= htmlspecialchars($board['student_name']); ?></span>
+                                            </button>
+                                        </h2>
+                                        <div
+                                            id="<?= $collapseId; ?>"
+                                            class="accordion-collapse collapse"
+                                            aria-labelledby="<?= $headingId; ?>"
+                                            data-bs-parent="#completedRankingAccordion"
+                                        >
+                                            <div class="accordion-body">
+                                                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-2">
+                                                    <div>
+                                                        <h5 class="mb-1 text-success"><?= htmlspecialchars($board['student_name']); ?></h5>
+                                                        <div class="text-muted small"><?= htmlspecialchars($board['student_email'] ?? ''); ?></div>
+                                                    </div>
+                                                    <div class="text-end">
+                                                        <span class="badge bg-success-subtle text-success">Message sent</span>
+                                                        <div class="small text-muted mt-1"><?= htmlspecialchars($sentAtLabel); ?></div>
+                                                    </div>
+                                                </div>
+                                                <?php if ($finalTitle !== ''): ?>
+                                                    <div class="small text-muted mb-3"><strong>Final title:</strong> <?= htmlspecialchars($finalTitle); ?></div>
+                                                <?php endif; ?>
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm align-middle mb-3">
+                                                        <thead class="table-light">
+                                                            <tr>
+                                                                <th>Concept Title</th>
+                                                                <th class="text-center">Rank&nbsp;1</th>
+                                                                <th class="text-center">Rank&nbsp;2</th>
+                                                                <th class="text-center">Rank&nbsp;3</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <?php foreach ($board['concepts'] as $concept): ?>
+                                                                <?php $isWinner = isset($board['final_concept']['concept_id']) && $board['final_concept']['concept_id'] === ($concept['concept_id'] ?? null); ?>
+                                                                <tr class="<?= $isWinner ? 'table-success-subtle' : ''; ?>">
+                                                                    <td class="fw-semibold">
+                                                                        <?= htmlspecialchars($concept['title']); ?>
+                                                                        <?php if ($isWinner): ?>
+                                                                            <span class="badge bg-success ms-2">Final pick</span>
+                                                                        <?php endif; ?>
+                                                                    </td>
+                                                                    <td class="text-center"><span class="badge bg-success-subtle text-success"><?= number_format($concept['rank_one']); ?></span></td>
+                                                                    <td class="text-center"><span class="badge bg-info-subtle text-info"><?= number_format($concept['rank_two']); ?></span></td>
+                                                                    <td class="text-center"><span class="badge bg-secondary-subtle text-secondary"><?= number_format($concept['rank_three']); ?></span></td>
+                                                                </tr>
+                                                            <?php endforeach; ?>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <h6 class="text-uppercase text-muted mb-3">Reviewer Breakdown</h6>
+                                                    <?php if (!empty($board['reviewers'])): ?>
+                                                        <div class="table-responsive">
+                                                            <table class="table table-striped table-sm align-middle">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th>Reviewer</th>
+                                                                        <th>Role</th>
+                                                                        <th>Rank&nbsp;1</th>
+                                                                        <th>Rank&nbsp;2</th>
+                                                                        <th>Rank&nbsp;3</th>
+                                                                        <th class="text-center">Mentor Interest</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    <?php foreach ($board['reviewers'] as $reviewer): ?>
+                                                                        <?php
+                                                                            $rankMap = [1 => 'Ã¢â‚¬â€', 2 => 'Ã¢â‚¬â€', 3 => 'Ã¢â‚¬â€'];
+                                                                            foreach ($reviewer['ranks'] as $rankNumber => $rankData) {
+                                                                                $rankMap[$rankNumber] = htmlspecialchars($rankData['title']);
+                                                                            }
+                                                                        ?>
+                                                                        <tr>
+                                                                            <td class="fw-semibold"><?= htmlspecialchars($reviewer['reviewer_name']); ?></td>
+                                                                            <td class="text-muted small text-capitalize"><?= htmlspecialchars(str_replace('_', ' ', $reviewer['reviewer_role'] ?? '')); ?></td>
+                                                                            <td><?= $rankMap[1]; ?></td>
+                                                                            <td><?= $rankMap[2]; ?></td>
+                                                                            <td><?= $rankMap[3]; ?></td>
+                                                                            <td class="text-center">
+                                                                                <?php if (!empty($reviewer['has_interest'])): ?>
+                                                                                    <span class="badge bg-success-subtle text-success">Yes</span>
+                                                                                <?php else: ?>
+                                                                                    <span class="text-muted">Ã¢â‚¬â€</span>
+                                                                                <?php endif; ?>
+                                                                            </td>
+                                                                        </tr>
+                                                                    <?php endforeach; ?>
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    <?php else: ?>
+                                                        <div class="text-muted small fst-italic">No reviewer submissions recorded.</div>
+                                                    <?php endif; ?>
+                                                </div>
                                             </div>
-                                            <span class="badge bg-success-subtle text-success">Sent</span>
                                         </div>
-                                        <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
-                                            <small class="text-muted"><?= htmlspecialchars($sentAtLabel); ?></small>
-                                            <small class="text-muted"><?= number_format(count($board['concepts'] ?? [])); ?> titles</small>
-                                        </div>
-                                    </button>
+                                    </div>
                                 <?php endforeach; ?>
+                                </div>
                             </div>
                             <?php if ($completedPages > 1): ?>
                                 <?php
@@ -508,109 +606,6 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
                                 </nav>
                             <?php endif; ?>
                         </div>
-                        <div class="ranking-board-detail">
-                            <div class="ranking-detail-empty" data-directory-empty>
-                                Select a student to view finalized ranking details.
-                            </div>
-                            <?php foreach ($completedDirectoryPage as $board): ?>
-                                <?php
-                                    $studentId = (int)($board['student_id'] ?? 0);
-                                    $sentInfo = $finalPickSentLookup[$studentId] ?? [];
-                                    $sentAtLabel = !empty($sentInfo['sent_at'])
-                                        ? date('M d, Y g:i A', strtotime((string)$sentInfo['sent_at']))
-                                        : 'Not recorded';
-                                    $finalTitle = $sentInfo['final_title'] ?? '';
-                                ?>
-                                <div class="ranking-detail-panel d-none" data-directory-detail data-student-id="<?= $studentId; ?>">
-                                    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-2">
-                                        <div>
-                                            <h5 class="mb-1 text-success"><?= htmlspecialchars($board['student_name']); ?></h5>
-                                            <div class="text-muted small"><?= htmlspecialchars($board['student_email'] ?? ''); ?></div>
-                                        </div>
-                                        <div class="text-end">
-                                            <span class="badge bg-success-subtle text-success">Message sent</span>
-                                            <div class="small text-muted mt-1"><?= htmlspecialchars($sentAtLabel); ?></div>
-                                        </div>
-                                    </div>
-                                    <?php if ($finalTitle !== ''): ?>
-                                        <div class="small text-muted mb-3"><strong>Final title:</strong> <?= htmlspecialchars($finalTitle); ?></div>
-                                    <?php endif; ?>
-                                    <div class="table-responsive">
-                                        <table class="table table-sm align-middle mb-3">
-                                            <thead class="table-light">
-                                                <tr>
-                                                    <th>Concept Title</th>
-                                                    <th class="text-center">Rank&nbsp;1</th>
-                                                    <th class="text-center">Rank&nbsp;2</th>
-                                                    <th class="text-center">Rank&nbsp;3</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($board['concepts'] as $concept): ?>
-                                                    <?php $isWinner = isset($board['final_concept']['concept_id']) && $board['final_concept']['concept_id'] === ($concept['concept_id'] ?? null); ?>
-                                                    <tr class="<?= $isWinner ? 'table-success-subtle' : ''; ?>">
-                                                        <td class="fw-semibold">
-                                                            <?= htmlspecialchars($concept['title']); ?>
-                                                            <?php if ($isWinner): ?>
-                                                                <span class="badge bg-success ms-2">Final pick</span>
-                                                            <?php endif; ?>
-                                                        </td>
-                                                        <td class="text-center"><span class="badge bg-success-subtle text-success"><?= number_format($concept['rank_one']); ?></span></td>
-                                                        <td class="text-center"><span class="badge bg-info-subtle text-info"><?= number_format($concept['rank_two']); ?></span></td>
-                                                        <td class="text-center"><span class="badge bg-secondary-subtle text-secondary"><?= number_format($concept['rank_three']); ?></span></td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                    <div class="mt-3">
-                                        <h6 class="text-uppercase text-muted mb-3">Reviewer Breakdown</h6>
-                                        <?php if (!empty($board['reviewers'])): ?>
-                                            <div class="table-responsive">
-                                                <table class="table table-striped table-sm align-middle">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Reviewer</th>
-                                                            <th>Role</th>
-                                                            <th>Rank&nbsp;1</th>
-                                                            <th>Rank&nbsp;2</th>
-                                                            <th>Rank&nbsp;3</th>
-                                                            <th class="text-center">Mentor Interest</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        <?php foreach ($board['reviewers'] as $reviewer): ?>
-                                                            <?php
-                                                                $rankMap = [1 => 'Ã¢â‚¬â€', 2 => 'Ã¢â‚¬â€', 3 => 'Ã¢â‚¬â€'];
-                                                                foreach ($reviewer['ranks'] as $rankNumber => $rankData) {
-                                                                    $rankMap[$rankNumber] = htmlspecialchars($rankData['title']);
-                                                                }
-                                                            ?>
-                                                            <tr>
-                                                                <td class="fw-semibold"><?= htmlspecialchars($reviewer['reviewer_name']); ?></td>
-                                                                <td class="text-muted small text-capitalize"><?= htmlspecialchars(str_replace('_', ' ', $reviewer['reviewer_role'] ?? '')); ?></td>
-                                                                <td><?= $rankMap[1]; ?></td>
-                                                                <td><?= $rankMap[2]; ?></td>
-                                                                <td><?= $rankMap[3]; ?></td>
-                                                                <td class="text-center">
-                                                                    <?php if (!empty($reviewer['has_interest'])): ?>
-                                                                        <span class="badge bg-success-subtle text-success">Yes</span>
-                                                                    <?php else: ?>
-                                                                        <span class="text-muted">Ã¢â‚¬â€</span>
-                                                                    <?php endif; ?>
-                                                                </td>
-                                                            </tr>
-                                                        <?php endforeach; ?>
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        <?php else: ?>
-                                            <div class="text-muted small fst-italic">No reviewer submissions recorded.</div>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
                     </div>
                 <?php endif; ?>
             </div>
@@ -623,99 +618,50 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
 <script>
     (function() {
         const list = document.querySelector('[data-directory-list]');
-        const panels = Array.from(document.querySelectorAll('[data-directory-detail]'));
         const emptyState = document.querySelector('[data-directory-empty]');
         const searchInput = document.querySelector('[data-directory-search]');
 
-        if (!list || panels.length === 0) {
+        if (!list) {
             return;
         }
 
-        const items = Array.from(list.querySelectorAll('.ranking-student-item'));
+        const items = Array.from(list.querySelectorAll('[data-directory-item]'));
 
-        const showEmpty = (message) => {
-            if (!emptyState) {
-                return;
+        const closeItem = (item) => {
+            const collapse = item.querySelector('.accordion-collapse');
+            if (collapse) {
+                collapse.classList.remove('show');
             }
-            emptyState.textContent = message || 'Select a student to view finalized ranking details.';
-            emptyState.classList.remove('d-none');
-        };
-
-        const hideEmpty = () => {
-            if (!emptyState) {
-                return;
-            }
-            emptyState.classList.add('d-none');
-        };
-
-        const setActiveItem = (item) => {
-            items.forEach((entry) => entry.classList.remove('active'));
-            if (item) {
-                item.classList.add('active');
-            }
-        };
-
-        const showPanel = (studentId) => {
-            let found = false;
-            panels.forEach((panel) => {
-                const match = panel.dataset.studentId === studentId;
-                panel.classList.toggle('d-none', !match);
-                if (match) {
-                    found = true;
-                }
-            });
-            if (found) {
-                hideEmpty();
-            } else {
-                showEmpty('Select a student to view finalized ranking details.');
-            }
-        };
-
-        const handleSelect = (item) => {
-            if (!item) {
-                return;
-            }
-            const studentId = item.dataset.directoryStudentId || '';
-            if (!studentId) {
-                return;
-            }
-            setActiveItem(item);
-            showPanel(studentId);
-        };
-
-        const selectFirstVisible = () => {
-            const firstVisible = items.find((item) => !item.classList.contains('d-none'));
-            if (firstVisible) {
-                handleSelect(firstVisible);
-            } else {
-                panels.forEach((panel) => panel.classList.add('d-none'));
-                showEmpty('No students match your search.');
+            const toggle = item.querySelector('.accordion-button');
+            if (toggle) {
+                toggle.classList.add('collapsed');
+                toggle.setAttribute('aria-expanded', 'false');
             }
         };
 
         const applyFilters = () => {
             const query = (searchInput?.value || '').trim().toLowerCase();
+            let visibleCount = 0;
             items.forEach((item) => {
                 const searchKey = (item.dataset.search || '').toLowerCase();
                 const matchesQuery = !query || searchKey.includes(query);
                 item.classList.toggle('d-none', !matchesQuery);
+                if (matchesQuery) {
+                    visibleCount += 1;
+                } else {
+                    closeItem(item);
+                }
             });
-
-            const activeVisible = items.find((item) => item.classList.contains('active') && !item.classList.contains('d-none'));
-            if (!activeVisible) {
-                selectFirstVisible();
+            if (emptyState) {
+                emptyState.classList.toggle('d-none', visibleCount > 0);
             }
         };
-
-        items.forEach((item) => {
-            item.addEventListener('click', () => handleSelect(item));
-        });
 
         if (searchInput) {
             searchInput.addEventListener('input', applyFilters);
         }
 
-        selectFirstVisible();
+        applyFilters();
     })();
 </script>
 </body>
