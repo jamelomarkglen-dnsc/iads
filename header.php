@@ -90,7 +90,7 @@ if (isset($_SESSION['role'])) {
                                 ?>
                                 <a
                                     href="<?php echo $noteLink ? htmlspecialchars($noteLink) : '#'; ?>"
-                                    class="list-group-item list-group-item-action d-flex flex-column gap-1<?php echo (int)$note['is_read'] === 0 ? ' fw-semibold' : ''; ?>"
+                                    class="list-group-item list-group-item-action d-flex flex-column gap-1 notif-item<?php echo (int)$note['is_read'] === 0 ? ' fw-semibold is-unread' : ' is-read'; ?>"
                                     data-notification-id="<?php echo (int)$note['id']; ?>"
                                     data-is-read="<?php echo (int)$note['is_read']; ?>"
                                 >
@@ -108,6 +108,23 @@ if (isset($_SESSION['role'])) {
         </div>
     </div>
 </nav>
+
+<style>
+    .notif-item {
+        background-color: #fff;
+        transition: background-color 0.2s ease;
+    }
+    .notif-item.is-unread {
+        background-color: #f1f3f5;
+    }
+    .notif-item.is-read {
+        background-color: #fff;
+    }
+    .notif-item:hover,
+    .notif-item:focus {
+        background-color: #eef2f5;
+    }
+</style>
 
 <script>
     window.APP_NOTIFICATIONS = {
@@ -182,7 +199,8 @@ document.addEventListener('DOMContentLoaded', function () {
             notes.forEach(function (note) {
                 const link = document.createElement('a');
                 link.href = resolveNotificationLink(note);
-                link.className = 'list-group-item list-group-item-action d-flex flex-column gap-1' + (parseInt(note.is_read, 10) === 0 ? ' fw-semibold' : '');
+                link.className = 'list-group-item list-group-item-action d-flex flex-column gap-1 notif-item'
+                    + (parseInt(note.is_read, 10) === 0 ? ' fw-semibold is-unread' : ' is-read');
                 link.dataset.notificationId = note.id;
                 link.dataset.isRead = note.is_read;
                 link.innerHTML = ''
