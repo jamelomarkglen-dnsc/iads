@@ -365,8 +365,25 @@ $completedFilteredBoards = array_values(array_filter(
     }
 ));
 
+$completedSearch = trim((string)($_GET['completed_search'] ?? ''));
+if ($completedSearch !== '') {
+    $searchNeedle = strtolower($completedSearch);
+    $completedFilteredBoards = array_values(array_filter(
+        $completedFilteredBoards,
+        static function ($board) use ($finalPickSentLookup, $searchNeedle) {
+            $studentName = strtolower((string)($board['student_name'] ?? ''));
+            $studentId = (int)($board['student_id'] ?? 0);
+            $sentInfo = $finalPickSentLookup[$studentId] ?? [];
+            $finalTitle = (string)($sentInfo['final_title'] ?? ($board['final_concept']['title'] ?? ''));
+            $finalTitle = strtolower($finalTitle);
+            return strpos($studentName, $searchNeedle) !== false
+                || strpos($finalTitle, $searchNeedle) !== false;
+        }
+    ));
+}
+
 $completedTotal = count($completedFilteredBoards);
-$completedPerPage = 12;
+$completedPerPage = 30;
 $completedPages = max(1, (int)ceil($completedTotal / $completedPerPage));
 $completedPage = max(1, (int)($_GET['completed_page'] ?? 1));
 if ($completedPage > $completedPages) {
@@ -419,25 +436,30 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
                 <?php else: ?>
                     <div class="ranking-board-shell ranking-board-shell--compact">
                         <div class="ranking-board-list">
-                            <div class="ranking-board-tools">
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
-                                    <input type="text" class="form-control" placeholder="Search name or final title" data-directory-search>
-                                </div>
-                                <form method="GET" class="d-flex gap-2 align-items-center">
-                                    <?php foreach ($_GET as $key => $value): ?>
-                                        <?php if (in_array($key, ['completed_range', 'completed_page'], true)) { continue; } ?>
-                                        <input type="hidden" name="<?= htmlspecialchars($key); ?>" value="<?= htmlspecialchars((string)$value, ENT_QUOTES); ?>">
-                                    <?php endforeach; ?>
-                                    <input type="hidden" name="completed_page" value="1">
-                                    <select class="form-select form-select-sm" name="completed_range" onchange="this.form.submit()">
-                                        <option value="all" <?= $completedRange === 'all' ? 'selected' : ''; ?>>All time</option>
-                                        <option value="7d" <?= $completedRange === '7d' ? 'selected' : ''; ?>>Last 7 days</option>
-                                        <option value="30d" <?= $completedRange === '30d' ? 'selected' : ''; ?>>Last 30 days</option>
-                                        <option value="90d" <?= $completedRange === '90d' ? 'selected' : ''; ?>>Last 90 days</option>
-                                    </select>
-                                </form>
+                        <form method="GET" class="ranking-board-tools">
+                            <?php foreach ($_GET as $key => $value): ?>
+                                <?php if (in_array($key, ['completed_range', 'completed_page', 'completed_search'], true)) { continue; } ?>
+                                <input type="hidden" name="<?= htmlspecialchars($key); ?>" value="<?= htmlspecialchars((string)$value, ENT_QUOTES); ?>">
+                            <?php endforeach; ?>
+                            <input type="hidden" name="completed_page" value="1">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                                <input
+                                    type="text"
+                                    class="form-control"
+                                    name="completed_search"
+                                    placeholder="Search name or final title"
+                                    value="<?= htmlspecialchars($completedSearch, ENT_QUOTES); ?>"
+                                >
                             </div>
+                            <select class="form-select form-select-sm" name="completed_range" onchange="this.form.submit()">
+                                <option value="all" <?= $completedRange === 'all' ? 'selected' : ''; ?>>All time</option>
+                                <option value="7d" <?= $completedRange === '7d' ? 'selected' : ''; ?>>Last 7 days</option>
+                                <option value="30d" <?= $completedRange === '30d' ? 'selected' : ''; ?>>Last 30 days</option>
+                                <option value="90d" <?= $completedRange === '90d' ? 'selected' : ''; ?>>Last 90 days</option>
+                            </select>
+                            <button type="submit" class="btn btn-outline-success btn-sm">Search</button>
+                        </form>
                             <div class="ranking-accordion-list" data-directory-list>
                                 <div class="text-muted small fst-italic d-none" data-directory-empty>No students match your search.</div>
                                 <div class="accordion" id="completedRankingAccordion">
@@ -615,55 +637,6 @@ $completedDirectoryPage = array_slice($completedFilteredBoards, $completedOffset
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-    (function() {
-        const list = document.querySelector('[data-directory-list]');
-        const emptyState = document.querySelector('[data-directory-empty]');
-        const searchInput = document.querySelector('[data-directory-search]');
-
-        if (!list) {
-            return;
-        }
-
-        const items = Array.from(list.querySelectorAll('[data-directory-item]'));
-
-        const closeItem = (item) => {
-            const collapse = item.querySelector('.accordion-collapse');
-            if (collapse) {
-                collapse.classList.remove('show');
-            }
-            const toggle = item.querySelector('.accordion-button');
-            if (toggle) {
-                toggle.classList.add('collapsed');
-                toggle.setAttribute('aria-expanded', 'false');
-            }
-        };
-
-        const applyFilters = () => {
-            const query = (searchInput?.value || '').trim().toLowerCase();
-            let visibleCount = 0;
-            items.forEach((item) => {
-                const searchKey = (item.dataset.search || '').toLowerCase();
-                const matchesQuery = !query || searchKey.includes(query);
-                item.classList.toggle('d-none', !matchesQuery);
-                if (matchesQuery) {
-                    visibleCount += 1;
-                } else {
-                    closeItem(item);
-                }
-            });
-            if (emptyState) {
-                emptyState.classList.toggle('d-none', visibleCount > 0);
-            }
-        };
-
-        if (searchInput) {
-            searchInput.addEventListener('input', applyFilters);
-        }
-
-        applyFilters();
-    })();
-</script>
 </body>
 </html>
 
