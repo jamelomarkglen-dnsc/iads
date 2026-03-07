@@ -811,13 +811,6 @@ if ($studentFullName === '') {
                                         <?php endif; ?>
                                     </div>
                                 </div>
-                                <div class="text-end">
-                                    <div class="text-muted small mb-1">Final submission status</div>
-                                    <span class="<?php echo $finalPickStatusClass; ?> text-capitalize"><?php echo htmlspecialchars($finalPickStatusDisplay); ?></span>
-                                    <?php if ($finalSubmissionTitle !== ''): ?>
-                                        <div class="text-muted small mt-2">Submitted title: <?php echo htmlspecialchars($finalSubmissionTitle); ?></div>
-                                    <?php endif; ?>
-                                </div>
                             </div>
                             <?php if (!empty($latestFinalPickMessage['message'])): ?>
                                 <div class="final-pick-message mt-3">
