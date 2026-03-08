@@ -288,6 +288,164 @@ if (isset($_GET['chair_assign_search']) && $_GET['chair_assign_search'] === '1')
     exit;
 }
 
+if (isset($_GET['chair_assign_debug']) && $_GET['chair_assign_debug'] === '1') {
+    header('Content-Type: application/json');
+    $query = trim((string)($_GET['q'] ?? ''));
+    if ($query === '') {
+        echo json_encode(['success' => false, 'error' => 'Enter a student ID, email, or username to check.']);
+        exit;
+    }
+    $numericId = ctype_digit($query) ? (int)$query : 0;
+    $studentSql = "
+        SELECT
+            u.id,
+            COALESCE(u.firstname, '') AS firstname,
+            COALESCE(u.lastname, '') AS lastname,
+            COALESCE(u.email, '') AS email,
+            COALESCE(u.student_id, '') AS student_id,
+            COALESCE(u.username, '') AS username,
+            COALESCE(u.role, '') AS role,
+            COALESCE(u.program, '') AS program,
+            COALESCE(u.department, '') AS department,
+            COALESCE(u.college, '') AS college,
+            COALESCE(u.adviser_id, 0) AS adviser_id,
+            COALESCE(u.advisor_id, 0) AS advisor_id
+        FROM users u
+        WHERE u.id = ?
+           OR u.student_id = ?
+           OR u.email = ?
+           OR u.username = ?
+        LIMIT 1
+    ";
+    $studentStmt = $conn->prepare($studentSql);
+    if (!$studentStmt) {
+        echo json_encode(['success' => false, 'error' => 'Unable to prepare the debug lookup.']);
+        exit;
+    }
+    $studentStmt->bind_param('isss', $numericId, $query, $query, $query);
+    $studentStmt->execute();
+    $studentResult = $studentStmt->get_result();
+    $studentRow = $studentResult ? $studentResult->fetch_assoc() : null;
+    if ($studentResult) {
+        $studentResult->free();
+    }
+    $studentStmt->close();
+
+    if (!$studentRow) {
+        echo json_encode(['success' => true, 'found' => false, 'message' => 'No matching student found.']);
+        exit;
+    }
+
+    $studentId = (int)($studentRow['id'] ?? 0);
+    $role = trim((string)($studentRow['role'] ?? ''));
+    $inScope = true;
+    if ($studentScopeCondition !== '') {
+        $scopeSql = "SELECT 1 FROM users u WHERE u.id = ? AND {$studentScopeCondition} LIMIT 1";
+        $scopeStmt = $conn->prepare($scopeSql);
+        if ($scopeStmt) {
+            $scopeStmt->bind_param('i', $studentId);
+            $scopeStmt->execute();
+            $scopeStmt->store_result();
+            $inScope = $scopeStmt->num_rows > 0;
+            $scopeStmt->close();
+        }
+    }
+
+    $unassigned = false;
+    if ($adviserAssignmentEnabled) {
+        $unassignedSql = "SELECT 1 FROM users u WHERE u.id = ? AND {$unassignedClause} LIMIT 1";
+        $unassignedStmt = $conn->prepare($unassignedSql);
+        if ($unassignedStmt) {
+            $unassignedStmt->bind_param('i', $studentId);
+            $unassignedStmt->execute();
+            $unassignedStmt->store_result();
+            $unassigned = $unassignedStmt->num_rows > 0;
+            $unassignedStmt->close();
+        }
+    }
+
+    $withinLimit = null;
+    $position = null;
+    if ($role === 'student' && $inScope && $unassigned) {
+        $lastName = (string)($studentRow['lastname'] ?? '');
+        $firstName = (string)($studentRow['firstname'] ?? '');
+        $positionSql = "
+            SELECT COUNT(*) AS position
+            FROM users u
+            WHERE u.role = 'student'
+              AND {$unassignedClause}
+        ";
+        if ($studentScopeCondition !== '') {
+            $positionSql .= " AND {$studentScopeCondition}";
+        }
+        $positionSql .= "
+              AND (
+                    COALESCE(u.lastname, '') < ?
+                    OR (COALESCE(u.lastname, '') = ? AND COALESCE(u.firstname, '') < ?)
+                    OR (COALESCE(u.lastname, '') = ? AND COALESCE(u.firstname, '') = ? AND u.id <= ?)
+                )
+        ";
+        $positionStmt = $conn->prepare($positionSql);
+        if ($positionStmt) {
+            $positionStmt->bind_param('sssssi', $lastName, $lastName, $firstName, $lastName, $firstName, $studentId);
+            $positionStmt->execute();
+            $positionResult = $positionStmt->get_result();
+            $positionRow = $positionResult ? $positionResult->fetch_assoc() : null;
+            if ($positionResult) {
+                $positionResult->free();
+            }
+            $positionStmt->close();
+            $position = isset($positionRow['position']) ? (int)$positionRow['position'] : null;
+            if ($position !== null) {
+                $withinLimit = $position <= $adviserAssignmentLimit;
+            }
+        }
+    }
+
+    $reasons = [];
+    if ($role !== 'student') {
+        $reasons[] = 'User role is not student.';
+    }
+    if (!$adviserAssignmentEnabled) {
+        $reasons[] = 'Adviser assignment columns are missing.';
+    } elseif (!$unassigned) {
+        $reasons[] = 'Adviser fields are not empty for this student.';
+    }
+    if (!$inScope) {
+        $reasons[] = 'Student is outside your scope.';
+    }
+    if ($withinLimit === false) {
+        $reasons[] = 'Student is outside the first ' . $adviserAssignmentLimit . ' results.';
+    }
+
+    echo json_encode([
+        'success' => true,
+        'found' => true,
+        'student' => [
+            'id' => $studentId,
+            'name' => trim(($studentRow['firstname'] ?? '') . ' ' . ($studentRow['lastname'] ?? '')),
+            'student_id' => (string)($studentRow['student_id'] ?? ''),
+            'email' => (string)($studentRow['email'] ?? ''),
+            'username' => (string)($studentRow['username'] ?? ''),
+            'role' => $role,
+            'program' => (string)($studentRow['program'] ?? ''),
+            'department' => (string)($studentRow['department'] ?? ''),
+            'college' => (string)($studentRow['college'] ?? ''),
+        ],
+        'checks' => [
+            'assignment_enabled' => $adviserAssignmentEnabled,
+            'in_scope' => $inScope,
+            'unassigned' => $unassigned,
+            'within_limit' => $withinLimit,
+            'position' => $position,
+            'adviser_id' => (int)($studentRow['adviser_id'] ?? 0),
+            'advisor_id' => (int)($studentRow['advisor_id'] ?? 0),
+        ],
+        'reasons' => $reasons,
+    ]);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['chair_assign_advisee'] ?? '') === '1') {
     if (!$adviserAssignmentEnabled) {
         $chairAssignAlert = ['type' => 'danger', 'message' => 'Advisor tracking columns are missing in the users table.'];
@@ -933,6 +1091,29 @@ $adviserCount = count($chairAdviserOptions);
                             Select advisers per student in the table. When only one faculty is interested, the adviser is auto-selected.
                         </div>
                         <div class="mb-3">
+                            <label class="form-label text-muted small">Why Is a Student Not Showing?</label>
+                            <div class="input-group mb-2">
+                                <span class="input-group-text bg-light text-muted">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input
+                                    type="text"
+                                    class="form-control"
+                                    id="chairAssignDebugInput"
+                                    placeholder="Enter student ID, email, or username"
+                                    autocomplete="off"
+                                >
+                                <button
+                                    class="btn btn-outline-secondary"
+                                    type="button"
+                                    id="chairAssignDebugButton"
+                                >
+                                    Check
+                                </button>
+                            </div>
+                            <div id="chairAssignDebugResult" class="small text-muted"></div>
+                        </div>
+                        <div class="mb-3">
                             <label class="form-label text-muted small">Quick Add Student</label>
                             <div class="position-relative">
                                 <div class="input-group">
@@ -1029,6 +1210,9 @@ $adviserCount = count($chairAdviserOptions);
     const quickSelectedWrapper = document.getElementById('chairAssignQuickSelectedWrapper');
     const quickSelectedList = document.getElementById('chairAssignQuickSelectedList');
     const quickHiddenInputs = document.getElementById('chairAssignQuickHiddenInputs');
+    const debugInput = document.getElementById('chairAssignDebugInput');
+    const debugButton = document.getElementById('chairAssignDebugButton');
+    const debugResult = document.getElementById('chairAssignDebugResult');
     const adviserOptions = <?php echo json_encode($adviserOptionsPayload ?? []); ?>;
     const adviserOptionsById = new Map(adviserOptions.map((option) => [option.id.toString(), option]));
     const QUICK_MIN_CHARACTERS = 2;
@@ -1234,6 +1418,49 @@ $adviserCount = count($chairAdviserOptions);
         quickResultsContainer.innerHTML = '';
     };
 
+    const renderDebugResult = (message, tone = 'text-muted') => {
+        if (!debugResult) {
+            return;
+        }
+        debugResult.className = `small ${tone}`;
+        debugResult.textContent = message;
+    };
+
+    const fetchDebugResult = (query) => {
+        if (!debugResult) {
+            return;
+        }
+        renderDebugResult('Checking student visibility...', 'text-muted');
+        fetch(`assign_adviser.php?chair_assign_debug=1&q=${encodeURIComponent(query)}`)
+            .then((response) => response.json())
+            .then((data) => {
+                if (!data.success) {
+                    renderDebugResult(data.error || 'Unable to check that student right now.', 'text-danger');
+                    return;
+                }
+                if (!data.found) {
+                    renderDebugResult(data.message || 'No matching student found.', 'text-warning');
+                    return;
+                }
+                const student = data.student || {};
+                const checks = data.checks || {};
+                const reasons = Array.isArray(data.reasons) ? data.reasons : [];
+                const name = student.name || 'Student';
+                const role = student.role || 'unknown';
+                const inScope = checks.in_scope ? 'Yes' : 'No';
+                const unassigned = checks.unassigned ? 'Yes' : 'No';
+                const withinLimit = checks.within_limit === null ? 'N/A' : (checks.within_limit ? 'Yes' : 'No');
+                let message = `${name} (role: ${role}) | In scope: ${inScope} | Unassigned: ${unassigned} | Within limit: ${withinLimit}`;
+                if (reasons.length > 0) {
+                    message += ` | Reasons: ${reasons.join(' ')}`;
+                }
+                renderDebugResult(message, reasons.length > 0 ? 'text-warning' : 'text-success');
+            })
+            .catch(() => {
+                renderDebugResult('Unable to check that student right now.', 'text-danger');
+            });
+    };
+
     const showQuickMessage = (message) => {
         if (!quickResultsContainer) {
             return;
@@ -1389,6 +1616,28 @@ $adviserCount = count($chairAdviserOptions);
             quickSearchTimer = setTimeout(() => {
                 fetchQuickResults(query);
             }, 250);
+        });
+    }
+
+    if (debugButton && debugInput) {
+        debugButton.addEventListener('click', () => {
+            const query = debugInput.value.trim();
+            if (!query) {
+                renderDebugResult('Enter a student ID, email, or username first.', 'text-warning');
+                return;
+            }
+            fetchDebugResult(query);
+        });
+    }
+
+    if (debugInput) {
+        debugInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                if (debugButton) {
+                    debugButton.click();
+                }
+            }
         });
     }
 
