@@ -34,6 +34,24 @@ function columnExists(mysqli $conn, string $table, string $column): bool
     return $exists;
 }
 
+function tableExists(mysqli $conn, string $table): bool
+{
+    $tableEscaped = $conn->real_escape_string($table);
+    $sql = "
+        SELECT 1
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = '{$tableEscaped}'
+        LIMIT 1
+    ";
+    $result = $conn->query($sql);
+    $exists = $result && $result->num_rows > 0;
+    if ($result) {
+        $result->free();
+    }
+    return $exists;
+}
+
 if (!function_exists('buildAdvisorUnassignedClause')) {
     function buildAdvisorUnassignedClause(string $alias, array $columns): string
     {
@@ -83,9 +101,103 @@ if (!empty(array_filter($chairScope))) {
         $studentScopeCondition = '(' . implode(' OR ', $scopeParts) . ')';
     }
 }
+
+function fetchInterestedAdviserIdsByStudent(mysqli $conn, array $studentIds, array $eligibleAdviserIds): array
+{
+    $studentIds = array_values(array_unique(array_filter(
+        array_map(static fn($value) => (int)$value, $studentIds),
+        static fn($id) => $id > 0
+    )));
+    $eligibleAdviserIds = array_values(array_unique(array_filter(
+        array_map(static fn($value) => (int)$value, $eligibleAdviserIds),
+        static fn($id) => $id > 0
+    )));
+    if (empty($studentIds) || empty($eligibleAdviserIds)) {
+        return [];
+    }
+    if (!tableExists($conn, 'concept_reviews') || !tableExists($conn, 'concept_reviewer_assignments')) {
+        return [];
+    }
+
+    $studentPlaceholders = implode(',', array_fill(0, count($studentIds), '?'));
+    $adviserPlaceholders = implode(',', array_fill(0, count($eligibleAdviserIds), '?'));
+    $sql = "
+        SELECT DISTINCT cra.student_id, cra.reviewer_id
+        FROM concept_reviews cr
+        JOIN concept_reviewer_assignments cra ON cra.id = cr.assignment_id
+        WHERE cr.adviser_interest = 1
+          AND cra.student_id IN ({$studentPlaceholders})
+          AND cra.reviewer_id IN ({$adviserPlaceholders})
+    ";
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        return [];
+    }
+
+    $types = str_repeat('i', count($studentIds) + count($eligibleAdviserIds));
+    $params = array_merge($studentIds, $eligibleAdviserIds);
+    $stmt->bind_param($types, ...$params);
+    $map = [];
+    if ($stmt->execute()) {
+        $result = $stmt->get_result();
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $studentId = (int)($row['student_id'] ?? 0);
+                $adviserId = (int)($row['reviewer_id'] ?? 0);
+                if ($studentId <= 0 || $adviserId <= 0) {
+                    continue;
+                }
+                if (!isset($map[$studentId])) {
+                    $map[$studentId] = [];
+                }
+                $map[$studentId][$adviserId] = true;
+            }
+            $result->free();
+        }
+    }
+    $stmt->close();
+
+    foreach ($map as $studentId => $adviserSet) {
+        $map[$studentId] = array_values(array_map('intval', array_keys($adviserSet)));
+    }
+
+    return $map;
+}
 $adviserScopeCondition = render_scope_condition($conn, $chairScope, 'a');
 $restrictAdvisersToScope = false;
 $chairQuickLookupValue = '';
+$adviserSql = "
+    SELECT DISTINCT a.id,
+           CONCAT(COALESCE(a.firstname, ''), ' ', COALESCE(a.lastname, '')) AS full_name,
+           COALESCE(a.program, '') AS program,
+           COALESCE(a.department, '') AS department
+    FROM users a
+    LEFT JOIN user_roles ar ON ar.user_id = a.id AND ar.role_code = 'adviser'
+    WHERE a.role NOT IN ('student', 'program_chairperson')
+      AND (a.role IN ('adviser', 'faculty') OR ar.user_id IS NOT NULL)
+";
+if ($adviserScopeCondition !== '' && $restrictAdvisersToScope) {
+    $adviserSql .= " AND {$adviserScopeCondition}";
+}
+$adviserSql .= " ORDER BY a.lastname, a.firstname";
+if ($adviserResult = $conn->query($adviserSql)) {
+    while ($row = $adviserResult->fetch_assoc()) {
+        $row['full_name'] = trim((string)($row['full_name'] ?? '')) ?: 'Adviser #' . (int)($row['id'] ?? 0);
+        $chairAdviserOptions[] = $row;
+    }
+    $adviserResult->free();
+}
+$adviserOptionLookup = [];
+foreach ($chairAdviserOptions as $option) {
+    $optionId = (int)($option['id'] ?? 0);
+    if ($optionId > 0) {
+        $adviserOptionLookup[$optionId] = $option;
+    }
+}
+$eligibleAdviserIds = array_values(array_map(
+    static fn($option) => (int)($option['id'] ?? 0),
+    $chairAdviserOptions
+));
 
 if (isset($_GET['chair_assign_search']) && $_GET['chair_assign_search'] === '1') {
     header('Content-Type: application/json');
@@ -162,6 +274,16 @@ if (isset($_GET['chair_assign_search']) && $_GET['chair_assign_search'] === '1')
     }
     $searchStmt->close();
 
+    if (!empty($results) && !empty($eligibleAdviserIds)) {
+        $searchStudentIds = array_column($results, 'id');
+        $interestLookup = fetchInterestedAdviserIdsByStudent($conn, $searchStudentIds, $eligibleAdviserIds);
+        foreach ($results as &$result) {
+            $studentId = (int)($result['id'] ?? 0);
+            $result['interested_adviser_ids'] = $interestLookup[$studentId] ?? [];
+        }
+        unset($result);
+    }
+
     echo json_encode(['success' => true, 'results' => $results]);
     exit;
 }
@@ -170,7 +292,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['chair_assign_advisee'] ?? 
     if (!$adviserAssignmentEnabled) {
         $chairAssignAlert = ['type' => 'danger', 'message' => 'Advisor tracking columns are missing in the users table.'];
     } else {
-        $selectedAdviserId = (int)($_POST['chair_assign_adviser_id'] ?? 0);
         $studentIdInput = $_POST['chair_assign_students'] ?? [];
         if (!is_array($studentIdInput)) {
             $studentIdInput = [$studentIdInput];
@@ -239,256 +360,283 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['chair_assign_advisee'] ?? 
 
         $selectedStudentIds = array_values(array_unique($selectedStudentIds));
 
-        if ($selectedAdviserId <= 0) {
-            $chairAssignAlert = ['type' => 'warning', 'message' => 'Please choose an adviser before assigning students.'];
-        } elseif (empty($selectedStudentIds)) {
+        if (empty($selectedStudentIds)) {
             if ($chairQuickLookupValue !== '' && $quickLookupError !== '') {
                 $chairAssignAlert = ['type' => 'warning', 'message' => $quickLookupError];
             } else {
                 $chairAssignAlert = ['type' => 'warning', 'message' => 'Select at least one student to link.'];
             }
         } else {
-            $adviserCheckSql = "
-                SELECT a.id, CONCAT(COALESCE(a.firstname,''), ' ', COALESCE(a.lastname,'')) AS full_name
-                FROM users a
-                LEFT JOIN user_roles ar ON ar.user_id = a.id AND ar.role_code = 'adviser'
-                WHERE a.id = ?
-                  AND a.role NOT IN ('student', 'program_chairperson')
-                  AND (a.role IN ('adviser', 'faculty') OR ar.user_id IS NOT NULL)
-            ";
-            if ($adviserScopeCondition !== '' && $restrictAdvisersToScope) {
-                $adviserCheckSql .= " AND {$adviserScopeCondition}";
+            $selectionInput = $_POST['chair_assign_adviser_for'] ?? [];
+            if (!is_array($selectionInput)) {
+                $selectionInput = [];
             }
-            $adviserCheckSql .= " LIMIT 1";
-            $adviserStmt = $conn->prepare($adviserCheckSql);
-            $adviserName = '';
-            if ($adviserStmt) {
-                $adviserStmt->bind_param('i', $selectedAdviserId);
-                $adviserStmt->execute();
-                $adviserResult = $adviserStmt->get_result();
-                $adviserRow = $adviserResult ? $adviserResult->fetch_assoc() : null;
-                if ($adviserResult) {
-                    $adviserResult->free();
-                }
-                $adviserStmt->close();
-                if ($adviserRow) {
-                    $adviserName = trim((string)($adviserRow['full_name'] ?? ''));
+            $adviserSelections = [];
+            foreach ($selectionInput as $studentId => $adviserId) {
+                $sid = (int)$studentId;
+                $aid = (int)$adviserId;
+                if ($sid > 0 && $aid > 0) {
+                    $adviserSelections[$sid] = $aid;
                 }
             }
 
-            if ($adviserName === '') {
-                $chairAssignAlert = ['type' => 'danger', 'message' => 'Unable to locate the selected adviser within your scope.'];
+            $interestLookup = fetchInterestedAdviserIdsByStudent($conn, $selectedStudentIds, $eligibleAdviserIds);
+            $missingSelections = [];
+            $invalidSelections = [];
+            $assignmentsByAdviser = [];
+            foreach ($selectedStudentIds as $studentId) {
+                $adviserId = (int)($adviserSelections[$studentId] ?? 0);
+                if ($adviserId <= 0) {
+                    $interested = $interestLookup[$studentId] ?? [];
+                    if (count($interested) === 1) {
+                        $adviserId = (int)$interested[0];
+                    }
+                }
+                if ($adviserId <= 0) {
+                    $missingSelections[] = $studentId;
+                    continue;
+                }
+                if (!isset($adviserOptionLookup[$adviserId])) {
+                    $invalidSelections[] = $studentId;
+                    continue;
+                }
+                if (!isset($assignmentsByAdviser[$adviserId])) {
+                    $assignmentsByAdviser[$adviserId] = [];
+                }
+                $assignmentsByAdviser[$adviserId][] = $studentId;
+            }
+
+            if (!empty($missingSelections)) {
+                $chairAssignAlert = [
+                    'type' => 'warning',
+                    'message' => sprintf(
+                        'Select an adviser for %d student%s before submitting.',
+                        count($missingSelections),
+                        count($missingSelections) === 1 ? '' : 's'
+                    ),
+                ];
+            } elseif (!empty($invalidSelections)) {
+                $chairAssignAlert = [
+                    'type' => 'warning',
+                    'message' => 'Some adviser selections are no longer available. Please reselect advisers for the highlighted students.',
+                ];
             } else {
                 $updateFields = [];
-                $updateTypes = '';
-                $updateParams = [];
+                $updateTypesBase = '';
+                $updateParamCount = 0;
                 if ($hasAdviserIdColumn) {
                     $updateFields[] = 'adviser_id = ?';
-                    $updateTypes .= 'i';
-                    $updateParams[] = $selectedAdviserId;
+                    $updateTypesBase .= 'i';
+                    $updateParamCount++;
                 }
                 if ($hasAdvisorIdColumn) {
                     $updateFields[] = 'advisor_id = ?';
-                    $updateTypes .= 'i';
-                    $updateParams[] = $selectedAdviserId;
+                    $updateTypesBase .= 'i';
+                    $updateParamCount++;
                 }
 
                 if (empty($updateFields)) {
                     $chairAssignAlert = ['type' => 'danger', 'message' => 'Advisor columns are unavailable for updates.'];
                 } else {
-                    $placeholders = implode(',', array_fill(0, count($selectedStudentIds), '?'));
-                    $setClause = implode(', ', $updateFields);
-                    $updateSql = "
-                        UPDATE users u
-                        SET {$setClause}
-                        WHERE u.id IN ({$placeholders})
-                          AND u.role = 'student'
-                          AND {$unassignedClause}
-                    ";
-                    if ($studentScopeCondition !== '') {
-                        $updateSql .= " AND {$studentScopeCondition}";
-                    }
-                    $updateTypes .= str_repeat('i', count($selectedStudentIds));
-                    $updateParams = array_merge($updateParams, $selectedStudentIds);
-                    $updateStmt = $conn->prepare($updateSql);
-                    if ($updateStmt) {
+                    $totalAssigned = 0;
+                    $assignedByAdviser = [];
+                    $updateFailures = 0;
+                    foreach ($assignmentsByAdviser as $adviserId => $studentIds) {
+                        $studentIds = array_values(array_unique(array_filter(
+                            array_map(static fn($value) => (int)$value, $studentIds),
+                            static fn($id) => $id > 0
+                        )));
+                        if (empty($studentIds)) {
+                            continue;
+                        }
+                        $placeholders = implode(',', array_fill(0, count($studentIds), '?'));
+                        $setClause = implode(', ', $updateFields);
+                        $updateSql = "
+                            UPDATE users u
+                            SET {$setClause}
+                            WHERE u.id IN ({$placeholders})
+                              AND u.role = 'student'
+                              AND {$unassignedClause}
+                        ";
+                        if ($studentScopeCondition !== '') {
+                            $updateSql .= " AND {$studentScopeCondition}";
+                        }
+                        $updateStmt = $conn->prepare($updateSql);
+                        if (!$updateStmt) {
+                            $updateFailures++;
+                            continue;
+                        }
+                        $updateTypes = $updateTypesBase . str_repeat('i', count($studentIds));
+                        $updateParams = array_merge(array_fill(0, $updateParamCount, $adviserId), $studentIds);
                         $updateStmt->bind_param($updateTypes, ...$updateParams);
-                        if ($updateStmt->execute() && $updateStmt->affected_rows > 0) {
-                            $assignedCount = $updateStmt->affected_rows;
-                            $hadAdviserRole = false;
-                            $roleCheckStmt = $conn->prepare("
+                        $assignedCount = 0;
+                        if ($updateStmt->execute()) {
+                            $assignedCount = (int)$updateStmt->affected_rows;
+                        }
+                        $updateStmt->close();
+
+                        if ($assignedCount <= 0) {
+                            continue;
+                        }
+
+                        $adviserName = trim((string)($adviserOptionLookup[$adviserId]['full_name'] ?? '')) ?: 'Adviser';
+                        $hadAdviserRole = false;
+                        $roleCheckStmt = $conn->prepare("
+                            SELECT 1 FROM user_roles
+                            WHERE user_id = ? AND role_code = 'adviser'
+                            LIMIT 1
+                        ");
+                        if ($roleCheckStmt) {
+                            $roleCheckStmt->bind_param('i', $adviserId);
+                            $roleCheckStmt->execute();
+                            $roleCheckStmt->store_result();
+                            $hadAdviserRole = $roleCheckStmt->num_rows > 0;
+                            $roleCheckStmt->close();
+                        }
+                        ensureUserRoleAssignment($conn, $adviserId, 'adviser');
+                        if (!$hadAdviserRole) {
+                            $roleConfirmStmt = $conn->prepare("
                                 SELECT 1 FROM user_roles
                                 WHERE user_id = ? AND role_code = 'adviser'
                                 LIMIT 1
                             ");
-                            if ($roleCheckStmt) {
-                                $roleCheckStmt->bind_param('i', $selectedAdviserId);
-                                $roleCheckStmt->execute();
-                                $roleCheckStmt->store_result();
-                                $hadAdviserRole = $roleCheckStmt->num_rows > 0;
-                                $roleCheckStmt->close();
-                            }
-                            ensureUserRoleAssignment($conn, $selectedAdviserId, 'adviser');
-                            if (!$hadAdviserRole) {
-                                $roleConfirmStmt = $conn->prepare("
-                                    SELECT 1 FROM user_roles
-                                    WHERE user_id = ? AND role_code = 'adviser'
-                                    LIMIT 1
-                                ");
-                                if ($roleConfirmStmt) {
-                                    $roleConfirmStmt->bind_param('i', $selectedAdviserId);
-                                    $roleConfirmStmt->execute();
-                                    $roleConfirmStmt->store_result();
-                                    $roleAssigned = $roleConfirmStmt->num_rows > 0;
-                                    $roleConfirmStmt->close();
-                                    if ($roleAssigned) {
-                                        notify_user(
-                                            $conn,
-                                            $selectedAdviserId,
-                                            'Adviser role assigned',
-                                            'You have been granted the Adviser role. Switch to Adviser to view your advisees and advisory chat.',
-                                            'adviser.php'
-                                        );
-                                    }
-                                }
-                            }
-                            $assignedStudents = [];
-                            if (!empty($selectedStudentIds)) {
-                                $assignedPlaceholders = implode(',', array_fill(0, count($selectedStudentIds), '?'));
-                                $adviserMatch = [];
-                                $adviserMatchTypes = '';
-                                $adviserMatchParams = [];
-                                if ($hasAdviserIdColumn) {
-                                    $adviserMatch[] = 'u.adviser_id = ?';
-                                    $adviserMatchTypes .= 'i';
-                                    $adviserMatchParams[] = $selectedAdviserId;
-                                }
-                                if ($hasAdvisorIdColumn) {
-                                    $adviserMatch[] = 'u.advisor_id = ?';
-                                    $adviserMatchTypes .= 'i';
-                                    $adviserMatchParams[] = $selectedAdviserId;
-                                }
-                                $assignedSql = "
-                                    SELECT u.id, CONCAT(COALESCE(u.firstname,''), ' ', COALESCE(u.lastname,'')) AS full_name
-                                    FROM users u
-                                    WHERE u.id IN ({$assignedPlaceholders})
-                                      AND u.role = 'student'
-                                ";
-                                if (!empty($adviserMatch)) {
-                                    $assignedSql .= " AND (" . implode(' OR ', $adviserMatch) . ")";
-                                }
-                                if ($studentScopeCondition !== '') {
-                                    $assignedSql .= " AND {$studentScopeCondition}";
-                                }
-                                $assignedStmt = $conn->prepare($assignedSql);
-                                if ($assignedStmt) {
-                                    $assignedTypes = str_repeat('i', count($selectedStudentIds)) . $adviserMatchTypes;
-                                    $assignedParams = array_merge($selectedStudentIds, $adviserMatchParams);
-                                    $assignedStmt->bind_param($assignedTypes, ...$assignedParams);
-                                    if ($assignedStmt->execute()) {
-                                        $assignedResult = $assignedStmt->get_result();
-                                        if ($assignedResult) {
-                                            $assignedStudents = $assignedResult->fetch_all(MYSQLI_ASSOC);
-                                            $assignedResult->free();
-                                        }
-                                    }
-                                    $assignedStmt->close();
-                                }
-                            }
-
-                            if (!empty($assignedStudents)) {
-                                $studentNames = array_map(
-                                    static fn($student) => trim((string)($student['full_name'] ?? '')),
-                                    $assignedStudents
-                                );
-                                $studentNames = array_values(array_filter($studentNames));
-                                $studentPreview = '';
-                                if (!empty($studentNames)) {
-                                    $studentPreview = count($studentNames) <= 3
-                                        ? implode(', ', $studentNames)
-                                        : implode(', ', array_slice($studentNames, 0, 3)) . ' and others';
-                                }
-                                $adviserMessage = $studentPreview !== ''
-                                    ? "You have been assigned {$assignedCount} advisee(s): {$studentPreview}."
-                                    : "You have been assigned {$assignedCount} advisee(s).";
-                                notify_user(
-                                    $conn,
-                                    $selectedAdviserId,
-                                    'New advisee assignment',
-                                    $adviserMessage,
-                                    'adviser.php'
-                                );
-
-                                foreach ($assignedStudents as $student) {
-                                    $studentId = (int)($student['id'] ?? 0);
-                                    if ($studentId <= 0) {
-                                        continue;
-                                    }
+                            if ($roleConfirmStmt) {
+                                $roleConfirmStmt->bind_param('i', $adviserId);
+                                $roleConfirmStmt->execute();
+                                $roleConfirmStmt->store_result();
+                                $roleAssigned = $roleConfirmStmt->num_rows > 0;
+                                $roleConfirmStmt->close();
+                                if ($roleAssigned) {
                                     notify_user(
                                         $conn,
-                                        $studentId,
-                                        'Adviser assigned',
-                                        "You have been assigned to {$adviserName} as your adviser.",
-                                        'student_dashboard.php'
+                                        $adviserId,
+                                        'Adviser role assigned',
+                                        'You have been granted the Adviser role. Switch to Adviser to view your advisees and advisory chat.',
+                                        'adviser.php'
                                     );
                                 }
                             }
-                            $message = sprintf(
-                                '%d student%s linked to %s.',
-                                $assignedCount,
-                                $assignedCount === 1 ? '' : 's',
-                                $adviserName
-                            );
-                            if ($quickLookupSuccessNote !== '') {
-                                $message .= ' ' . $quickLookupSuccessNote;
-                            }
-                            if ($quickLookupError !== '') {
-                                $message .= ' Note: ' . $quickLookupError;
-                            }
-                            $chairAssignAlert = [
-                                'type' => $quickLookupError === '' ? 'success' : 'warning',
-                                'message' => $message,
-                            ];
-                            if ($quickLookupError === '') {
-                                $chairQuickLookupValue = '';
-                            }
-                        } else {
-                            $failureMessage = 'No students were updated. They might already have advisers or fall outside your scope.';
-                            if ($quickLookupError !== '') {
-                                $failureMessage .= ' ' . $quickLookupError;
-                            }
-                            $chairAssignAlert = ['type' => 'warning', 'message' => $failureMessage];
                         }
-                        $updateStmt->close();
+
+                        $assignedStudents = [];
+                        $assignedPlaceholders = implode(',', array_fill(0, count($studentIds), '?'));
+                        $adviserMatch = [];
+                        $adviserMatchTypes = '';
+                        $adviserMatchParams = [];
+                        if ($hasAdviserIdColumn) {
+                            $adviserMatch[] = 'u.adviser_id = ?';
+                            $adviserMatchTypes .= 'i';
+                            $adviserMatchParams[] = $adviserId;
+                        }
+                        if ($hasAdvisorIdColumn) {
+                            $adviserMatch[] = 'u.advisor_id = ?';
+                            $adviserMatchTypes .= 'i';
+                            $adviserMatchParams[] = $adviserId;
+                        }
+                        $assignedSql = "
+                            SELECT u.id, CONCAT(COALESCE(u.firstname,''), ' ', COALESCE(u.lastname,'')) AS full_name
+                            FROM users u
+                            WHERE u.id IN ({$assignedPlaceholders})
+                              AND u.role = 'student'
+                        ";
+                        if (!empty($adviserMatch)) {
+                            $assignedSql .= " AND (" . implode(' OR ', $adviserMatch) . ")";
+                        }
+                        if ($studentScopeCondition !== '') {
+                            $assignedSql .= " AND {$studentScopeCondition}";
+                        }
+                        $assignedStmt = $conn->prepare($assignedSql);
+                        if ($assignedStmt) {
+                            $assignedTypes = str_repeat('i', count($studentIds)) . $adviserMatchTypes;
+                            $assignedParams = array_merge($studentIds, $adviserMatchParams);
+                            $assignedStmt->bind_param($assignedTypes, ...$assignedParams);
+                            if ($assignedStmt->execute()) {
+                                $assignedResult = $assignedStmt->get_result();
+                                if ($assignedResult) {
+                                    $assignedStudents = $assignedResult->fetch_all(MYSQLI_ASSOC);
+                                    $assignedResult->free();
+                                }
+                            }
+                            $assignedStmt->close();
+                        }
+
+                        if (!empty($assignedStudents)) {
+                            $studentNames = array_map(
+                                static fn($student) => trim((string)($student['full_name'] ?? '')),
+                                $assignedStudents
+                            );
+                            $studentNames = array_values(array_filter($studentNames));
+                            $studentPreview = '';
+                            if (!empty($studentNames)) {
+                                $studentPreview = count($studentNames) <= 3
+                                    ? implode(', ', $studentNames)
+                                    : implode(', ', array_slice($studentNames, 0, 3)) . ' and others';
+                            }
+                            $adviserMessage = $studentPreview !== ''
+                                ? "You have been assigned {$assignedCount} advisee(s): {$studentPreview}."
+                                : "You have been assigned {$assignedCount} advisee(s).";
+                            notify_user(
+                                $conn,
+                                $adviserId,
+                                'New advisee assignment',
+                                $adviserMessage,
+                                'adviser.php'
+                            );
+
+                            foreach ($assignedStudents as $student) {
+                                $studentId = (int)($student['id'] ?? 0);
+                                if ($studentId <= 0) {
+                                    continue;
+                                }
+                                notify_user(
+                                    $conn,
+                                    $studentId,
+                                    'Adviser assigned',
+                                    "You have been assigned to {$adviserName} as your adviser.",
+                                    'student_dashboard.php'
+                                );
+                            }
+                        }
+
+                        $totalAssigned += $assignedCount;
+                        $assignedByAdviser[$adviserId] = ($assignedByAdviser[$adviserId] ?? 0) + $assignedCount;
+                    }
+
+                    if ($totalAssigned > 0) {
+                        $message = sprintf(
+                            '%d student%s linked across %d adviser%s.',
+                            $totalAssigned,
+                            $totalAssigned === 1 ? '' : 's',
+                            count($assignedByAdviser),
+                            count($assignedByAdviser) === 1 ? '' : 's'
+                        );
+                        if ($quickLookupSuccessNote !== '') {
+                            $message .= ' ' . $quickLookupSuccessNote;
+                        }
+                        if ($quickLookupError !== '') {
+                            $message .= ' Note: ' . $quickLookupError;
+                        }
+                        if ($updateFailures > 0) {
+                            $message .= ' Some adviser updates could not be prepared.';
+                        }
+                        $chairAssignAlert = [
+                            'type' => $quickLookupError === '' ? 'success' : 'warning',
+                            'message' => $message,
+                        ];
+                        if ($quickLookupError === '') {
+                            $chairQuickLookupValue = '';
+                        }
                     } else {
-                        $chairAssignAlert = ['type' => 'danger', 'message' => 'Unable to prepare the adviser assignment update.'];
+                        $failureMessage = 'No students were updated. They might already have advisers or fall outside your scope.';
+                        if ($quickLookupError !== '') {
+                            $failureMessage .= ' ' . $quickLookupError;
+                        }
+                        $chairAssignAlert = ['type' => 'warning', 'message' => $failureMessage];
                     }
                 }
             }
         }
     }
-}
-
-$adviserSql = "
-    SELECT DISTINCT a.id,
-           CONCAT(COALESCE(a.firstname, ''), ' ', COALESCE(a.lastname, '')) AS full_name,
-           COALESCE(a.program, '') AS program,
-           COALESCE(a.department, '') AS department
-    FROM users a
-    LEFT JOIN user_roles ar ON ar.user_id = a.id AND ar.role_code = 'adviser'
-    WHERE a.role NOT IN ('student', 'program_chairperson')
-      AND (a.role IN ('adviser', 'faculty') OR ar.user_id IS NOT NULL)
-";
-if ($adviserScopeCondition !== '' && $restrictAdvisersToScope) {
-    $adviserSql .= " AND {$adviserScopeCondition}";
-}
-$adviserSql .= " ORDER BY a.lastname, a.firstname";
-if ($adviserResult = $conn->query($adviserSql)) {
-    while ($row = $adviserResult->fetch_assoc()) {
-        $row['full_name'] = trim((string)($row['full_name'] ?? '')) ?: 'Adviser #' . (int)($row['id'] ?? 0);
-        $chairAdviserOptions[] = $row;
-    }
-    $adviserResult->free();
 }
 
 if ($adviserAssignmentEnabled) {
@@ -530,6 +678,12 @@ if ($adviserAssignmentEnabled) {
         }
         $listResult->free();
     }
+}
+
+$interestedAdviserIdsByStudent = [];
+if ($adviserAssignmentEnabled && !empty($chairUnassignedStudents) && !empty($eligibleAdviserIds)) {
+    $studentIds = array_map(static fn($student) => (int)($student['id'] ?? 0), $chairUnassignedStudents);
+    $interestedAdviserIdsByStudent = fetchInterestedAdviserIdsByStudent($conn, $studentIds, $eligibleAdviserIds);
 }
 
 $adviserCount = count($chairAdviserOptions);
@@ -644,7 +798,7 @@ $adviserCount = count($chairAdviserOptions);
                                     <?= number_format($chairUnassignedTotal); ?> students without advisers.
                                 </small>
                                 <div class="text-muted small">
-                                    Select students then choose an adviser on the right.
+                                    Select students and confirm an adviser per row.
                                 </div>
                             </div>
                             <div class="table-responsive">
@@ -660,6 +814,7 @@ $adviserCount = count($chairAdviserOptions);
                                                 >
                                             </th>
                                             <th scope="col">Student</th>
+                                            <th scope="col">Interested Adviser</th>
                                             <th scope="col">Program</th>
                                             <th scope="col">Year Level</th>
                                         </tr>
@@ -674,6 +829,20 @@ $adviserCount = count($chairAdviserOptions);
                                                 $programLabel = trim((string)($student['program'] ?? '')) ?: 'Not specified';
                                                 $yearLevel = trim((string)($student['year_level'] ?? '')) ?: 'N/A';
                                                 $email = trim((string)($student['email'] ?? ''));
+                                                $interestedAdviserIds = $interestedAdviserIdsByStudent[$studentId] ?? [];
+                                                $interestedCount = count($interestedAdviserIds);
+                                                $autoAdviserId = $interestedCount === 1 ? (int)($interestedAdviserIds[0] ?? 0) : 0;
+                                                $adviserOptionsForStudent = [];
+                                                if ($interestedCount > 0) {
+                                                    foreach ($interestedAdviserIds as $adviserId) {
+                                                        $adviserId = (int)$adviserId;
+                                                        if (isset($adviserOptionLookup[$adviserId])) {
+                                                            $adviserOptionsForStudent[] = $adviserOptionLookup[$adviserId];
+                                                        }
+                                                    }
+                                                } else {
+                                                    $adviserOptionsForStudent = $chairAdviserOptions;
+                                                }
                                             ?>
                                             <tr>
                                                 <td>
@@ -692,6 +861,39 @@ $adviserCount = count($chairAdviserOptions);
                                                     </small>
                                                     <?php if ($email !== ''): ?>
                                                         <small class="text-muted d-block"><?= htmlspecialchars($email); ?></small>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <select
+                                                        class="form-select form-select-sm"
+                                                        name="chair_assign_adviser_for[<?= $studentId; ?>]"
+                                                        <?= (!$adviserAssignmentEnabled || $adviserCount === 0) ? 'disabled' : ''; ?>
+                                                    >
+                                                        <option value="">-- Select adviser --</option>
+                                                        <?php foreach ($adviserOptionsForStudent as $adviserOption): ?>
+                                                            <?php
+                                                                $adviserId = (int)($adviserOption['id'] ?? 0);
+                                                                $adviserName = trim((string)($adviserOption['full_name'] ?? 'Adviser'));
+                                                                $assignmentContext = trim((string)($adviserOption['program'] ?? ''));
+                                                                if ($assignmentContext === '') {
+                                                                    $assignmentContext = trim((string)($adviserOption['department'] ?? ''));
+                                                                }
+                                                                $label = $adviserName;
+                                                                if ($assignmentContext !== '') {
+                                                                    $label .= ' | ' . $assignmentContext;
+                                                                }
+                                                            ?>
+                                                            <option value="<?= $adviserId; ?>" <?= $autoAdviserId === $adviserId ? 'selected' : ''; ?>>
+                                                                <?= htmlspecialchars($label); ?>
+                                                            </option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                    <?php if ($interestedCount === 1): ?>
+                                                        <small class="text-muted d-block">Auto-selected (only interested faculty).</small>
+                                                    <?php elseif ($interestedCount > 1): ?>
+                                                        <small class="text-muted d-block"><?= htmlspecialchars((string)$interestedCount); ?> interested faculty.</small>
+                                                    <?php else: ?>
+                                                        <small class="text-muted d-block">No interested faculty yet.</small>
                                                     <?php endif; ?>
                                                 </td>
                                                 <td>
@@ -717,43 +919,8 @@ $adviserCount = count($chairAdviserOptions);
                         <p class="text-muted small mb-0">Link selected students to an adviser roster instantly.</p>
                     </div>
                     <div class="card-body">
-                        <div class="mb-3">
-                            <label class="form-label text-muted small">Choose Adviser</label>
-                            <input
-                                type="text"
-                                class="form-control mb-2"
-                                id="chairAssignAdviserFilter"
-                                placeholder="Filter adviser name..."
-                                <?= (!$adviserAssignmentEnabled || empty($chairAdviserOptions)) ? 'disabled' : ''; ?>
-                            >
-                            <select
-                                class="form-select"
-                                name="chair_assign_adviser_id"
-                                id="chairAssignAdviserSelect"
-                                <?= (!$adviserAssignmentEnabled || empty($chairAdviserOptions)) ? 'disabled' : ''; ?>
-                                required
-                            >
-                                <option value="">-- Select adviser --</option>
-                                <?php foreach ($chairAdviserOptions as $adviser): ?>
-                                    <?php
-                                        $adviserId = (int)($adviser['id'] ?? 0);
-                                        $adviserName = trim((string)($adviser['full_name'] ?? 'Adviser'));
-                                        $assignmentContext = trim((string)($adviser['program'] ?? ''));
-                                        if ($assignmentContext === '') {
-                                            $assignmentContext = trim((string)($adviser['department'] ?? ''));
-                                        }
-                                    ?>
-                                    <option value="<?= $adviserId; ?>" data-name="<?= htmlspecialchars(strtolower($adviserName), ENT_QUOTES); ?>">
-                                        <?= htmlspecialchars($adviserName); ?>
-                                        <?= $assignmentContext !== '' ? ' | ' . htmlspecialchars($assignmentContext) : ''; ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                            <?php if (empty($chairAdviserOptions)): ?>
-                                <small class="text-muted">No advisers found within your scope. Add adviser accounts first.</small>
-                            <?php else: ?>
-                                <small class="text-muted" id="chairAssignAdviserEmpty" style="display:none;">No advisers match that name.</small>
-                            <?php endif; ?>
+                        <div class="alert alert-info small">
+                            Select advisers per student in the table. When only one faculty is interested, the adviser is auto-selected.
                         </div>
                         <div class="mb-3">
                             <label class="form-label text-muted small">Quick Add Student</label>
@@ -797,9 +964,6 @@ $adviserCount = count($chairAdviserOptions);
                         <div class="alert alert-info small">
                             Selected students will immediately appear in the chosen adviser's advisee list.
                         </div>
-                        <div class="alert alert-secondary small mb-3">
-                            Prefer the legacy workflow? Continue in <a href="adviser_directory.php" class="alert-link">Add Advisee to Adviser</a> for detailed roster controls.
-                        </div>
                         <div class="d-flex gap-2">
                             <button
                                 type="submit"
@@ -821,15 +985,26 @@ $adviserCount = count($chairAdviserOptions);
                 </section>
             </div>
         </form>
-
-        <div class="text-muted small">
-            Need to audit past assignments? Visit the <a href="adviser_directory.php">adviser directory</a> to see each roster.
-        </div>
     </div>
 </main>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<?php
+    $adviserOptionsPayload = array_map(static function ($option) {
+        $adviserId = (int)($option['id'] ?? 0);
+        $adviserName = trim((string)($option['full_name'] ?? 'Adviser'));
+        $assignmentContext = trim((string)($option['program'] ?? ''));
+        if ($assignmentContext === '') {
+            $assignmentContext = trim((string)($option['department'] ?? ''));
+        }
+        $label = $adviserName;
+        if ($assignmentContext !== '') {
+            $label .= ' | ' . $assignmentContext;
+        }
+        return ['id' => $adviserId, 'label' => $label];
+    }, $chairAdviserOptions);
+?>
 <script>
 (function() {
     const chairAssignForm = document.getElementById('chairAssignForm');
@@ -844,9 +1019,8 @@ $adviserCount = count($chairAdviserOptions);
     const quickSelectedWrapper = document.getElementById('chairAssignQuickSelectedWrapper');
     const quickSelectedList = document.getElementById('chairAssignQuickSelectedList');
     const quickHiddenInputs = document.getElementById('chairAssignQuickHiddenInputs');
-    const adviserFilterInput = document.getElementById('chairAssignAdviserFilter');
-    const adviserSelect = document.getElementById('chairAssignAdviserSelect');
-    const adviserEmptyHint = document.getElementById('chairAssignAdviserEmpty');
+    const adviserOptions = <?php echo json_encode($adviserOptionsPayload ?? []); ?>;
+    const adviserOptionsById = new Map(adviserOptions.map((option) => [option.id.toString(), option]));
     const QUICK_MIN_CHARACTERS = 2;
     let quickSearchTimer = null;
     let quickSearchAbortController = null;
@@ -862,10 +1036,25 @@ $adviserCount = count($chairAdviserOptions);
         selectedCountElement.textContent = selectedTotal.toString();
     };
 
+    const getQuickSelectedValues = () => {
+        const selections = {};
+        if (!quickSelectedList) {
+            return selections;
+        }
+        quickSelectedList.querySelectorAll('select[data-quick-select]').forEach((select) => {
+            const studentId = select.getAttribute('data-quick-select');
+            if (studentId) {
+                selections[studentId] = select.value;
+            }
+        });
+        return selections;
+    };
+
     const renderQuickSelectedList = () => {
         if (!quickSelectedWrapper || !quickSelectedList) {
             return;
         }
+        const previousSelections = getQuickSelectedValues();
         const selected = getQuickSelectedInputs();
         quickSelectedList.innerHTML = '';
         if (selected.length === 0) {
@@ -875,28 +1064,82 @@ $adviserCount = count($chairAdviserOptions);
         quickSelectedWrapper.classList.remove('d-none');
         selected.forEach((input) => {
             const studentId = input.value;
-            const pill = document.createElement('span');
-            pill.className = 'badge bg-success-subtle text-success d-inline-flex align-items-center gap-2';
-            pill.setAttribute('data-quick-pill', studentId);
+            const wrapper = document.createElement('div');
+            wrapper.className = 'border rounded p-2 d-flex flex-column gap-2 bg-white';
+            wrapper.setAttribute('data-quick-pill', studentId);
             const nameText = input.getAttribute('data-quick-name') || `Student #${studentId}`;
             const metaText = input.getAttribute('data-quick-meta') || '';
-            const label = document.createElement('span');
+            const header = document.createElement('div');
+            header.className = 'd-flex align-items-start justify-content-between gap-2';
+            const label = document.createElement('div');
+            label.className = 'fw-semibold text-success';
             label.textContent = nameText;
-            pill.appendChild(label);
+            header.appendChild(label);
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.className = 'btn btn-sm btn-link text-success p-0';
+            removeBtn.setAttribute('data-quick-remove', studentId);
+            removeBtn.setAttribute('aria-label', 'Remove student');
+            removeBtn.innerHTML = '<i class="bi bi-x-circle"></i>';
+            header.appendChild(removeBtn);
+            wrapper.appendChild(header);
             if (metaText) {
                 const meta = document.createElement('small');
                 meta.className = 'text-muted text-lowercase';
                 meta.textContent = metaText;
-                pill.appendChild(meta);
+                wrapper.appendChild(meta);
             }
-            const removeBtn = document.createElement('button');
-            removeBtn.type = 'button';
-            removeBtn.className = 'btn btn-sm btn-link text-success p-0 ms-1';
-            removeBtn.setAttribute('data-quick-remove', studentId);
-            removeBtn.setAttribute('aria-label', 'Remove student');
-            removeBtn.innerHTML = '<i class="bi bi-x-circle"></i>';
-            pill.appendChild(removeBtn);
-            quickSelectedList.appendChild(pill);
+
+            let interestedIds = [];
+            const interestedRaw = input.getAttribute('data-quick-interested') || '[]';
+            try {
+                const parsed = JSON.parse(interestedRaw);
+                if (Array.isArray(parsed)) {
+                    interestedIds = parsed.map((value) => parseInt(value, 10)).filter((value) => Number.isFinite(value));
+                }
+            } catch (error) {
+                interestedIds = [];
+            }
+            const availableOptions = interestedIds.length > 0
+                ? interestedIds.map((id) => adviserOptionsById.get(id.toString())).filter(Boolean)
+                : adviserOptions;
+            const select = document.createElement('select');
+            select.className = 'form-select form-select-sm';
+            select.name = `chair_assign_adviser_for[${studentId}]`;
+            select.setAttribute('data-quick-select', studentId);
+            if (!adviserOptions.length) {
+                select.disabled = true;
+            }
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = '-- Select adviser --';
+            select.appendChild(placeholder);
+            availableOptions.forEach((option) => {
+                const opt = document.createElement('option');
+                opt.value = option.id;
+                opt.textContent = option.label;
+                select.appendChild(opt);
+            });
+            const previous = previousSelections[studentId] || '';
+            if (previous) {
+                select.value = previous;
+            } else if (interestedIds.length === 1) {
+                select.value = interestedIds[0].toString();
+            }
+            wrapper.appendChild(select);
+
+            const note = document.createElement('small');
+            note.className = 'text-muted';
+            if (interestedIds.length === 1) {
+                note.textContent = 'Auto-selected (only interested faculty).';
+            } else if (interestedIds.length > 1) {
+                note.textContent = `${interestedIds.length} interested faculty.`;
+            } else {
+                note.textContent = 'No interested faculty yet.';
+            }
+            wrapper.appendChild(note);
+
+            quickSelectedList.appendChild(wrapper);
         });
     };
 
@@ -932,6 +1175,8 @@ $adviserCount = count($chairAdviserOptions);
         hiddenInput.setAttribute('data-quick-input', studentId);
         hiddenInput.setAttribute('data-quick-name', student.name || '');
         hiddenInput.setAttribute('data-quick-meta', student.meta || '');
+        const interestedIds = Array.isArray(student.interested_adviser_ids) ? student.interested_adviser_ids : [];
+        hiddenInput.setAttribute('data-quick-interested', JSON.stringify(interestedIds));
         quickHiddenInputs.appendChild(hiddenInput);
         renderQuickSelectedList();
         updateSelectedCount();
@@ -969,6 +1214,7 @@ $adviserCount = count($chairAdviserOptions);
             entry.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-start';
             entry.setAttribute('data-result-id', item.id);
             entry.setAttribute('data-result-name', item.name || '');
+            entry.setAttribute('data-result-interested', JSON.stringify(item.interested_adviser_ids || []));
             const metaParts = [];
             if (item.student_id) {
                 metaParts.push(`ID: ${item.student_id}`);
@@ -1100,10 +1346,21 @@ $adviserCount = count($chairAdviserOptions);
             if (!target) {
                 return;
             }
+            let interestedIds = [];
+            const interestedRaw = target.getAttribute('data-result-interested') || '[]';
+            try {
+                const parsed = JSON.parse(interestedRaw);
+                if (Array.isArray(parsed)) {
+                    interestedIds = parsed;
+                }
+            } catch (error) {
+                interestedIds = [];
+            }
             addQuickSelection({
                 id: target.getAttribute('data-result-id'),
                 name: target.getAttribute('data-result-name') || '',
-                meta: target.getAttribute('data-result-meta') || ''
+                meta: target.getAttribute('data-result-meta') || '',
+                interested_adviser_ids: interestedIds
             });
             hideQuickResults();
             if (quickSearchInput) {
@@ -1133,27 +1390,6 @@ $adviserCount = count($chairAdviserOptions);
         hideQuickResults();
     });
 
-    if (adviserFilterInput && adviserSelect) {
-        adviserFilterInput.addEventListener('input', () => {
-            const query = adviserFilterInput.value.trim().toLowerCase();
-            let matches = 0;
-            Array.from(adviserSelect.options).forEach((option, index) => {
-                if (index === 0) {
-                    option.hidden = false;
-                    return;
-                }
-                const name = option.dataset.name || option.textContent.toLowerCase();
-                const isMatch = query === '' || name.includes(query);
-                option.hidden = !isMatch;
-                if (isMatch) {
-                    matches++;
-                }
-            });
-            if (adviserEmptyHint) {
-                adviserEmptyHint.style.display = matches === 0 && query !== '' ? 'block' : 'none';
-            }
-        });
-    }
 })();
 </script>
 </body>

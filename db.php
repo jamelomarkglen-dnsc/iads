@@ -6,7 +6,7 @@ $servername = "localhost";
 // $password = "Dnsc01606";
 // $database = "u645049065_iads2";
 
-// Local
+// // Local
 $username = "root";
 $password = ""; 
 $database = "advance_studies";
