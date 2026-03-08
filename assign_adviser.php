@@ -697,6 +697,15 @@ $adviserCount = count($chairAdviserOptions);
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="progchair.css">
+    <style>
+        .adviser-required select {
+            border-color: #f0ad4e;
+            box-shadow: 0 0 0 0.2rem rgba(240, 173, 78, 0.15);
+        }
+        .adviser-required .adviser-required-note {
+            color: #b47a2a;
+        }
+    </style>
 </head>
 <body class="bg-light program-chair-layout">
 <?php include 'header.php'; ?>
@@ -863,7 +872,7 @@ $adviserCount = count($chairAdviserOptions);
                                                         <small class="text-muted d-block"><?= htmlspecialchars($email); ?></small>
                                                     <?php endif; ?>
                                                 </td>
-                                                <td>
+                                                <td class="adviser-select-cell">
                                                     <select
                                                         class="form-select form-select-sm"
                                                         name="chair_assign_adviser_for[<?= $studentId; ?>]"
@@ -895,6 +904,7 @@ $adviserCount = count($chairAdviserOptions);
                                                     <?php else: ?>
                                                         <small class="text-muted d-block">No interested faculty yet.</small>
                                                     <?php endif; ?>
+                                                    <small class="adviser-required-note d-none">Please choose an adviser.</small>
                                                 </td>
                                                 <td>
                                                     <span class="badge bg-success-subtle text-success"><?= htmlspecialchars($programLabel); ?></span>
@@ -1036,6 +1046,27 @@ $adviserCount = count($chairAdviserOptions);
         selectedCountElement.textContent = selectedTotal.toString();
     };
 
+    const updateRowAdviserRequirement = (row) => {
+        if (!row) {
+            return;
+        }
+        const checkbox = row.querySelector('.chair-assign-checkbox');
+        const select = row.querySelector('select[name^="chair_assign_adviser_for"]');
+        const note = row.querySelector('.adviser-required-note');
+        if (!checkbox || !select || !note) {
+            return;
+        }
+        const needsSelection = checkbox.checked && !select.value;
+        row.classList.toggle('adviser-required', needsSelection);
+        note.classList.toggle('d-none', !needsSelection);
+    };
+
+    const updateAllRowAdviserRequirements = () => {
+        chairAssignForm.querySelectorAll('tbody tr').forEach((row) => {
+            updateRowAdviserRequirement(row);
+        });
+    };
+
     const getQuickSelectedValues = () => {
         const selections = {};
         if (!quickSelectedList) {
@@ -1139,7 +1170,20 @@ $adviserCount = count($chairAdviserOptions);
             }
             wrapper.appendChild(note);
 
+            const requiredNote = document.createElement('small');
+            requiredNote.className = 'adviser-required-note d-none';
+            requiredNote.textContent = 'Please choose an adviser.';
+            wrapper.appendChild(requiredNote);
+
             quickSelectedList.appendChild(wrapper);
+        });
+
+        quickSelectedList.querySelectorAll('select[data-quick-select]').forEach((select) => {
+            const note = select.parentElement?.querySelector('.adviser-required-note');
+            if (note) {
+                const needsSelection = !select.value;
+                note.classList.toggle('d-none', !needsSelection);
+            }
         });
     };
 
@@ -1288,6 +1332,11 @@ $adviserCount = count($chairAdviserOptions);
         if (event.target.classList.contains('chair-assign-checkbox')) {
             updateSelectedCount();
             syncSelectAllToggle();
+            updateRowAdviserRequirement(event.target.closest('tr'));
+            return;
+        }
+        if (event.target.matches('select[name^="chair_assign_adviser_for"]')) {
+            updateRowAdviserRequirement(event.target.closest('tr'));
         }
     });
 
@@ -1296,6 +1345,7 @@ $adviserCount = count($chairAdviserOptions);
             const checkboxes = getCheckboxes();
             checkboxes.forEach((checkbox) => {
                 checkbox.checked = selectAllToggle.checked;
+                updateRowAdviserRequirement(checkbox.closest('tr'));
             });
             updateSelectedCount();
             syncSelectAllToggle();
@@ -1306,6 +1356,7 @@ $adviserCount = count($chairAdviserOptions);
         clearSelectionButton.addEventListener('click', () => {
             getCheckboxes().forEach((checkbox) => {
                 checkbox.checked = false;
+                updateRowAdviserRequirement(checkbox.closest('tr'));
             });
             getQuickSelectedInputs().forEach((input) => input.remove());
             renderQuickSelectedList();
@@ -1320,6 +1371,7 @@ $adviserCount = count($chairAdviserOptions);
     updateSelectedCount();
     syncSelectAllToggle();
     renderQuickSelectedList();
+    updateAllRowAdviserRequirements();
 
     if (quickSearchInput) {
         quickSearchInput.addEventListener('input', () => {
@@ -1377,6 +1429,18 @@ $adviserCount = count($chairAdviserOptions);
                 return;
             }
             removeQuickSelection(removeButton.getAttribute('data-quick-remove'));
+        });
+        quickSelectedList.addEventListener('change', (event) => {
+            const target = event.target;
+            if (!target.matches('select[data-quick-select]')) {
+                return;
+            }
+            const wrapper = target.closest('[data-quick-pill]');
+            const note = wrapper ? wrapper.querySelector('.adviser-required-note') : null;
+            if (note) {
+                const needsSelection = !target.value;
+                note.classList.toggle('d-none', !needsSelection);
+            }
         });
     }
 
