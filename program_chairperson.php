@@ -160,7 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_chair_feedback']
         if (!$reviewTarget) {
             $chairFeedbackAlert = ['type' => 'danger', 'message' => 'Unable to send feedback. No matching review record was found yet.'];
         } elseif ($feedbackTarget === 'mentor' && (int)($reviewTarget['review_id'] ?? 0) <= 0) {
-            $chairFeedbackAlert = ['type' => 'warning', 'message' => 'This reviewer has not submitted a ranking yet. Feedback will be available once their review is saved.'];
+            $chairFeedbackAlert = ['type' => 'warning', 'message' => 'This reviewer has not submitted a score yet. Feedback will be available once their review is saved.'];
         } else {
             $reviewId = (int)($reviewTarget['review_id'] ?? 0);
             $studentId = (int)($reviewTarget['student_id'] ?? $studentIdFromPost);
@@ -509,27 +509,27 @@ $rankingSql = "
         cp.created_at,
         CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, '')) AS student_name,
         u.email AS student_email,
-        SUM(CASE WHEN cr.rank_order = 1 OR (cr.rank_order IS NULL AND cr.is_preferred = 1) THEN 1 ELSE 0 END) AS rank_one_votes,
-        SUM(CASE WHEN cr.rank_order = 2 THEN 1 ELSE 0 END) AS rank_two_votes,
-        SUM(CASE WHEN cr.rank_order = 3 THEN 1 ELSE 0 END) AS rank_three_votes
+        AVG(CASE WHEN cr.score IS NOT NULL AND cr.score > 0 THEN cr.score END) AS avg_score,
+        COUNT(CASE WHEN cr.score IS NOT NULL AND cr.score > 0 THEN 1 END) AS score_count
     FROM concept_reviews cr
     JOIN concept_reviewer_assignments cra ON cra.id = cr.assignment_id
     JOIN concept_papers cp ON cp.id = cr.concept_paper_id
     LEFT JOIN users u ON u.id = cp.student_id
-    WHERE (cr.rank_order IS NOT NULL OR cr.is_preferred = 1)
+    WHERE cr.score IS NOT NULL AND cr.score > 0
 ";
 if ($conceptScopeWhere !== '') {
     $rankingSql .= "      AND ({$conceptScopeWhere} OR cra.assigned_by = {$programChairId})\n";
 }
 $rankingSql .= "
     GROUP BY cp.id, cp.student_id, cp.title, cp.created_at, student_name, u.email
-    HAVING (rank_one_votes > 0 OR rank_two_votes > 0 OR rank_three_votes > 0)
-    ORDER BY rank_one_votes DESC, rank_two_votes DESC, rank_three_votes DESC, cp.created_at DESC
+    HAVING score_count > 0
+    ORDER BY avg_score DESC, score_count DESC, cp.created_at DESC
     LIMIT 80
 ";
 $rankingBoardFull = [];
 $rankingBoardSummary = [
-    'top_votes' => 0,
+    'score_sum' => 0,
+    'review_count' => 0,
     'concepts' => 0,
     'students' => 0,
 ];
@@ -546,31 +546,38 @@ if ($rankingResult) {
                 'student_name' => trim($row['student_name'] ?? 'Student'),
                 'student_email' => trim($row['student_email'] ?? ''),
                 'concepts' => [],
-                'best_rank_one' => 0,
+                'best_avg_score' => 0,
+                'best_review_count' => 0,
                 'reviewers' => [],
                 'interested_reviewers' => [],
                 'interest_keys' => [],
             ];
         }
 
+        $avgScore = isset($row['avg_score']) ? (float)$row['avg_score'] : 0.0;
+        $scoreCount = (int)($row['score_count'] ?? 0);
         $concept = [
             'concept_id' => (int)($row['concept_id'] ?? 0),
             'title' => $row['title'] ?? 'Untitled Concept',
-            'rank_one' => (int)($row['rank_one_votes'] ?? 0),
-            'rank_two' => (int)($row['rank_two_votes'] ?? 0),
-            'rank_three' => (int)($row['rank_three_votes'] ?? 0),
+            'avg_score' => $avgScore,
+            'score_count' => $scoreCount,
             'score_key' => [
-                (int)($row['rank_one_votes'] ?? 0),
-                (int)($row['rank_two_votes'] ?? 0),
-                (int)($row['rank_three_votes'] ?? 0),
+                $avgScore,
+                $scoreCount,
             ],
         ];
         $rankingBoardFull[$studentId]['concepts'][] = $concept;
-        $rankingBoardFull[$studentId]['best_rank_one'] = max($rankingBoardFull[$studentId]['best_rank_one'], $concept['rank_one']);
-        $rankingBoardSummary['top_votes'] += $concept['rank_one'];
-        if ($concept['rank_one'] > 0 || $concept['rank_two'] > 0 || $concept['rank_three'] > 0) {
+        $bestAvg = (float)($rankingBoardFull[$studentId]['best_avg_score'] ?? 0);
+        $bestCount = (int)($rankingBoardFull[$studentId]['best_review_count'] ?? 0);
+        if ($avgScore > $bestAvg || ($avgScore === $bestAvg && $scoreCount > $bestCount)) {
+            $rankingBoardFull[$studentId]['best_avg_score'] = $avgScore;
+            $rankingBoardFull[$studentId]['best_review_count'] = $scoreCount;
+        }
+        if ($scoreCount > 0) {
             $rankingBoardSummary['concepts']++;
         }
+        $rankingBoardSummary['review_count'] += $scoreCount;
+        $rankingBoardSummary['score_sum'] += $avgScore * $scoreCount;
     }
     $rankingResult->free();
 }
@@ -587,9 +594,9 @@ $progressSql = "
             cra.reviewer_id,
             COUNT(DISTINCT cra.id) AS total_review_assignments,
             COUNT(DISTINCT CASE WHEN cr.id IS NOT NULL THEN cra.id END) AS reviewed_assignments,
-            COUNT(DISTINCT CASE WHEN cr.rank_order IN (1,2,3) OR (cr.rank_order IS NULL AND cr.is_preferred = 1) THEN cra.id END) AS ranked_review_assignments,
+            COUNT(DISTINCT CASE WHEN cr.score IS NOT NULL AND cr.score > 0 THEN cra.id END) AS scored_review_assignments,
             CASE
-                WHEN COUNT(DISTINCT CASE WHEN cr.id IS NOT NULL THEN cra.id END) > 0
+                WHEN COUNT(DISTINCT CASE WHEN cr.score IS NOT NULL AND cr.score > 0 THEN cra.id END) > 0
                 THEN 1 ELSE 0 END AS reviewer_started
         FROM concept_reviewer_assignments cra
         LEFT JOIN concept_reviews cr ON cr.assignment_id = cra.id
@@ -628,6 +635,8 @@ $reviewerSql = "
         cp.id AS concept_id,
         cp.title AS concept_title,
         cr.id AS review_id,
+        cr.score AS review_score,
+        cr.recommendation AS review_recommendation,
         cr.rank_order,
         cr.is_preferred,
         cr.adviser_interest,
@@ -661,7 +670,7 @@ if ($reviewerResult) {
                 'reviewer_id' => $reviewerId,
                 'reviewer_name' => trim($row['reviewer_name'] ?? 'Reviewer'),
                 'reviewer_role' => $row['reviewer_role'] ?? '',
-                'ranks' => [],
+                'scores' => [],
                 'has_interest' => false,
                 'primary_assignment_id' => (int)($row['assignment_id'] ?? 0),
                 'primary_review_id' => isset($row['review_id']) ? (int)$row['review_id'] : 0,
@@ -669,14 +678,14 @@ if ($reviewerResult) {
             ];
         }
         $entry =& $rankingBoardFull[$studentId]['reviewers'][$reviewerKey];
-        $rankOrder = isset($row['rank_order']) ? (int)$row['rank_order'] : null;
-        if (($rankOrder === null || $rankOrder === 0) && (int)($row['is_preferred'] ?? 0) === 1) {
-            $rankOrder = 1;
-        }
-        if ($rankOrder !== null && $rankOrder >= 1 && $rankOrder <= 3) {
-            $entry['ranks'][$rankOrder] = [
-                'concept_id' => (int)($row['concept_id'] ?? 0),
+        $scoreValue = isset($row['review_score']) ? (int)$row['review_score'] : 0;
+        $conceptIdValue = (int)($row['concept_id'] ?? 0);
+        if ($scoreValue > 0 && $conceptIdValue > 0) {
+            $entry['scores'][$conceptIdValue] = [
+                'concept_id' => $conceptIdValue,
                 'title' => $row['concept_title'] ?? 'Untitled Concept',
+                'score' => $scoreValue,
+                'recommendation' => $row['review_recommendation'] ?? '',
             ];
         }
         $interestFlag = (int)($row['adviser_interest'] ?? 0) === 1;
@@ -827,11 +836,19 @@ foreach ($rankingBoardFull as $studentId => &$board) {
 unset($board);
 
 $rankingBoardSummary['students'] = count($rankingBoardFull);
+$overallAvgScore = $rankingBoardSummary['review_count'] > 0
+    ? ($rankingBoardSummary['score_sum'] / $rankingBoardSummary['review_count'])
+    : 0;
 $rankingBoardCollection = array_values($rankingBoardFull);
 usort($rankingBoardCollection, function ($a, $b) {
-    $scoreA = $a['best_rank_one'] ?? 0;
-    $scoreB = $b['best_rank_one'] ?? 0;
+    $scoreA = $a['best_avg_score'] ?? 0;
+    $scoreB = $b['best_avg_score'] ?? 0;
     if ($scoreA === $scoreB) {
+        $countA = $a['best_review_count'] ?? 0;
+        $countB = $b['best_review_count'] ?? 0;
+        if ($countA !== $countB) {
+            return $countB <=> $countA;
+        }
         return strcmp($a['student_name'] ?? '', $b['student_name'] ?? '');
     }
     return $scoreB <=> $scoreA;
@@ -943,22 +960,29 @@ foreach ($activeRankingBoards as $board) {
     $rankedAssignments = (int)($board['ranked_assignments'] ?? 0);
     $rankingComplete = $totalAssignments > 0 && $rankedAssignments >= $totalAssignments;
 
-    $rankedConceptTitles = array_values(array_filter(array_map(
-        static fn($concept) => trim((string)($concept['title'] ?? '')),
-        array_slice($board['concepts'] ?? [], 0, 3)
-    )));
+    $topConcepts = array_slice($board['concepts'] ?? [], 0, 3);
+    $rankedConceptTitles = array_map(
+        static fn($concept) => trim((string)($concept['title'] ?? 'Untitled Concept')),
+        $topConcepts
+    );
+    $rankedConceptScores = array_map(
+        static fn($concept) => (float)($concept['avg_score'] ?? 0),
+        $topConcepts
+    );
     $finalPickHighlights[] = [
         'student_id' => (int)($board['student_id'] ?? 0),
         'student_name' => $board['student_name'] ?? 'Student',
         'student_email' => $board['student_email'] ?? '',
         'concept_id' => $rankingComplete ? (int)($board['final_concept']['concept_id'] ?? 0) : 0,
         'title' => $rankingComplete ? ($board['final_concept']['title'] ?? 'Untitled Concept') : '',
-        'rank_one' => $rankingComplete ? (int)($board['final_concept']['rank_one'] ?? 0) : 0,
-        'rank_two' => $rankingComplete ? (int)($board['final_concept']['rank_two'] ?? 0) : 0,
-        'rank_three' => $rankingComplete ? (int)($board['final_concept']['rank_three'] ?? 0) : 0,
-        'rank_one_title' => $rankingComplete ? ($rankedConceptTitles[0] ?? '') : '',
-        'rank_two_title' => $rankingComplete ? ($rankedConceptTitles[1] ?? '') : '',
-        'rank_three_title' => $rankingComplete ? ($rankedConceptTitles[2] ?? '') : '',
+        'avg_score' => $rankingComplete ? (float)($board['final_concept']['avg_score'] ?? 0) : 0,
+        'review_count' => $rankingComplete ? (int)($board['final_concept']['score_count'] ?? 0) : 0,
+        'top_one_title' => $rankingComplete ? ($rankedConceptTitles[0] ?? '') : '',
+        'top_two_title' => $rankingComplete ? ($rankedConceptTitles[1] ?? '') : '',
+        'top_three_title' => $rankingComplete ? ($rankedConceptTitles[2] ?? '') : '',
+        'top_one_score' => $rankingComplete ? (float)($rankedConceptScores[0] ?? 0) : 0,
+        'top_two_score' => $rankingComplete ? (float)($rankedConceptScores[1] ?? 0) : 0,
+        'top_three_score' => $rankingComplete ? (float)($rankedConceptScores[2] ?? 0) : 0,
         'has_tie_on_top' => $rankingComplete && !empty($board['has_tie_on_top']),
         'ranking_complete' => $rankingComplete,
         'ranked_assignments' => $rankedAssignments,
@@ -1275,7 +1299,7 @@ if ($endorsementStmt) {
                     <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
                         <div>
                             <h2 class="h6 fw-semibold mb-1">Concept Ranking Board</h2>
-                            <p class="text-muted small mb-0">See where reviewers agree on the best titles per student.</p>
+                            <p class="text-muted small mb-0">Review average scores and faculty input per student.</p>
                         </div>
                         <div class="d-flex flex-row flex-nowrap gap-2">
                             <a href="completed_rankings.php" class="btn btn-sm btn-outline-secondary">
@@ -1290,7 +1314,7 @@ if ($endorsementStmt) {
                         <?php if (empty($activeRankingBoards)): ?>
                             <div class="text-center text-muted py-4">
                                 <i class="bi bi-bar-chart-line fs-2 d-block mb-2"></i>
-                                <p class="mb-0">No active rankings to review. Completed rankings appear in the directory.</p>
+                                <p class="mb-0">No active scores to review. Completed recommendations appear in the directory.</p>
                             </div>
                         <?php else: ?>
                             <div class="ranking-board-shell">
@@ -1302,8 +1326,10 @@ if ($endorsementStmt) {
                                                 $totalAssignments = (int)($board['total_assignments'] ?? 0);
                                                 $rankingComplete = !empty($board['ranking_complete']);
                                                 $progressLabel = $totalAssignments > 0
-                                                    ? "Ranked {$rankedAssignments} of {$totalAssignments} reviewers"
+                                                    ? "Scored {$rankedAssignments} of {$totalAssignments} reviewers"
                                                     : "No reviewer assignments yet";
+                                                $bestAvgScore = isset($board['best_avg_score']) ? (float)$board['best_avg_score'] : 0;
+                                                $bestAvgLabel = $bestAvgScore > 0 ? number_format($bestAvgScore, 1) : '0.0';
                                                 if ($totalAssignments <= 0) {
                                                     $statusKey = 'unassigned';
                                                     $statusLabel = 'No assignments';
@@ -1339,7 +1365,7 @@ if ($endorsementStmt) {
                                                 </div>
                                                 <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
                                                     <small class="text-muted"><?= number_format(count($board['concepts'] ?? [])); ?> titles</small>
-                                                    <span class="badge bg-success-subtle text-success">R1: <?= number_format($board['best_rank_one'] ?? 0); ?></span>
+                                                    <span class="badge bg-success-subtle text-success">Avg: <?= $bestAvgLabel; ?></span>
                                                     <small class="text-muted"><?= htmlspecialchars($progressLabel); ?></small>
                                                 </div>
                                             </button>
@@ -1348,7 +1374,7 @@ if ($endorsementStmt) {
                                 </div>
                                 <div class="ranking-board-detail">
                                     <div class="ranking-detail-empty" data-ranking-empty>
-                                        Select a student to preview ranking details.
+                                        Select a student to preview score details.
                                     </div>
                                     <?php foreach ($activeRankingBoards as $board): ?>
                                         <?php
@@ -1356,7 +1382,7 @@ if ($endorsementStmt) {
                                             $totalAssignments = (int)($board['total_assignments'] ?? 0);
                                             $rankingComplete = !empty($board['ranking_complete']);
                                             $progressLabel = $totalAssignments > 0
-                                                ? "Ranked {$rankedAssignments} of {$totalAssignments} reviewers"
+                                                ? "Scored {$rankedAssignments} of {$totalAssignments} reviewers"
                                                 : "No reviewer assignments yet";
                                             $progressClass = $rankingComplete ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning';
                                             $recommendationClass = $rankingComplete
@@ -1371,7 +1397,7 @@ if ($endorsementStmt) {
                                                 </div>
                                                 <div class="text-end">
                                                     <span class="badge <?= $progressClass; ?>"><?= htmlspecialchars($progressLabel); ?></span>
-                                                    <div class="small text-muted mt-1"><?= number_format(count($board['concepts'] ?? [])); ?> titles ranked</div>
+                                                    <div class="small text-muted mt-1"><?= number_format(count($board['concepts'] ?? [])); ?> titles scored</div>
                                                 </div>
                                             </div>
                                             <div class="table-responsive">
@@ -1379,9 +1405,8 @@ if ($endorsementStmt) {
                                                     <thead class="table-light">
                                                         <tr>
                                                             <th>Concept Title</th>
-                                                            <th class="text-center">Rank&nbsp;1</th>
-                                                            <th class="text-center">Rank&nbsp;2</th>
-                                                            <th class="text-center">Rank&nbsp;3</th>
+                                                            <th class="text-center">Avg&nbsp;Score</th>
+                                                            <th class="text-center">Reviews</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
@@ -1394,9 +1419,16 @@ if ($endorsementStmt) {
                                                                         <span class="badge bg-success ms-2">Final pick</span>
                                                                     <?php endif; ?>
                                                                 </td>
-                                                                <td class="text-center"><span class="badge bg-success-subtle text-success"><?= number_format($concept['rank_one']); ?></span></td>
-                                                                <td class="text-center"><span class="badge bg-info-subtle text-info"><?= number_format($concept['rank_two']); ?></span></td>
-                                                                <td class="text-center"><span class="badge bg-secondary-subtle text-secondary"><?= number_format($concept['rank_three']); ?></span></td>
+                                                                <td class="text-center">
+                                                                    <span class="badge bg-success-subtle text-success">
+                                                                        <?= number_format((float)($concept['avg_score'] ?? 0), 1); ?>
+                                                                    </span>
+                                                                </td>
+                                                                <td class="text-center">
+                                                                    <span class="badge bg-info-subtle text-info">
+                                                                        <?= number_format((int)($concept['score_count'] ?? 0)); ?>
+                                                                    </span>
+                                                                </td>
                                                             </tr>
                                                         <?php endforeach; ?>
                                                     </tbody>
@@ -1404,15 +1436,20 @@ if ($endorsementStmt) {
                                             </div>
                                             <?php if (!empty($board['final_concept'])): ?>
                                                 <div class="<?= $recommendationClass; ?>">
-                                                    <strong>Recommended concept:</strong> <?= htmlspecialchars($board['final_concept']['title'] ?? ''); ?> (<?= number_format($board['final_concept']['rank_one'] ?? 0); ?> Rank&nbsp;1 vote<?= ($board['final_concept']['rank_one'] ?? 0) === 1 ? '' : 's'; ?>)
+                                                    <?php
+                                                        $finalAvgScore = (float)($board['final_concept']['avg_score'] ?? 0);
+                                                        $finalReviewCount = (int)($board['final_concept']['score_count'] ?? 0);
+                                                    ?>
+                                                    <strong>Recommended concept:</strong> <?= htmlspecialchars($board['final_concept']['title'] ?? ''); ?>
+                                                    (Avg score <?= number_format($finalAvgScore, 1); ?> from <?= number_format($finalReviewCount); ?> review<?= $finalReviewCount === 1 ? '' : 's'; ?>)
                                                     <?php if (!empty($board['has_tie_on_top'])): ?>
-                                                        <span class="badge bg-warning-subtle text-warning ms-2">Tie on Rank&nbsp;1 votes</span>
+                                                        <span class="badge bg-warning-subtle text-warning ms-2">Tie on Avg Score</span>
                                                     <?php endif; ?>
                                                     <div class="small text-muted mb-0">
                                                         <?php if ($rankingComplete): ?>
-                                                            Basis: Highest number of Rank&nbsp;1 selections. Ties break via Rank&nbsp;2 then Rank&nbsp;3.
+                                                            Basis: Highest average score. Ties break via number of submitted reviews.
                                                         <?php else: ?>
-                                                            Preliminary result &mdash; waiting for remaining reviewer rankings.
+                                                            Preliminary result &mdash; waiting for remaining reviewer scores.
                                                         <?php endif; ?>
                                                     </div>
                                                 </div>
@@ -1426,26 +1463,45 @@ if ($endorsementStmt) {
                                                                 <tr>
                                                                     <th>Reviewer</th>
                                                                     <th>Role</th>
-                                                                    <th>Rank&nbsp;1</th>
-                                                                    <th>Rank&nbsp;2</th>
-                                                                    <th>Rank&nbsp;3</th>
+                                                                    <th>Scores</th>
                                                                     <th class="text-center">Mentor Interest</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
                                                                 <?php foreach ($board['reviewers'] as $reviewer): ?>
                                                                     <?php
-                                                                        $rankMap = [1 => '&mdash;', 2 => '&mdash;', 3 => '&mdash;'];
-                                                                        foreach ($reviewer['ranks'] as $rankNumber => $rankData) {
-                                                                            $rankMap[$rankNumber] = htmlspecialchars($rankData['title']);
+                                                                        $scoreEntries = $reviewer['scores'] ?? [];
+                                                                        if (!empty($scoreEntries)) {
+                                                                            $scoreEntries = array_values($scoreEntries);
+                                                                            usort($scoreEntries, function ($a, $b) {
+                                                                                return strcasecmp((string)($a['title'] ?? ''), (string)($b['title'] ?? ''));
+                                                                            });
                                                                         }
                                                                     ?>
                                                                     <tr>
                                                                         <td class="fw-semibold"><?= htmlspecialchars($reviewer['reviewer_name']); ?></td>
                                                                         <td class="text-muted small text-capitalize"><?= htmlspecialchars(str_replace('_', ' ', $reviewer['reviewer_role'] ?? '')); ?></td>
-                                                                        <td><?= $rankMap[1]; ?></td>
-                                                                        <td><?= $rankMap[2]; ?></td>
-                                                                        <td><?= $rankMap[3]; ?></td>
+                                                                        <td>
+                                                                            <?php if (empty($scoreEntries)): ?>
+                                                                                <span class="text-muted">-</span>
+                                                                            <?php else: ?>
+                                                                                <?php foreach ($scoreEntries as $scoreEntry): ?>
+                                                                                    <?php
+                                                                                        $scoreTitle = trim((string)($scoreEntry['title'] ?? 'Untitled Concept'));
+                                                                                        $scoreValue = (int)($scoreEntry['score'] ?? 0);
+                                                                                        $scoreRec = trim((string)($scoreEntry['recommendation'] ?? ''));
+                                                                                        $scoreLabel = $scoreValue > 0 ? "{$scoreValue}/5" : '-';
+                                                                                        if ($scoreRec !== '') {
+                                                                                            $scoreLabel .= ' (' . ucfirst($scoreRec) . ')';
+                                                                                        }
+                                                                                    ?>
+                                                                                    <div class="small">
+                                                                                        <span class="fw-semibold"><?= htmlspecialchars($scoreTitle); ?></span>
+                                                                                        &mdash; <?= htmlspecialchars($scoreLabel); ?>
+                                                                                    </div>
+                                                                                <?php endforeach; ?>
+                                                                            <?php endif; ?>
+                                                                        </td>
                                                                         <td class="text-center">
                                                                             <?php if (!empty($reviewer['has_interest'])): ?>
                                                                                 <span class="badge bg-success-subtle text-success">Yes</span>
@@ -1459,7 +1515,7 @@ if ($endorsementStmt) {
                                                         </table>
                                                     </div>
                                                 <?php else: ?>
-                                                    <div class="text-muted small fst-italic">Awaiting this reviewer&rsquo;s submitted ranking.</div>
+                                                    <div class="text-muted small fst-italic">Awaiting this reviewer&rsquo;s submitted score.</div>
                                                 <?php endif; ?>
                                             </div>
                                             <?php if (!empty($board['reviewer_feedback_entries'])): ?>
@@ -1618,24 +1674,24 @@ if ($endorsementStmt) {
                 
                 <section class="card shadow-sm border-0">
                         <div class="card-body">
-                            <h6 class="text-uppercase text-muted mb-3">Ranking Summary</h6>
+                            <h6 class="text-uppercase text-muted mb-3">Score Summary</h6>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <div>
-                                    <small class="text-muted d-block">Top-choice ballots</small>
-                                    <h3 class="mb-0 text-success"><?= number_format($rankingBoardSummary['top_votes']); ?></h3>
+                                    <small class="text-muted d-block">Avg score (overall)</small>
+                                    <h3 class="mb-0 text-success"><?= number_format($overallAvgScore, 1); ?></h3>
                                 </div>
                                 <div class="text-end">
-                                    <small class="text-muted d-block">Titles ranked</small>
+                                    <small class="text-muted d-block">Titles scored</small>
                                     <h4 class="mb-0"><?= number_format($rankingBoardSummary['concepts']); ?></h4>
                                 </div>
                             </div>
                             <ul class="list-unstyled small text-muted mb-4">
-                                <li>Students with reviewer rankings: <strong><?= number_format($rankingBoardSummary['students']); ?></strong></li>
-                                <li>Assignments awaiting rank: <strong><?= number_format($assignmentStats['pending']); ?></strong></li>
+                                <li>Students with reviewer scores: <strong><?= number_format($rankingBoardSummary['students']); ?></strong></li>
+                                <li>Assignments awaiting scores: <strong><?= number_format($assignmentStats['pending']); ?></strong></li>
                                 <li>Reviewer deadlines due soon: <strong><?= number_format($assignmentStats['due_soon']); ?></strong></li>
                             </ul>
                             <a href="assign_faculty.php" class="btn btn-outline-success w-100">
-                                <i class="bi bi-stars me-1"></i> Accelerate ranking cycle
+                                <i class="bi bi-stars me-1"></i> Accelerate scoring cycle
                             </a>
                         </div>
                 </section>
@@ -1731,7 +1787,7 @@ if ($endorsementStmt) {
                     <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
                         <div>
                             <h2 class="h6 fw-semibold mb-1">Final Picks &amp; Status</h2>
-                            <p class="text-muted small mb-0">Auto-generated recommendations based on reviewer rankings.</p>
+                            <p class="text-muted small mb-0">Auto-generated recommendations based on reviewer scores.</p>
                         </div>
                         <a href="assign_faculty.php" class="btn btn-sm btn-outline-success">
                             <i class="bi bi-arrow-repeat me-1"></i> Refresh Assignments
@@ -1739,7 +1795,7 @@ if ($endorsementStmt) {
                     </div>
                     <div class="card-body pt-0">
                         <?php if (empty($finalPickHighlights)): ?>
-                            <p class="text-muted mb-0">No final pick recommendations yet. Ranking data will appear once reviewers submit evaluations.</p>
+                            <p class="text-muted mb-0">No final pick recommendations yet. Score data will appear once reviewers submit evaluations.</p>
                         <?php else: ?>
                             <div class="table-responsive">
                                 <table class="table align-middle mb-0">
@@ -1760,8 +1816,8 @@ if ($endorsementStmt) {
                                                 $totalAssignments = (int)($pick['total_assignments'] ?? 0);
                                                 if (!$rankingComplete) {
                                                     $statusLabel = $totalAssignments > 0
-                                                        ? "Awaiting rankings ({$rankedAssignments}/{$totalAssignments} reviewers)"
-                                                        : 'Awaiting rankings';
+                                                        ? "Awaiting scores ({$rankedAssignments}/{$totalAssignments} reviewers)"
+                                                        : 'Awaiting scores';
                                                     $statusClass = 'bg-warning-subtle text-warning';
                                                 } else {
                                                     $finalStatus = trim((string)($pick['final_submission_status'] ?? ''));
@@ -1787,12 +1843,12 @@ if ($endorsementStmt) {
                                                         <div class="fw-semibold"><?= htmlspecialchars($pick['title']); ?></div>
                                                         <small class="text-muted">Concept ID #<?= (int)$pick['concept_id']; ?></small>
                                                         <?php if (!empty($pick['has_tie_on_top'])): ?>
-                                                            <span class="badge bg-warning-subtle text-warning ms-2">Tie on Rank 1</span>
+                                                            <span class="badge bg-warning-subtle text-warning ms-2">Tie on Avg Score</span>
                                                         <?php endif; ?>
                                                     <?php else: ?>
-                                                        <div class="fw-semibold text-muted">Awaiting final ranking</div>
+                                                        <div class="fw-semibold text-muted">Awaiting final scores</div>
                                                         <?php if ($totalAssignments > 0): ?>
-                                                            <small class="text-muted">Ranked <?= number_format($rankedAssignments); ?> of <?= number_format($totalAssignments); ?> reviewers</small>
+                                                            <small class="text-muted">Scored <?= number_format($rankedAssignments); ?> of <?= number_format($totalAssignments); ?> reviewers</small>
                                                         <?php endif; ?>
                                                     <?php endif; ?>
                                                 </td>
@@ -1811,19 +1867,21 @@ if ($endorsementStmt) {
                                                             data-student-email="<?= htmlspecialchars($pick['student_email'] ?: 'Not available', ENT_QUOTES); ?>"
                                                             data-final-title="<?= htmlspecialchars($pick['title'], ENT_QUOTES); ?>"
                                                             data-concept-id="<?= (int)$pick['concept_id']; ?>"
-                                                            data-rank-one="<?= (int)$pick['rank_one']; ?>"
-                                                            data-rank-two="<?= (int)$pick['rank_two']; ?>"
-                                                            data-rank-three="<?= (int)$pick['rank_three']; ?>"
-                                                            data-rank-one-title="<?= htmlspecialchars($pick['rank_one_title'] ?? '', ENT_QUOTES); ?>"
-                                                            data-rank-two-title="<?= htmlspecialchars($pick['rank_two_title'] ?? '', ENT_QUOTES); ?>"
-                                                            data-rank-three-title="<?= htmlspecialchars($pick['rank_three_title'] ?? '', ENT_QUOTES); ?>"
+                                                            data-avg-score="<?= htmlspecialchars(number_format((float)($pick['avg_score'] ?? 0), 1), ENT_QUOTES); ?>"
+                                                            data-review-count="<?= (int)($pick['review_count'] ?? 0); ?>"
+                                                            data-top-one-title="<?= htmlspecialchars($pick['top_one_title'] ?? '', ENT_QUOTES); ?>"
+                                                            data-top-two-title="<?= htmlspecialchars($pick['top_two_title'] ?? '', ENT_QUOTES); ?>"
+                                                            data-top-three-title="<?= htmlspecialchars($pick['top_three_title'] ?? '', ENT_QUOTES); ?>"
+                                                            data-top-one-score="<?= htmlspecialchars(number_format((float)($pick['top_one_score'] ?? 0), 1), ENT_QUOTES); ?>"
+                                                            data-top-two-score="<?= htmlspecialchars(number_format((float)($pick['top_two_score'] ?? 0), 1), ENT_QUOTES); ?>"
+                                                            data-top-three-score="<?= htmlspecialchars(number_format((float)($pick['top_three_score'] ?? 0), 1), ENT_QUOTES); ?>"
                                                             data-has-tie="<?= !empty($pick['has_tie_on_top']) ? '1' : '0'; ?>"
                                                         >
                                                             Message student
                                                         </button>
                                                     <?php else: ?>
                                                         <button type="button" class="btn btn-outline-secondary btn-sm" disabled>
-                                                            Waiting rankings
+                                                            Waiting scores
                                                         </button>
                                                     <?php endif; ?>
                                                 </td>
@@ -2130,9 +2188,8 @@ if ($endorsementStmt) {
                 <input type="hidden" name="student_name" id="finalPickStudentNameInput">
                 <input type="hidden" name="final_title" id="finalPickTitleInput">
                 <input type="hidden" name="concept_id" id="finalPickConceptId">
-                <input type="hidden" name="rank_one" id="finalPickRankOneInput">
-                <input type="hidden" name="rank_two" id="finalPickRankTwoInput">
-                <input type="hidden" name="rank_three" id="finalPickRankThreeInput">
+                <input type="hidden" name="avg_score" id="finalPickAvgScoreInput">
+                <input type="hidden" name="review_count" id="finalPickReviewCountInput">
                 <div class="mb-3">
                     <label class="form-label text-muted small" for="finalPickStudentNameDisplay">Student</label>
                     <input type="text" class="form-control" id="finalPickStudentNameDisplay" readonly>
@@ -2146,7 +2203,7 @@ if ($endorsementStmt) {
                     <input type="text" class="form-control" id="finalPickTitleDisplay" readonly>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label text-muted small" for="finalPickTieDisplay">Tie on Rank 1</label>
+                    <label class="form-label text-muted small" for="finalPickTieDisplay">Tie on Avg Score</label>
                     <input type="text" class="form-control" id="finalPickTieDisplay" readonly>
                 </div>
                 <div class="mb-3">
@@ -2178,7 +2235,7 @@ if ($endorsementStmt) {
             if (!emptyState) {
                 return;
             }
-            emptyState.textContent = message || 'Select a student to preview ranking details.';
+            emptyState.textContent = message || 'Select a student to preview score details.';
             emptyState.classList.remove('d-none');
         };
 
@@ -2208,7 +2265,7 @@ if ($endorsementStmt) {
             if (found) {
                 hideEmpty();
             } else {
-                showEmpty('Select a student to preview ranking details.');
+                showEmpty('Select a student to preview score details.');
             }
         };
 
@@ -2450,12 +2507,14 @@ if ($endorsementStmt) {
                 studentEmail = 'Not available',
                 finalTitle = 'Final title',
                 conceptId = '',
-                rankOne = '0',
-                rankTwo = '0',
-                rankThree = '0',
-                rankOneTitle = '',
-                rankTwoTitle = '',
-                rankThreeTitle = '',
+                avgScore = '0',
+                reviewCount = '0',
+                topOneTitle = '',
+                topTwoTitle = '',
+                topThreeTitle = '',
+                topOneScore = '0',
+                topTwoScore = '0',
+                topThreeScore = '0',
                 hasTie = '0'
             } = details;
 
@@ -2464,21 +2523,22 @@ if ($endorsementStmt) {
             finalPickForm.dataset.currentStudentEmail = studentEmail;
             finalPickForm.dataset.currentFinalTitle = finalTitle;
             finalPickForm.dataset.currentConceptId = conceptId;
-            finalPickForm.dataset.currentRankOne = rankOne;
-            finalPickForm.dataset.currentRankTwo = rankTwo;
-            finalPickForm.dataset.currentRankThree = rankThree;
-            finalPickForm.dataset.currentRankOneTitle = rankOneTitle;
-            finalPickForm.dataset.currentRankTwoTitle = rankTwoTitle;
-            finalPickForm.dataset.currentRankThreeTitle = rankThreeTitle;
+            finalPickForm.dataset.currentAvgScore = avgScore;
+            finalPickForm.dataset.currentReviewCount = reviewCount;
+            finalPickForm.dataset.currentTopOneTitle = topOneTitle;
+            finalPickForm.dataset.currentTopTwoTitle = topTwoTitle;
+            finalPickForm.dataset.currentTopThreeTitle = topThreeTitle;
+            finalPickForm.dataset.currentTopOneScore = topOneScore;
+            finalPickForm.dataset.currentTopTwoScore = topTwoScore;
+            finalPickForm.dataset.currentTopThreeScore = topThreeScore;
             finalPickForm.dataset.currentHasTie = hasTie;
 
             finalPickModal.querySelector('#finalPickStudentId').value = studentId;
             finalPickModal.querySelector('#finalPickStudentNameInput').value = studentName;
             finalPickModal.querySelector('#finalPickTitleInput').value = finalTitle;
             finalPickModal.querySelector('#finalPickConceptId').value = conceptId;
-            finalPickModal.querySelector('#finalPickRankOneInput').value = rankOne;
-            finalPickModal.querySelector('#finalPickRankTwoInput').value = rankTwo;
-            finalPickModal.querySelector('#finalPickRankThreeInput').value = rankThree;
+            finalPickModal.querySelector('#finalPickAvgScoreInput').value = avgScore;
+            finalPickModal.querySelector('#finalPickReviewCountInput').value = reviewCount;
 
             finalPickModal.querySelector('#finalPickStudentNameDisplay').value = studentName;
             finalPickModal.querySelector('#finalPickStudentEmailDisplay').value = studentEmail;
@@ -2486,11 +2546,14 @@ if ($endorsementStmt) {
             finalPickModal.querySelector('#finalPickTieDisplay').value = hasTie === '1' ? 'Yes' : 'No';
 
             const textarea = finalPickModal.querySelector('#finalPickMessageTextarea');
-            const normalizeRankTitle = (value) => (value && value.trim() ? value : 'No additional ranked title available');
-            const rankOneLabel = normalizeRankTitle(rankOneTitle);
-            const rankTwoLabel = normalizeRankTitle(rankTwoTitle);
-            const rankThreeLabel = normalizeRankTitle(rankThreeTitle);
-            textarea.value = `Hi ${studentName}, based on the concept ranking board, the recommended title to pursue is "${finalTitle}". Ranked titles: Rank 1 — ${rankOneLabel}, Rank 2 — ${rankTwoLabel}, Rank 3 — ${rankThreeLabel}. Your title is recommended.`;
+            const normalizeTitle = (value) => (value && value.trim() ? value : 'No additional scored title available');
+            const formatScore = (value) => (value && value !== '0' ? `${value}/5` : 'n/a');
+            const topOneLabel = `${normalizeTitle(topOneTitle)} (${formatScore(topOneScore)})`;
+            const topTwoLabel = `${normalizeTitle(topTwoTitle)} (${formatScore(topTwoScore)})`;
+            const topThreeLabel = `${normalizeTitle(topThreeTitle)} (${formatScore(topThreeScore)})`;
+            const avgLabel = avgScore && avgScore !== '0' ? `${avgScore}/5` : 'n/a';
+            const reviewLabel = reviewCount && reviewCount !== '0' ? reviewCount : '0';
+            textarea.value = `Hi ${studentName}, based on the concept ranking board, the recommended title to pursue is "${finalTitle}". Final average score: ${avgLabel} from ${reviewLabel} review(s). Top-scoring titles: 1) ${topOneLabel}, 2) ${topTwoLabel}, 3) ${topThreeLabel}. Your title is recommended.`;
         };
 
         document.querySelectorAll('.final-pick-btn').forEach((button) => {
@@ -2501,12 +2564,14 @@ if ($endorsementStmt) {
                     studentEmail: button.getAttribute('data-student-email') || 'Not available',
                     finalTitle: button.getAttribute('data-final-title') || 'Final title',
                     conceptId: button.getAttribute('data-concept-id') || '',
-                    rankOne: button.getAttribute('data-rank-one') || '0',
-                    rankTwo: button.getAttribute('data-rank-two') || '0',
-                    rankThree: button.getAttribute('data-rank-three') || '0',
-                    rankOneTitle: button.getAttribute('data-rank-one-title') || '',
-                    rankTwoTitle: button.getAttribute('data-rank-two-title') || '',
-                    rankThreeTitle: button.getAttribute('data-rank-three-title') || '',
+                    avgScore: button.getAttribute('data-avg-score') || '0',
+                    reviewCount: button.getAttribute('data-review-count') || '0',
+                    topOneTitle: button.getAttribute('data-top-one-title') || '',
+                    topTwoTitle: button.getAttribute('data-top-two-title') || '',
+                    topThreeTitle: button.getAttribute('data-top-three-title') || '',
+                    topOneScore: button.getAttribute('data-top-one-score') || '0',
+                    topTwoScore: button.getAttribute('data-top-two-score') || '0',
+                    topThreeScore: button.getAttribute('data-top-three-score') || '0',
                     hasTie: button.getAttribute('data-has-tie') || '0'
                 };
                 applyFinalPickDetails(payload);
@@ -2523,12 +2588,14 @@ if ($endorsementStmt) {
                 studentEmail: finalPickForm.dataset.currentStudentEmail || 'Not available',
                 finalTitle: finalPickForm.dataset.currentFinalTitle || 'Final title',
                 conceptId: finalPickForm.dataset.currentConceptId || '',
-                rankOne: finalPickForm.dataset.currentRankOne || '0',
-                rankTwo: finalPickForm.dataset.currentRankTwo || '0',
-                rankThree: finalPickForm.dataset.currentRankThree || '0',
-                rankOneTitle: finalPickForm.dataset.currentRankOneTitle || '',
-                rankTwoTitle: finalPickForm.dataset.currentRankTwoTitle || '',
-                rankThreeTitle: finalPickForm.dataset.currentRankThreeTitle || '',
+                avgScore: finalPickForm.dataset.currentAvgScore || '0',
+                reviewCount: finalPickForm.dataset.currentReviewCount || '0',
+                topOneTitle: finalPickForm.dataset.currentTopOneTitle || '',
+                topTwoTitle: finalPickForm.dataset.currentTopTwoTitle || '',
+                topThreeTitle: finalPickForm.dataset.currentTopThreeTitle || '',
+                topOneScore: finalPickForm.dataset.currentTopOneScore || '0',
+                topTwoScore: finalPickForm.dataset.currentTopTwoScore || '0',
+                topThreeScore: finalPickForm.dataset.currentTopThreeScore || '0',
                 hasTie: finalPickForm.dataset.currentHasTie || '0'
             });
         });
