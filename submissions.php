@@ -37,7 +37,7 @@ if ($viewAll) {
 }
 
 $sql = "
-  SELECT s.id, s.title, s.type, s.abstract, s.keywords, s.file_path,
+  SELECT s.id, s.student_id, s.title, s.type, s.abstract, s.keywords, s.file_path,
          s.concept_file_1, s.concept_file_2, s.concept_file_3,
          s.status, s.created_at,
          u.firstname, u.lastname, u.email, u.program, u.department, u.college
@@ -605,6 +605,10 @@ function renderTypeBadge(?string $type): string
                     $assignFilterTarget = (string)($s['id'] ?? '');
                 }
                 $assignUrl = 'assign_faculty.php?status=all&source=submissions&q=' . rawurlencode($assignFilterTarget);
+                $studentId = (int)($s['student_id'] ?? 0);
+                if ($studentId > 0) {
+                    $assignUrl .= '&student_id=' . $studentId;
+                }
               ?>
                 <tr class="submission-row"
                     data-status="<?= htmlspecialchars($statusValue); ?>"
