@@ -268,6 +268,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_rank_update'])) 
     } else {
         $assignmentReviewRole = resolveAssignmentRole($role, $assignmentRow['reviewer_role'] ?? null);
         $studentIdForRank = (int)($assignmentRow['student_id'] ?? 0);
+        $shouldCheckInterestLimit = false;
+        if ($adviserInterest === 1 && $studentIdForRank > 0) {
+            $studentInterestStmt = $conn->prepare("
+                SELECT 1
+                FROM concept_reviews cr
+                JOIN concept_reviewer_assignments cra ON cra.id = cr.assignment_id
+                WHERE cr.reviewer_id = ? AND cr.adviser_interest = 1 AND cra.student_id = ?
+                LIMIT 1
+            ");
+            $hasInterestForStudent = false;
+            if ($studentInterestStmt) {
+                $studentInterestStmt->bind_param('ii', $reviewerId, $studentIdForRank);
+                $studentInterestStmt->execute();
+                $studentInterestStmt->store_result();
+                $hasInterestForStudent = $studentInterestStmt->num_rows > 0;
+                $studentInterestStmt->close();
+            }
+            $shouldCheckInterestLimit = !$hasInterestForStudent;
+        }
         if ($isPreferred === 1 && $studentIdForRank > 0) {
             $clearStmt = $conn->prepare("
                 UPDATE concept_reviews cr
@@ -308,9 +327,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_rank_update'])) 
             }
         }
 
-        if (!$duplicateRank && $commentSuggestions === '') {
+        if (!$duplicateRank && $shouldCheckInterestLimit) {
+            $limitCount = 0;
+            $countStmt = $conn->prepare("
+                SELECT COUNT(DISTINCT cra.student_id) AS total
+                FROM concept_reviews cr
+                JOIN concept_reviewer_assignments cra ON cra.id = cr.assignment_id
+                WHERE cr.reviewer_id = ? AND cr.adviser_interest = 1
+            ");
+            if ($countStmt) {
+                $countStmt->bind_param('i', $reviewerId);
+                $countStmt->execute();
+                $countResult = $countStmt->get_result();
+                $countRow = $countResult ? $countResult->fetch_assoc() : null;
+                $limitCount = (int)($countRow['total'] ?? 0);
+                $countStmt->close();
+            }
+            if ($limitCount >= 3) {
+                $feedback = [
+                    'type' => 'warning',
+                    'message' => 'You can only mark interest in mentoring up to 3 students. Uncheck another interest before selecting a new one.',
+                ];
+            }
+        }
+
+        if (!$duplicateRank && $feedback['message'] === '' && $adviserInterest === 1 && $studentIdForRank > 0) {
+            $clearInterestStmt = $conn->prepare("
+                UPDATE concept_reviews cr
+                JOIN concept_reviewer_assignments cra ON cra.id = cr.assignment_id
+                SET cr.adviser_interest = 0,
+                    cr.updated_at = CURRENT_TIMESTAMP
+                WHERE cr.reviewer_id = ? AND cra.student_id = ? AND cr.assignment_id <> ?
+            ");
+            if ($clearInterestStmt) {
+                $clearInterestStmt->bind_param('iii', $reviewerId, $studentIdForRank, $assignmentId);
+                $clearInterestStmt->execute();
+                $clearInterestStmt->close();
+            }
+        }
+
+        if (!$duplicateRank && $feedback['message'] === '' && $commentSuggestions === '') {
             $feedback = ['type' => 'warning', 'message' => 'Please provide your comments and suggestions before saving.'];
-        } elseif (!$duplicateRank) {
+        } elseif (!$duplicateRank && $feedback['message'] === '') {
             $reviewStmt = $conn->prepare("
                 INSERT INTO concept_reviews (assignment_id, concept_paper_id, reviewer_id, reviewer_role, score, recommendation, rank_order, is_preferred, notes, comment_suggestions, adviser_interest)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1221,12 +1279,13 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                             <label class="form-label fw-semibold">Comments &amp; Suggestions</label>
                                                             <textarea class="form-control" name="comment_suggestions" rows="4" placeholder="Provide detailed comments or suggestions for this candidate" required><?= htmlspecialchars($review['comment_suggestions'] ?? ($review['notes'] ?? '')); ?></textarea>
                                                         </div>
-                                                        <div class="form-check form-switch mb-3">
-                                                            <input class="form-check-input" type="checkbox" role="switch" id="interest<?= (int)$item['assignment_id']; ?>" name="adviser_interest" value="1" <?= !empty($review['adviser_interest']) ? 'checked' : ''; ?>>
+                                                        <div class="form-check form-switch mb-1">
+                                                            <input class="form-check-input" type="checkbox" role="switch" id="interest<?= (int)$item['assignment_id']; ?>" name="adviser_interest" value="1" data-mentoring-toggle data-student-id="<?= (int)$student['student_id']; ?>" <?= !empty($review['adviser_interest']) ? 'checked' : ''; ?>>
                                                             <label class="form-check-label" for="interest<?= (int)$item['assignment_id']; ?>">
                                                                 Interested in mentoring the candidate as a <strong>Thesis Adviser</strong>? (Please check)
                                                             </label>
                                                         </div>
+                                                        <small class="text-muted mentoring-limit d-block mb-3" data-mentoring-count>Mentoring interests: 0/3 used</small>
                                                         <?php
                                                             $chairFeedbackMessage = trim((string)($review['chair_feedback'] ?? ''));
                                                             $mentorInterested = !empty($review['adviser_interest']);
@@ -1425,6 +1484,74 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                 });
             });
         });
+    })();
+
+    (function() {
+        const limit = 3;
+        const toggles = Array.from(document.querySelectorAll('[data-mentoring-toggle]'));
+        const labels = Array.from(document.querySelectorAll('[data-mentoring-count]'));
+        if (!toggles.length) {
+            return;
+        }
+
+        const getStudentId = (toggle) => toggle.getAttribute('data-student-id') || '';
+
+        const getSelectedStudents = (excludeToggle = null) => {
+            const selected = new Set();
+            toggles.forEach((toggle) => {
+                if (excludeToggle && toggle === excludeToggle) {
+                    return;
+                }
+                if (!toggle.checked) {
+                    return;
+                }
+                const sid = getStudentId(toggle);
+                if (sid) {
+                    selected.add(sid);
+                }
+            });
+            return selected;
+        };
+
+        const update = () => {
+            const selectedStudents = getSelectedStudents();
+            const selectedCount = selectedStudents.size;
+            labels.forEach((label) => {
+                label.textContent = `Mentoring interests: ${selectedCount}/${limit} used`;
+            });
+            const disableExtras = selectedCount >= limit;
+            toggles.forEach((toggle) => {
+                const sid = getStudentId(toggle);
+                if (toggle.checked) {
+                    toggle.disabled = false;
+                } else if (disableExtras && sid && !selectedStudents.has(sid)) {
+                    toggle.disabled = true;
+                } else {
+                    toggle.disabled = false;
+                }
+            });
+        };
+
+        toggles.forEach((toggle) => {
+            toggle.addEventListener('change', () => {
+                const sid = getStudentId(toggle);
+                if (toggle.checked && sid) {
+                    const selectedBefore = getSelectedStudents(toggle);
+                    if (!selectedBefore.has(sid) && selectedBefore.size >= limit) {
+                        toggle.checked = false;
+                        update();
+                        return;
+                    }
+                    toggles.forEach((other) => {
+                        if (other !== toggle && getStudentId(other) === sid) {
+                            other.checked = false;
+                        }
+                    });
+                }
+                update();
+            });
+        });
+        update();
     })();
 
     (function() {
