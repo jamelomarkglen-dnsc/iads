@@ -501,40 +501,10 @@ $filters = [
     </div>
 </div>
 
-<!-- Add Advisee Modal -->
-<div class="modal fade" id="addAdviseeModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header bg-success text-white">
-                <h5 class="modal-title"><i class="bi bi-person-plus me-2"></i>Add Advisee</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <label for="searchAdviseeInput" class="form-label fw-semibold">Search Students</label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-success text-white"><i class="bi bi-search"></i></span>
-                        <input type="text" id="searchAdviseeInput" class="form-control" placeholder="Enter name or email">
-                    </div>
-                </div>
-                <div id="searchAdviseeResults" class="mt-3">
-                    <div class="d-flex justify-content-center py-4 text-muted">
-                        <div class="spinner-border text-success" role="status"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 (function () {
     const API_URL = 'advisory_chat_api.php';
-    const ASSIGN_API_URL = 'advisory_assign_api.php';
     const adviseeButtons = document.querySelectorAll('.advisee-item');
     const removeButtons = document.querySelectorAll('.advisee-remove-btn');
     const filterButtons = document.querySelectorAll('.status-filter');
@@ -720,89 +690,6 @@ $filters = [
         });
     });
 
-    // --- Add Advisee Modal Logic ---
-    const addModalEl = document.getElementById('addAdviseeModal');
-    const addModal = addModalEl ? new bootstrap.Modal(addModalEl) : null;
-    const searchInput = document.getElementById('searchAdviseeInput');
-    const searchResultsEl = document.getElementById('searchAdviseeResults');
-    let searchTimer = null;
-
-    function renderSearchResults(results) {
-        if (!results.length) {
-            searchResultsEl.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-info-circle fs-1 d-block mb-2"></i>No available students found. All students may already be assigned.</div>';
-            return;
-        }
-        const list = document.createElement('div');
-        list.className = 'list-group list-group-flush';
-        results.forEach(student => {
-            const item = document.createElement('div');
-            item.className = 'search-result-item d-flex justify-content-between align-items-center';
-            item.innerHTML = `
-                <div>
-                    <div class="fw-semibold">${student.name}</div>
-                    <small class="text-muted">${student.email}</small>
-                </div>
-                <button class="btn btn-success btn-sm" data-student-id="${student.id}"><i class="bi bi-plus-lg me-1"></i>Add</button>
-            `;
-            const btn = item.querySelector('button');
-            btn.addEventListener('click', () => assignStudent(student.id, btn));
-            list.appendChild(item);
-        });
-        searchResultsEl.innerHTML = '';
-        searchResultsEl.appendChild(list);
-    }
-
-    function fetchCandidates(query = '') {
-        searchResultsEl.innerHTML = '<div class="d-flex justify-content-center py-4 text-muted"><div class="spinner-border text-success" role="status"></div></div>';
-        fetch(`${ASSIGN_API_URL}?action=search&query=${encodeURIComponent(query)}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.success) {
-                    renderSearchResults(data.results || []);
-                } else {
-                    searchResultsEl.innerHTML = '<div class="text-center text-danger py-4">Unable to load students. Please try again.</div>';
-                }
-            })
-            .catch(() => searchResultsEl.innerHTML = '<div class="text-center text-danger py-4">Unable to load students. Please try again.</div>');
-    }
-
-    function assignStudent(studentId, button) {
-        button.disabled = true;
-        const formData = new FormData();
-        formData.append('student_id', studentId);
-        fetch(ASSIGN_API_URL, {
-            method: 'POST',
-            body: formData
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data && data.success) {
-                searchResultsEl.innerHTML = '<div class="text-center text-success py-4"><i class="bi bi-check-circle fs-1 d-block mb-2"></i>Student added to your advisory.</div>';
-                setTimeout(() => window.location.reload(), 1200);
-            } else {
-                button.disabled = false;
-                alert(data.error || 'Unable to add student. Please try again.');
-            }
-        })
-        .catch(() => {
-            button.disabled = false;
-            alert('Unable to add student. Please try again.');
-        });
-    }
-
-    if (addModalEl) {
-        addModalEl.addEventListener('shown.bs.modal', () => {
-            searchInput.value = '';
-            fetchCandidates();
-            searchInput.focus();
-        });
-
-        searchInput.addEventListener('keyup', function () {
-            const query = this.value.trim();
-            clearTimeout(searchTimer);
-            searchTimer = setTimeout(() => fetchCandidates(query), 250);
-        });
-    }
 })();
 </script>
 </body>
