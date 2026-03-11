@@ -374,9 +374,6 @@ $filters = [
                         </button>
                     <?php endforeach; ?>
                 </div>
-                <button class="btn btn-success px-4" data-bs-toggle="modal" data-bs-target="#addAdviseeModal">
-                    <i class="bi bi-person-plus-fill me-2"></i>Add Advisee
-                </button>
             </div>
         </div>
         <?php if ($adviseeAlert): ?>
