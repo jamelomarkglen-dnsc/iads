@@ -937,6 +937,9 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
         <?php endif; ?>
+        <div class="alert alert-warning py-2 px-3 small d-none" role="alert" data-mentoring-limit-banner>
+            Mentoring limit reached: 3/3 students selected. Uncheck a student to select another.
+        </div>
 
         <div class="row g-3 mb-4">
             <div class="col-md-3">
@@ -1490,6 +1493,7 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
         const limit = 3;
         const toggles = Array.from(document.querySelectorAll('[data-mentoring-toggle]'));
         const labels = Array.from(document.querySelectorAll('[data-mentoring-count]'));
+        const banner = document.querySelector('[data-mentoring-limit-banner]');
         if (!toggles.length) {
             return;
         }
@@ -1519,6 +1523,14 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
             labels.forEach((label) => {
                 label.textContent = `Mentoring interests: ${selectedCount}/${limit} used`;
             });
+            if (banner) {
+                if (selectedCount >= limit) {
+                    banner.textContent = `Mentoring limit reached: ${selectedCount}/${limit} students selected. Uncheck a student to select another.`;
+                    banner.classList.remove('d-none');
+                } else {
+                    banner.classList.add('d-none');
+                }
+            }
             const disableExtras = selectedCount >= limit;
             toggles.forEach((toggle) => {
                 const sid = getStudentId(toggle);
