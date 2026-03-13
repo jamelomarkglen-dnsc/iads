@@ -81,8 +81,10 @@ if (isset($_SESSION['role'])) {
                             <?php foreach ($notifications as $note): ?>
                                 <?php
                                 $noteLink = $note['link'] ?? '';
-                                if (!$noteLink) {
-                                    $titleLower = strtolower(trim((string)($note['title'] ?? '')));
+                                $titleLower = strtolower(trim((string)($note['title'] ?? '')));
+                                if ($userRole === 'student' && $titleLower === 'new advisory message') {
+                                    $noteLink = 'student_messages.php';
+                                } elseif (!$noteLink) {
                                     if ($titleLower === 'outline defense endorsement') {
                                         $noteLink = 'program_chairperson.php#endorsement-inbox';
                                     }
@@ -129,7 +131,8 @@ if (isset($_SESSION['role'])) {
 <script>
     window.APP_NOTIFICATIONS = {
         unread: <?php echo (int)$unreadCount; ?>,
-        list: <?php echo json_encode($notifications, JSON_UNESCAPED_UNICODE); ?>
+        list: <?php echo json_encode($notifications, JSON_UNESCAPED_UNICODE); ?>,
+        role: <?php echo json_encode((string)$userRole); ?>
     };
 </script>
 <script>
@@ -180,10 +183,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function resolveNotificationLink(note) {
+        const title = note && note.title ? String(note.title).toLowerCase().trim() : '';
+        if (title === 'new advisory message' && window.APP_NOTIFICATIONS && window.APP_NOTIFICATIONS.role === 'student') {
+            return 'student_messages.php';
+        }
         if (note && note.link) {
             return note.link;
         }
-        const title = note && note.title ? String(note.title).toLowerCase().trim() : '';
         if (title === 'outline defense endorsement') {
             return 'program_chairperson.php#endorsement-inbox';
         }

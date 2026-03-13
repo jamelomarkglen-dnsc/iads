@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $counterpartId = $counterpartRole === 'student' ? $studentId : $adviserId;
 
     $snippet = mb_strlen($message) > 120 ? mb_substr($message, 0, 117) . '...' : $message;
-    $link = $counterpartRole === 'student' ? 'student_dashboard.php' : 'advisory.php';
+    $link = $counterpartRole === 'student' ? 'student_messages.php' : 'advisory.php';
     notify_user_for_role(
         $conn,
         $counterpartId,
