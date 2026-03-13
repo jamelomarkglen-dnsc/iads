@@ -68,65 +68,7 @@ $advisorTypes = str_repeat('i', count($advisorColumns));
 $advisorParams = array_fill(0, count($advisorColumns), $adviserId);
 $adviseeAlert = null;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['remove_advisee'] ?? '') === '1') {
-    $targetStudentId = (int)($_POST['student_id'] ?? 0);
-    if ($targetStudentId <= 0) {
-        $adviseeAlert = ['type' => 'danger', 'message' => 'Invalid student selection.'];
-    } else {
-        $checkSql = "
-            SELECT u.id, CONCAT(COALESCE(u.firstname,''), ' ', COALESCE(u.lastname,'')) AS full_name
-            FROM users u
-            WHERE u.id = ?
-              AND u.role = 'student'
-              AND {$advisorWhere}
-            LIMIT 1
-        ";
-        $checkStmt = $conn->prepare($checkSql);
-        if ($checkStmt) {
-            $bindTypes = 'i' . $advisorTypes;
-            $bindValues = [$bindTypes, $targetStudentId];
-            foreach ($advisorParams as $index => $value) {
-                $bindValues[] = &$advisorParams[$index];
-            }
-            $bindValues[1] = &$targetStudentId;
-            call_user_func_array([$checkStmt, 'bind_param'], $bindValues);
-            $checkStmt->execute();
-            $checkResult = $checkStmt->get_result();
-            $studentRow = $checkResult ? $checkResult->fetch_assoc() : null;
-            if ($checkResult) {
-                $checkResult->free();
-            }
-            $checkStmt->close();
-            if ($studentRow) {
-                $updates = [];
-                if (in_array('adviser_id', $advisorColumns, true)) {
-                    $updates[] = 'adviser_id = NULL';
-                }
-                if (in_array('advisor_id', $advisorColumns, true)) {
-                    $updates[] = 'advisor_id = NULL';
-                }
-                $updateSql = "UPDATE users SET " . implode(', ', $updates) . " WHERE id = ?";
-                $updateStmt = $conn->prepare($updateSql);
-                if ($updateStmt) {
-                    $updateStmt->bind_param('i', $targetStudentId);
-                    if ($updateStmt->execute()) {
-                        $removedName = trim((string)($studentRow['full_name'] ?? 'The student'));
-                        $adviseeAlert = ['type' => 'success', 'message' => "{$removedName} has been removed from your advisory list."];
-                    } else {
-                        $adviseeAlert = ['type' => 'danger', 'message' => 'Unable to update the advisory list right now.'];
-                    }
-                    $updateStmt->close();
-                } else {
-                    $adviseeAlert = ['type' => 'danger', 'message' => 'Unable to prepare the removal request.'];
-                }
-            } else {
-                $adviseeAlert = ['type' => 'warning', 'message' => 'The selected student is no longer linked to your advisory list.'];
-            }
-        } else {
-            $adviseeAlert = ['type' => 'danger', 'message' => 'Failed to verify the selected student.'];
-        }
-    }
-}
+
 
 $adviseesSql = "
     SELECT u.id, u.firstname, u.lastname, u.email,
@@ -445,13 +387,6 @@ $filters = [
                                             </div>
                                             <div class="d-flex flex-column align-items-end gap-2">
                                                 <span class="badge rounded-pill bg-success-subtle text-success text-capitalize"><?php echo htmlspecialchars($advisee['submission_status']); ?></span>
-                                                <form method="POST" class="text-end">
-                                                    <input type="hidden" name="remove_advisee" value="1">
-                                                    <input type="hidden" name="student_id" value="<?php echo (int)$advisee['id']; ?>">
-                                                    <button type="submit" class="btn btn-sm btn-outline-danger advisee-remove-btn">
-                                                        <i class="bi bi-x-circle me-1"></i>Remove
-                                                    </button>
-                                                </form>
                                             </div>
                                         </div>
                                     </div>
@@ -506,7 +441,6 @@ $filters = [
 (function () {
     const API_URL = 'advisory_chat_api.php';
     const adviseeButtons = document.querySelectorAll('.advisee-item');
-    const removeButtons = document.querySelectorAll('.advisee-remove-btn');
     const filterButtons = document.querySelectorAll('.status-filter');
     const chatMessagesEl = document.getElementById('chatMessages');
     const chatForm = document.getElementById('chatForm');
@@ -631,16 +565,6 @@ $filters = [
 
     adviseeButtons.forEach(button => {
         button.addEventListener('click', () => activateStudent(button));
-    });
-    removeButtons.forEach((button) => {
-        button.addEventListener('click', (event) => {
-            event.stopPropagation();
-            const parent = button.closest('.advisee-item');
-            const studentName = parent ? parent.dataset.studentName : 'this student';
-            if (!confirm(`Remove ${studentName} from your advisory list?`)) {
-                event.preventDefault();
-            }
-        });
     });
 
     filterButtons.forEach(button => {
