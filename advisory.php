@@ -126,9 +126,17 @@ $filters = [
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <style>
+        :root {
+            --surface-white: #ffffff;
+            --surface-tint: #f6fbf7;
+            --brand-dark: #16562c;
+            --brand-mid: #1a7431;
+            --text-strong: #1a2d1f;
+            --text-muted: rgba(26, 45, 31, 0.68);
+        }
         body {
-            background: #f3f9f3;
-            color: #1a2d1f;
+            background: linear-gradient(180deg, #f0f7f2 0%, #f7fbf8 100%);
+            color: var(--text-strong);
         }
         .content {
             margin-left: var(--sidebar-width-expanded, 240px);
@@ -148,15 +156,30 @@ $filters = [
             }
         }
         .card {
-            border: 1px solid rgba(22, 86, 44, 0.12);
+            border: 1px solid rgba(22, 86, 44, 0.08);
             border-radius: 16px;
-            box-shadow: 0 12px 24px rgba(22, 86, 44, 0.08);
+            box-shadow: 0 10px 22px rgba(22, 86, 44, 0.08);
         }
         .card-header {
-            background: #16562c;
+            background: linear-gradient(135deg, var(--brand-mid), var(--brand-dark));
             color: #f3f9f3;
             border-top-left-radius: 16px;
             border-top-right-radius: 16px;
+        }
+        .page-title {
+            letter-spacing: 0.02em;
+        }
+        .panel-shell {
+            background: linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(246,251,247,0.95) 100%);
+            border: 1px solid rgba(22, 86, 44, 0.08);
+            border-radius: 22px;
+            padding: 18px;
+            box-shadow: 0 14px 30px rgba(22, 86, 44, 0.06);
+        }
+        @media (max-width: 992px) {
+            .panel-shell {
+                padding: 14px;
+            }
         }
         .advisee-list {
             max-height: 70vh;
@@ -165,14 +188,16 @@ $filters = [
         .advisee-item {
             border: none;
             border-bottom: 1px solid rgba(22, 86, 44, 0.08);
-            background: #ffffff;
+            background: var(--surface-white);
             color: inherit;
             text-align: left;
             transition: background 0.2s ease, transform 0.2s ease;
+            padding: 14px 16px;
         }
         .advisee-item:hover {
             background: #f0f8f1;
-            transform: translateX(4px);
+            transform: translateX(2px);
+            box-shadow: inset 4px 0 0 rgba(22, 86, 44, 0.18);
         }
         .advisee-item.active-student {
             background: #e2f3e7;
@@ -197,6 +222,7 @@ $filters = [
             display: flex;
             flex-direction: column;
             gap: 12px;
+            scroll-behavior: smooth;
         }
         .chat-bubble {
             max-width: 70%;
@@ -206,16 +232,27 @@ $filters = [
             flex-direction: column;
             gap: 6px;
             box-shadow: 0 8px 18px rgba(22, 86, 44, 0.12);
+            animation: bubbleIn 0.2s ease;
+        }
+        @keyframes bubbleIn {
+            from {
+                opacity: 0;
+                transform: translateY(4px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
         .chat-bubble.sent {
             margin-left: auto;
-            background: linear-gradient(135deg, #1a7431, #16562c);
+            background: linear-gradient(135deg, var(--brand-mid), var(--brand-dark));
             color: #f3f9f3;
             border-bottom-right-radius: 4px;
         }
         .chat-bubble.received {
             margin-right: auto;
-            background: #ffffff;
+            background: var(--surface-white);
             border-bottom-left-radius: 4px;
             border: 1px solid rgba(22, 86, 44, 0.18);
             color: #1c3321;
@@ -225,7 +262,10 @@ $filters = [
             align-items: center;
             gap: 8px;
             font-size: 0.75rem;
-            opacity: 0.8;
+            color: var(--text-muted);
+        }
+        .chat-bubble.sent .chat-meta {
+            color: rgba(255, 255, 255, 0.75);
         }
         .chat-divider {
             text-transform: uppercase;
@@ -276,10 +316,16 @@ $filters = [
         }
         .stat-chip {
             border-radius: 18px;
-            background: #fff;
+            background: var(--surface-white);
             padding: 16px;
             box-shadow: 0 12px 24px rgba(22,86,44,0.1);
             border: 1px solid rgba(22,86,44,0.08);
+        }
+        .stat-chip small {
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-size: 0.7rem;
+            color: var(--text-muted);
         }
         .filter-toggle .btn {
             border-radius: 999px;
@@ -298,7 +344,7 @@ $filters = [
     <div class="container-fluid">
         <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
             <div>
-                <h2 class="fw-bold text-success mb-1">Advisory Chat</h2>
+                <h2 class="fw-bold text-success mb-1 page-title">Advisory Chat</h2>
                 <p class="text-muted mb-0">Collaborate with your advisees in real-time using the DNSC IAdS chat.</p>
             </div>
             <div class="d-flex flex-wrap gap-2">
@@ -332,89 +378,91 @@ $filters = [
             </div>
         </div>
 
-        <div class="row g-4">
-            <div class="col-lg-4">
-                <div class="card h-100">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span><i class="bi bi-people-fill me-2"></i>My Advisees</span>
-                        <span class="badge bg-light text-success"><?php echo count($advisees); ?></span>
-                    </div>
-                    <div class="card-body p-0">
-                        <?php if (!$adviserHasAdvisees): ?>
-                            <div class="p-4 text-center text-muted">
-                                <i class="bi bi-person-exclamation fs-1 d-block mb-2"></i>
-                                No advisees assigned yet.
-                            </div>
-                        <?php else: ?>
-                            <div class="advisee-list list-group list-group-flush" id="adviseeList">
-                                <?php foreach ($advisees as $advisee): ?>
-                                    <?php
-                                        $fullName = trim($advisee['firstname'] . ' ' . $advisee['lastname']);
-                                        $isActive = $advisee['id'] === $defaultStudentId;
-                                    ?>
-                                    <div
-                                        class="list-group-item advisee-item <?php echo $isActive ? 'active-student' : ''; ?>"
-                                        role="button"
-                                        tabindex="0"
-                                        data-stage="<?php echo htmlspecialchars($advisee['stage']); ?>"
-                                        data-student-id="<?php echo (int)$advisee['id']; ?>"
-                                        data-student-name="<?php echo htmlspecialchars($fullName); ?>"
-                                        data-student-email="<?php echo htmlspecialchars($advisee['email']); ?>"
-                                    >
-                                        <div class="d-flex justify-content-between align-items-start gap-2">
-                                            <div class="flex-grow-1">
-                                                <div class="fw-semibold"><?php echo htmlspecialchars($fullName); ?></div>
-                                                <small class="text-muted"><?php echo htmlspecialchars($advisee['email']); ?></small>
-                                                <?php if (!empty($advisee['paper_title'])): ?>
-                                                    <div class="small text-success mt-1">
-                                                        <i class="bi bi-journal-text me-1"></i><?php echo htmlspecialchars($advisee['paper_title']); ?>
-                                                    </div>
-                                                <?php endif; ?>
-                                            </div>
-                                            <div class="d-flex flex-column align-items-end gap-2">
-                                                <span class="badge rounded-pill bg-success-subtle text-success text-capitalize"><?php echo htmlspecialchars($advisee['submission_status']); ?></span>
+        <div class="panel-shell">
+            <div class="row g-4">
+                <div class="col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-people-fill me-2"></i>My Advisees</span>
+                            <span class="badge bg-light text-success"><?php echo count($advisees); ?></span>
+                        </div>
+                        <div class="card-body p-0">
+                            <?php if (!$adviserHasAdvisees): ?>
+                                <div class="p-4 text-center text-muted">
+                                    <i class="bi bi-person-exclamation fs-1 d-block mb-2"></i>
+                                    No advisees assigned yet.
+                                </div>
+                            <?php else: ?>
+                                <div class="advisee-list list-group list-group-flush" id="adviseeList">
+                                    <?php foreach ($advisees as $advisee): ?>
+                                        <?php
+                                            $fullName = trim($advisee['firstname'] . ' ' . $advisee['lastname']);
+                                            $isActive = $advisee['id'] === $defaultStudentId;
+                                        ?>
+                                        <div
+                                            class="list-group-item advisee-item <?php echo $isActive ? 'active-student' : ''; ?>"
+                                            role="button"
+                                            tabindex="0"
+                                            data-stage="<?php echo htmlspecialchars($advisee['stage']); ?>"
+                                            data-student-id="<?php echo (int)$advisee['id']; ?>"
+                                            data-student-name="<?php echo htmlspecialchars($fullName); ?>"
+                                            data-student-email="<?php echo htmlspecialchars($advisee['email']); ?>"
+                                        >
+                                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                                <div class="flex-grow-1">
+                                                    <div class="fw-semibold"><?php echo htmlspecialchars($fullName); ?></div>
+                                                    <small class="text-muted"><?php echo htmlspecialchars($advisee['email']); ?></small>
+                                                    <?php if (!empty($advisee['paper_title'])): ?>
+                                                        <div class="small text-success mt-1">
+                                                            <i class="bi bi-journal-text me-1"></i><?php echo htmlspecialchars($advisee['paper_title']); ?>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <div class="d-flex flex-column align-items-end gap-2">
+                                                    <span class="badge rounded-pill bg-success-subtle text-success text-capitalize"><?php echo htmlspecialchars($advisee['submission_status']); ?></span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        <?php endif; ?>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="col-lg-8">
-                <div class="card chat-card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <div>
-                            <h5 class="mb-0" id="chatPartnerName"><?php echo $defaultStudentName ?: 'Select an advisee'; ?></h5>
-                            <small class="text-white-50" id="chatHeaderMeta"><?php echo $defaultStudentEmail ? htmlspecialchars($defaultStudentEmail) : 'No advisee selected'; ?></small>
+                <div class="col-lg-8">
+                    <div class="card chat-card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-0" id="chatPartnerName"><?php echo $defaultStudentName ?: 'Select an advisee'; ?></h5>
+                                <small class="text-white-50" id="chatHeaderMeta"><?php echo $defaultStudentEmail ? htmlspecialchars($defaultStudentEmail) : 'No advisee selected'; ?></small>
+                            </div>
+                            <span class="badge bg-light text-success">Adviser</span>
                         </div>
-                        <span class="badge bg-light text-success">Adviser</span>
-                    </div>
-                    <div class="chat-messages" id="chatMessages">
-                        <?php if (!$adviserHasAdvisees): ?>
-                            <div class="chat-empty-state">
-                                <i class="bi bi-people fs-1"></i>
-                                <p class="mb-0">No advisees assigned yet.</p>
-                            </div>
-                        <?php else: ?>
-                            <div class="chat-empty-state">
-                                <i class="bi bi-chat-dots fs-1"></i>
-                                <p class="mb-0">Select an advisee from the left to view your conversation history.</p>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                    <div class="card-footer bg-white">
-                        <form class="chat-form" id="chatForm">
-                            <div class="input-group">
-                                <input type="hidden" name="student_id" id="chatStudentId" value="<?php echo $defaultStudentId ? (int)$defaultStudentId : ''; ?>">
-                                <textarea class="form-control" name="message" id="chatMessageInput" rows="2" placeholder="<?php echo $adviserHasAdvisees ? 'Type your message...' : 'Add an advisee to start messaging'; ?>" <?php echo $adviserHasAdvisees ? '' : 'disabled'; ?> required></textarea>
-                                <button class="btn btn-success" type="submit" id="chatSendBtn" <?php echo $adviserHasAdvisees ? '' : 'disabled'; ?>>
-                                    <i class="bi bi-send-fill"></i>
-                                </button>
-                            </div>
-                        </form>
+                        <div class="chat-messages" id="chatMessages">
+                            <?php if (!$adviserHasAdvisees): ?>
+                                <div class="chat-empty-state">
+                                    <i class="bi bi-people fs-1"></i>
+                                    <p class="mb-0">No advisees assigned yet.</p>
+                                </div>
+                            <?php else: ?>
+                                <div class="chat-empty-state">
+                                    <i class="bi bi-chat-dots fs-1"></i>
+                                    <p class="mb-0">Select an advisee from the left to view your conversation history.</p>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                        <div class="card-footer bg-white">
+                            <form class="chat-form" id="chatForm">
+                                <div class="input-group">
+                                    <input type="hidden" name="student_id" id="chatStudentId" value="<?php echo $defaultStudentId ? (int)$defaultStudentId : ''; ?>">
+                                    <textarea class="form-control" name="message" id="chatMessageInput" rows="2" placeholder="<?php echo $adviserHasAdvisees ? 'Type your message...' : 'No advisees assigned yet.'; ?>" <?php echo $adviserHasAdvisees ? '' : 'disabled'; ?> required></textarea>
+                                    <button class="btn btn-success" type="submit" id="chatSendBtn" <?php echo $adviserHasAdvisees ? '' : 'disabled'; ?>>
+                                        <i class="bi bi-send-fill"></i>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>
