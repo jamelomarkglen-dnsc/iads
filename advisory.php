@@ -66,9 +66,6 @@ if (empty($advisorColumns)) {
 $advisorWhere = advisorWhereClause('u', $advisorColumns);
 $advisorTypes = str_repeat('i', count($advisorColumns));
 $advisorParams = array_fill(0, count($advisorColumns), $adviserId);
-$adviseeAlert = null;
-
-
 
 $adviseesSql = "
     SELECT u.id, u.firstname, u.lastname, u.email,
@@ -291,10 +288,6 @@ $filters = [
             background: #16562c;
             color: #fff;
         }
-        .search-result-item {
-            border-bottom: 1px solid rgba(22, 86, 44, 0.08);
-            padding: 12px 0;
-        }
     </style>
 </head>
 <body>
@@ -318,13 +311,6 @@ $filters = [
                 </div>
             </div>
         </div>
-        <?php if ($adviseeAlert): ?>
-            <div class="alert alert-<?php echo htmlspecialchars($adviseeAlert['type']); ?> alert-dismissible fade show shadow-sm" role="alert">
-                <?php echo htmlspecialchars($adviseeAlert['message']); ?>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-        <?php endif; ?>
-
         <div class="row g-3 mb-4">
             <div class="col-sm-4 col-lg-3">
                 <div class="stat-chip text-center">
@@ -357,7 +343,7 @@ $filters = [
                         <?php if (!$adviserHasAdvisees): ?>
                             <div class="p-4 text-center text-muted">
                                 <i class="bi bi-person-exclamation fs-1 d-block mb-2"></i>
-                                No advisees yet. Use “Add Advisee” to link students under your advisory.
+                                No advisees assigned yet.
                             </div>
                         <?php else: ?>
                             <div class="advisee-list list-group list-group-flush" id="adviseeList">
@@ -410,7 +396,7 @@ $filters = [
                         <?php if (!$adviserHasAdvisees): ?>
                             <div class="chat-empty-state">
                                 <i class="bi bi-people fs-1"></i>
-                                <p class="mb-0">Add a student to your advisory to start chatting.</p>
+                                <p class="mb-0">No advisees assigned yet.</p>
                             </div>
                         <?php else: ?>
                             <div class="chat-empty-state">
