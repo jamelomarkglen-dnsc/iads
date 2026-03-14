@@ -64,6 +64,14 @@ $hasAdvisor = !empty($advisor['id']);
             border: 1px solid rgba(22, 86, 44, 0.08);
             overflow: hidden;
             box-shadow: 0 14px 28px rgba(22, 86, 44, 0.08);
+            width: 100%;
+            max-width: 940px;
+            margin: 0 auto;
+        }
+        @media (max-width: 1000px) {
+            .chat-card {
+                max-width: 100%;
+            }
         }
         .chat-header {
             padding: 0.75rem 1.1rem;
@@ -77,7 +85,7 @@ $hasAdvisor = !empty($advisor['id']);
         .chat-messages {
             flex: 1 1 auto;
             overflow-y: auto;
-            padding: 0.8rem 0.9rem 1rem;
+            padding: 0.75rem 0.9rem 0.95rem;
             background: linear-gradient(180deg, #f3faf5 0%, #ffffff 100%);
         }
         .chat-messages .d-flex {
@@ -94,8 +102,8 @@ $hasAdvisor = !empty($advisor['id']);
             text-align: center;
         }
         .chat-bubble {
-            max-width: 46%;
-            padding: 7px 10px;
+            max-width: 44%;
+            padding: 8px 10px;
             border-radius: 12px;
             display: inline-flex;
             flex-direction: column;
