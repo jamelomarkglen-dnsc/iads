@@ -480,9 +480,6 @@ if ($userLastLogin !== '') {
                             <i class="bi bi-chevron-down chevron"></i>
                         </button>
                         <div class="nav-section-links">
-                            <a href="create_faculty.php" class="nav-sub-link <?php echo ($currentPage == 'create_faculty.php') ? 'active' : ''; ?>">
-                                Create Faculty
-                            </a>
                             <a href="verify_faculty.php" class="nav-sub-link <?php echo ($currentPage == 'verify_faculty.php') ? 'active' : ''; ?>">
                                 Verify Faculty
                             </a>
@@ -513,9 +510,6 @@ if ($userLastLogin !== '') {
                             <i class="bi bi-chevron-down chevron"></i>
                         </button>
                         <div class="nav-section-links">
-                            <a href="create_student.php" class="nav-sub-link <?php echo ($currentPage == 'create_student.php') ? 'active' : ''; ?>">
-                                Create Student
-                            </a>
                             <a href="student_directory.php" class="nav-sub-link <?php echo ($currentPage == 'student_directory.php') ? 'active' : ''; ?>">
                                 Student Directory
                             </a>
