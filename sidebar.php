@@ -311,6 +311,7 @@ $reviewerInboxAllowed = in_array($role, ['committee_chair', 'committee_chairpers
 
 $facultyMenuPages = [
     'create_faculty.php',
+    'verify_faculty.php',
     'assign_adviser.php',
     'reviewer_pipeline.php',
     'assign_panel.php',
@@ -395,6 +396,9 @@ if ($userLastLogin !== '') {
                             <i class="bi bi-inbox"></i> <span class="link-text">Assignment Inbox</span>
                         </a>
                         <?php endif; ?>
+                        <a href="verify_students.php" class="nav-link <?php echo ($currentPage == 'verify_students.php') ? 'active' : ''; ?>">
+                            <i class="bi bi-person-check"></i> <span class="link-text">Verify Students</span>
+                        </a>
                     <?php endif; ?>
 
                     <?php if ($role === 'student'): ?>
@@ -431,6 +435,9 @@ if ($userLastLogin !== '') {
                         <div class="nav-section-links">
                             <a href="create_faculty.php" class="nav-sub-link <?php echo ($currentPage == 'create_faculty.php') ? 'active' : ''; ?>">
                                 Create Faculty
+                            </a>
+                            <a href="verify_faculty.php" class="nav-sub-link <?php echo ($currentPage == 'verify_faculty.php') ? 'active' : ''; ?>">
+                                Verify Faculty
                             </a>
                             <a href="assign_adviser.php" class="nav-sub-link <?php echo ($currentPage == 'assign_adviser.php') ? 'active' : ''; ?>">
                                 Assign Students
@@ -532,6 +539,9 @@ if ($userLastLogin !== '') {
                 <?php if ($role === 'dean'): ?>
                     <a href="create_progchair.php" class="nav-link <?php echo ($currentPage == 'create_progchair.php') ? 'active' : ''; ?>">
                         <i class="bi bi-person-badge"></i> <span class="link-text">Create Program Chair</span>
+                    </a>
+                    <a href="verify_program_chair.php" class="nav-link <?php echo ($currentPage == 'verify_program_chair.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-person-check"></i> <span class="link-text">Verify Program Chair</span>
                     </a>
                     <a href="dean_defense_committee.php" class="nav-link <?php echo ($currentPage == 'dean_defense_committee.php') ? 'active' : ''; ?>">
                         <i class="bi bi-clipboard-check"></i> <span class="link-text">Defense Committee</span>
