@@ -182,11 +182,26 @@ if ($hasAccountStatus) {
             min-height: 100vh;
             background: #f5f8f5;
         }
+        .content {
+            margin-left: 220px;
+            padding: 28px 24px;
+            min-height: 100vh;
+            transition: margin-left .3s;
+        }
+        #sidebar.collapsed ~ .content {
+            margin-left: 60px;
+        }
         .table th {
             font-size: 0.85rem;
             text-transform: uppercase;
             letter-spacing: 0.04em;
             color: #47654c;
+        }
+        @media (max-width: 992px) {
+            .content {
+                margin-left: 0;
+                padding: 24px 16px;
+            }
         }
     </style>
 </head>
@@ -194,6 +209,7 @@ if ($hasAccountStatus) {
 <?php include 'header.php'; ?>
 <?php include 'sidebar.php'; ?>
 
+<div class="content">
 <main class="container py-5 px-3 px-md-4" style="max-width: 1100px;">
     <div class="d-flex flex-wrap align-items-center justify-content-between mb-4">
         <div>
@@ -270,5 +286,6 @@ if ($hasAccountStatus) {
         </div>
     <?php endif; ?>
 </main>
+</div>
 </body>
 </html>
