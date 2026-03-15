@@ -48,6 +48,7 @@ function ensure_column(mysqli $conn, string $table, string $column, string $defi
 }
 
 $hasAccountStatus = ensure_column($conn, 'users', 'account_status', "VARCHAR(20) NOT NULL DEFAULT 'approved'");
+$hasSpecialization = column_exists($conn, 'users', 'specialization');
 
 $scope = get_program_chair_scope($conn, (int)($_SESSION['user_id'] ?? 0));
 $scopeSql = '';
@@ -123,8 +124,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'], $_POST['use
 
 $pendingAccounts = [];
 if ($hasAccountStatus) {
+    $specializationSelect = $hasSpecialization ? 'u.specialization' : "'' AS specialization";
     $sql = "
-        SELECT u.id, u.firstname, u.lastname, u.email, u.department, u.college, u.contact, u.gender, u.specialization, u.created_at
+        SELECT u.id, u.firstname, u.lastname, u.email, u.department, u.college, u.contact, u.gender, {$specializationSelect}, u.created_at
         FROM users u
         WHERE u.role = 'faculty' AND u.account_status = 'pending' {$scopeSql}
         ORDER BY u.created_at DESC
