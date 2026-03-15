@@ -175,8 +175,8 @@ if (isset($_POST['register'])) {
                 $accountStatus = 'approved';
             }
         } elseif ($role === 'program_chairperson') {
-            if ($oldInput['fullname'] === '' || $oldInput['username'] === '') {
-                $errors[] = "Full name and username are required.";
+            if ($oldInput['firstname'] === '' || $oldInput['lastname'] === '' || $oldInput['username'] === '') {
+                $errors[] = "First name, last name, and username are required.";
             }
             if ($oldInput['department'] === '' || $oldInput['program_focus'] === '') {
                 $errors[] = "Department and program handled are required.";
@@ -185,7 +185,8 @@ if (isset($_POST['register'])) {
                 $errors[] = "Contact number, gender, and institute are required.";
             }
             if (empty($errors)) {
-                [$firstname, $lastname] = split_name($oldInput['fullname']);
+                $firstname = $oldInput['firstname'];
+                $lastname = $oldInput['lastname'];
                 $username = $oldInput['username'];
                 $program = $oldInput['program_focus'];
                 $accountStatus = 'pending';
@@ -483,8 +484,13 @@ if (isset($_POST['register'])) {
                 <div class="section-title">Program Chairperson Profile</div>
                 <div class="row mb-3">
                     <div class="col-md-6">
-                        <input type="text" name="fullname" class="form-control" placeholder="Full Name" value="<?php echo htmlspecialchars($oldInput['fullname']); ?>" data-required="true">
+                        <input type="text" name="firstname" class="form-control" placeholder="First Name" value="<?php echo htmlspecialchars($oldInput['firstname']); ?>" data-required="true">
                     </div>
+                    <div class="col-md-6">
+                        <input type="text" name="lastname" class="form-control" placeholder="Last Name" value="<?php echo htmlspecialchars($oldInput['lastname']); ?>" data-required="true">
+                    </div>
+                </div>
+                <div class="row mb-3">
                     <div class="col-md-6">
                         <input type="text" name="username" class="form-control" placeholder="Username" value="<?php echo htmlspecialchars($oldInput['username']); ?>" data-required="true">
                     </div>
