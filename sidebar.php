@@ -848,6 +848,12 @@ if ($userLastLogin !== '') {
                                 <input type="text" class="form-control" value="<?php echo htmlspecialchars($userProfile['gender']); ?>" readonly>
                             </div>
                             <?php endif; ?>
+                            <?php if ($role === 'faculty'): ?>
+                            <div class="col-md-6">
+                                <label class="form-label">Program</label>
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($userProfile['program']); ?>" readonly>
+                            </div>
+                            <?php else: ?>
                             <div class="col-md-6">
                                 <label class="form-label">Program</label>
                                 <input type="text" class="form-control" value="<?php echo htmlspecialchars($userProfile['program']); ?>" readonly>
@@ -856,6 +862,7 @@ if ($userLastLogin !== '') {
                                 <label class="form-label">Department</label>
                                 <input type="text" class="form-control" value="<?php echo htmlspecialchars($userProfile['department']); ?>" readonly>
                             </div>
+                            <?php endif; ?>
                             <?php if ($hasCollegeColumn && in_array($role, ['program_chairperson', 'faculty', 'student'], true)): ?>
                             <div class="col-md-6">
                                 <label class="form-label">College / Institute</label>
