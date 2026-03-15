@@ -22,6 +22,29 @@ function display_login_error($message) {
     echo "</div>";
 }
 
+function login_user_column_exists(mysqli $conn, string $column): bool {
+    static $cache = [];
+    if (isset($cache[$column])) {
+        return $cache[$column];
+    }
+    $columnEscaped = $conn->real_escape_string($column);
+    $sql = "
+        SELECT 1
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'users'
+          AND COLUMN_NAME = '{$columnEscaped}'
+        LIMIT 1
+    ";
+    $result = $conn->query($sql);
+    $exists = $result && $result->num_rows > 0;
+    if ($result) {
+        $result->free();
+    }
+    $cache[$column] = $exists;
+    return $exists;
+}
+
 if (isset($_POST['login'])) {
     // Prevent any potential output
     ob_clean();
@@ -101,6 +124,12 @@ if (isset($_POST['login'])) {
 
     if ($result->num_rows > 0) {
         $row = $result->fetch_assoc();
+
+        $accountStatus = '';
+        $hasAccountStatus = login_user_column_exists($conn, 'account_status');
+        if ($hasAccountStatus) {
+            $accountStatus = trim((string)($row['account_status'] ?? ''));
+        }
         
         // Log user details (be careful with sensitive information)
         detailed_error_log("User Found", [
@@ -118,6 +147,14 @@ if (isset($_POST['login'])) {
         ]);
 
         if ($passwordVerifyResult) {
+            if ($hasAccountStatus && $accountStatus !== '' && $accountStatus !== 'approved' && $row['role'] !== 'dean') {
+                $error = "Account is pending verification.";
+                detailed_error_log("Login blocked: Pending verification for email: $username");
+                $_SESSION['login_error'] = $error;
+                ob_end_clean();
+                header("Location: login.php");
+                exit;
+            }
             $userId = (int)$row['id'];
             
             // Enhanced role determination with validation

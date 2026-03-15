@@ -1,34 +1,396 @@
 <?php
 session_start();
-include 'db.php'; // database connection
+include 'db.php';
 
 $message = "";
+$oldInput = [
+    'role' => '',
+    'firstname' => '',
+    'lastname' => '',
+    'fullname' => '',
+    'email' => '',
+    'contact' => '',
+    'gender' => '',
+    'college' => '',
+    'department' => '',
+    'program_focus' => '',
+    'username' => '',
+    'specialization' => '',
+    'student_id' => '',
+    'program' => '',
+    'year_level' => '',
+];
+
+function columnExists(mysqli $conn, string $table, string $column): bool
+{
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (isset($cache[$key])) {
+        return $cache[$key];
+    }
+    $tableEscaped = $conn->real_escape_string($table);
+    $columnEscaped = $conn->real_escape_string($column);
+    $sql = "SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$tableEscaped' AND COLUMN_NAME = '$columnEscaped' LIMIT 1";
+    $result = $conn->query($sql);
+    $exists = $result && $result->num_rows > 0;
+    if ($result) {
+        $result->free();
+    }
+    $cache[$key] = $exists;
+    return $exists;
+}
+
+function ensureColumn(mysqli $conn, string $table, string $column, string $definition): bool
+{
+    if (!preg_match('/^[A-Za-z0-9_]+$/', $table) || !preg_match('/^[A-Za-z0-9_]+$/', $column)) {
+        return columnExists($conn, $table, $column);
+    }
+    if (columnExists($conn, $table, $column)) {
+        return true;
+    }
+    $sql = "ALTER TABLE `$table` ADD COLUMN `$column` $definition";
+    try {
+        return (bool)$conn->query($sql);
+    } catch (mysqli_sql_exception $e) {
+        return false;
+    }
+}
+
+function split_name(string $name): array
+{
+    $parts = preg_split('/\s+/', trim($name));
+    $first = array_shift($parts) ?? '';
+    $last = implode(' ', $parts);
+    return [$first, $last];
+}
+
+function bindParams(mysqli_stmt $stmt, string $types, array $values): bool
+{
+    $params = [$types];
+    foreach ($values as $value) {
+        $params[] = $value;
+    }
+    $refs = [];
+    foreach ($params as $key => $value) {
+        $refs[$key] = &$params[$key];
+    }
+    return (bool)call_user_func_array([$stmt, 'bind_param'], $refs);
+}
+
+function generateUniqueUsername(mysqli $conn, string $seed): string
+{
+    $base = strtolower(preg_replace('/[^a-z0-9]+/i', '', $seed));
+    if ($base === '') {
+        $base = 'student';
+    }
+    $username = $base;
+    $suffix = 1;
+
+    $checkSql = "SELECT id FROM users WHERE username = ? LIMIT 1";
+    $stmt = $conn->prepare($checkSql);
+    if (!$stmt) {
+        return $username;
+    }
+
+    while (true) {
+        $stmt->bind_param('s', $username);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if (!$result || $result->num_rows === 0) {
+            break;
+        }
+        $username = $base . $suffix;
+        $suffix++;
+    }
+    $stmt->close();
+    return $username;
+}
+
+$programOptions = [
+    'PHDEM' => 'Doctor of Philosophy in Educational Management (PHDEM)',
+    'MAEM' => 'Master of Arts in Educational Management (MAEM)',
+    'MAED-ELST' => 'Master of Education Major in English Language Studies and Teaching (MAED-ELST)',
+    'MST-GENSCI' => 'Master in Science Teaching Major in General Science (MST-GENSCI)',
+    'MST-MATH' => 'Master in Science Teaching Major in Mathematics (MST-MATH)',
+    'MFM-AT' => 'Master in Fisheries Management Major in Aquaculture Technology (MFM-AT)',
+    'MFM-FP' => 'Master in Fisheries Management Major in Fish Processing (MFM-FP)',
+    'MSMB' => 'Master of Science in Marine Biodiversity (MSMB)',
+    'MIT' => 'Master in Information Technology (MIT)',
+];
+
+$yearOptions = [
+    '1st Year',
+    '2nd Year',
+    '3rd Year',
+    '4th Year',
+];
+
+$hasAccountStatusColumn = ensureColumn($conn, 'users', 'account_status', "VARCHAR(20) NOT NULL DEFAULT 'approved'");
+$hasSpecializationColumn = columnExists($conn, 'users', 'specialization');
+$hasStudentIdColumn = columnExists($conn, 'users', 'student_id');
+$hasProgramColumn = columnExists($conn, 'users', 'program');
+$hasDepartmentColumn = columnExists($conn, 'users', 'department');
+$hasCollegeColumn = columnExists($conn, 'users', 'college');
+$hasYearLevelColumn = columnExists($conn, 'users', 'year_level');
+$hasPhotoColumn = columnExists($conn, 'users', 'photo');
 
 if (isset($_POST['register'])) {
-    $firstname = trim($_POST['firstname']);
-    $lastname = trim($_POST['lastname']);
-    $email = trim($_POST['email']);
-    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
-    $role = $_POST['role'];
-    $username = $firstname . " " . $lastname;
+    foreach ($oldInput as $key => $value) {
+        $oldInput[$key] = trim($_POST[$key] ?? '');
+    }
 
-    // Check if email already exists
-    $check = $conn->prepare("SELECT * FROM users WHERE email = ?");
-    $check->bind_param("s", $email);
-    $check->execute();
-    $result = $check->get_result();
+    $role = $oldInput['role'];
+    $email = $oldInput['email'];
+    $passwordPlain = (string)($_POST['password'] ?? '');
+    $confirmPassword = (string)($_POST['confirm_password'] ?? '');
+    $errors = [];
 
-    if ($result->num_rows > 0) {
-        $message = "<div class='alert alert-danger'>Email already exists!</div>";
-    } else {
-        $sql = $conn->prepare("INSERT INTO users (firstname, lastname, username, password, email, role) VALUES (?, ?, ?, ?, ?, ?)");
-        $sql->bind_param("ssssss", $firstname, $lastname, $username, $password, $email, $role);
+    if ($role === '') {
+        $errors[] = "Please select a role.";
+    }
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = "Please enter a valid email address.";
+    }
+    if ($passwordPlain === '' || $confirmPassword === '') {
+        $errors[] = "Password and confirmation are required.";
+    } elseif ($passwordPlain !== $confirmPassword) {
+        $errors[] = "Passwords do not match.";
+    }
 
-        if ($sql->execute()) {
-            $message = "<div class='alert alert-success'>Registration successful! Redirecting...</div>";
-            header("refresh:2; url=login.php");
+    $firstname = '';
+    $lastname = '';
+    $username = '';
+    $accountStatus = 'approved';
+    $program = '';
+    $photoPath = null;
+
+    if (empty($errors)) {
+        if ($role === 'dean') {
+            if ($oldInput['firstname'] === '' || $oldInput['lastname'] === '') {
+                $errors[] = "First and last name are required.";
+            } else {
+                $firstname = $oldInput['firstname'];
+                $lastname = $oldInput['lastname'];
+                $username = trim($firstname . ' ' . $lastname);
+                $accountStatus = 'approved';
+            }
+        } elseif ($role === 'program_chairperson') {
+            if ($oldInput['fullname'] === '' || $oldInput['username'] === '') {
+                $errors[] = "Full name and username are required.";
+            }
+            if ($oldInput['department'] === '' || $oldInput['program_focus'] === '') {
+                $errors[] = "Department and program handled are required.";
+            }
+            if ($oldInput['contact'] === '' || $oldInput['gender'] === '' || $oldInput['college'] === '') {
+                $errors[] = "Contact number, gender, and institute are required.";
+            }
+            if (empty($errors)) {
+                [$firstname, $lastname] = split_name($oldInput['fullname']);
+                $username = $oldInput['username'];
+                $program = $oldInput['program_focus'];
+                $accountStatus = 'pending';
+            }
+        } elseif ($role === 'faculty') {
+            if ($oldInput['fullname'] === '' || $oldInput['username'] === '') {
+                $errors[] = "Full name and username are required.";
+            }
+            if (!preg_match('/^\d{10,15}$/', $oldInput['contact'])) {
+                $errors[] = "Contact number should contain 10-15 digits.";
+            }
+            if ($oldInput['gender'] === '' || $oldInput['college'] === '' || $oldInput['department'] === '') {
+                $errors[] = "Gender, institute, and program are required.";
+            }
+            if (empty($errors)) {
+                [$firstname, $lastname] = split_name($oldInput['fullname']);
+                $username = $oldInput['username'];
+                $accountStatus = 'pending';
+            }
+        } elseif ($role === 'student') {
+            if ($oldInput['firstname'] === '' || $oldInput['lastname'] === '') {
+                $errors[] = "First and last name are required.";
+            }
+            if ($hasStudentIdColumn && !preg_match('/^[0-9]{2,}$/', $oldInput['student_id'])) {
+                $errors[] = "Student ID should contain digits only.";
+            }
+            if ($oldInput['program'] === '' || $oldInput['year_level'] === '') {
+                $errors[] = "Program and year level are required.";
+            }
+            if ($oldInput['department'] === '' || $oldInput['college'] === '') {
+                $errors[] = "Department and institute are required.";
+            }
+            if (empty($errors)) {
+                $firstname = $oldInput['firstname'];
+                $lastname = $oldInput['lastname'];
+                $seed = $oldInput['student_id'] ?: ($firstname . $lastname) ?: $email;
+                $username = generateUniqueUsername($conn, $seed);
+                $accountStatus = 'pending';
+            }
         } else {
-            $message = "<div class='alert alert-danger'>Error: Could not register.</div>";
+            $errors[] = "Invalid role selection.";
+        }
+    }
+
+    if (empty($errors) && $role !== 'dean' && !$hasAccountStatusColumn) {
+        $errors[] = "Account verification is not available right now. Please contact the administrator.";
+    }
+
+    if (empty($errors) && $role === 'program_chairperson' && isset($_FILES['photo']) && ($_FILES['photo']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        $fileInfo = $_FILES['photo'];
+        if (($fileInfo['error'] ?? UPLOAD_ERR_OK) === UPLOAD_ERR_OK) {
+            if (!is_dir("uploads")) {
+                mkdir("uploads", 0777, true);
+            }
+            $photoPath = "uploads/" . basename($fileInfo['name']);
+            move_uploaded_file($fileInfo['tmp_name'], $photoPath);
+        }
+    }
+
+    if (empty($errors)) {
+        $checkSql = "SELECT id FROM users WHERE email = ?";
+        $checkTypes = "s";
+        $checkValues = [$email];
+
+        if (in_array($role, ['program_chairperson', 'faculty'], true) && $username !== '') {
+            $checkSql .= " OR username = ?";
+            $checkTypes .= "s";
+            $checkValues[] = $username;
+        }
+        if ($role === 'student' && $hasStudentIdColumn && $oldInput['student_id'] !== '') {
+            $checkSql .= " OR student_id = ?";
+            $checkTypes .= "s";
+            $checkValues[] = $oldInput['student_id'];
+        }
+
+        $checkStmt = $conn->prepare($checkSql);
+        if (!$checkStmt) {
+            $errors[] = "Unable to validate account information.";
+        } else {
+            bindParams($checkStmt, $checkTypes, $checkValues);
+            $checkStmt->execute();
+            $checkResult = $checkStmt->get_result();
+            if ($checkResult && $checkResult->num_rows > 0) {
+                if ($role === 'student' && $hasStudentIdColumn) {
+                    $errors[] = "Email or Student ID already exists.";
+                } elseif (in_array($role, ['program_chairperson', 'faculty'], true)) {
+                    $errors[] = "Email or username already exists.";
+                } else {
+                    $errors[] = "Email already exists.";
+                }
+            }
+            if ($checkResult) {
+                $checkResult->free();
+            }
+            $checkStmt->close();
+        }
+    }
+
+    if (!empty($errors)) {
+        $message = "<div class='alert alert-danger'>" . implode("<br>", array_map('htmlspecialchars', $errors)) . "</div>";
+    } else {
+        $passwordHashed = password_hash($passwordPlain, PASSWORD_DEFAULT);
+        $columns = ['firstname', 'lastname', 'username', 'password', 'email', 'role'];
+        $types = "ssssss";
+        $values = [$firstname, $lastname, $username, $passwordHashed, $email, $role];
+
+        if (in_array($role, ['program_chairperson', 'faculty'], true)) {
+            if ($hasDepartmentColumn) {
+                $columns[] = 'department';
+                $types .= 's';
+                $values[] = $oldInput['department'];
+            }
+            if ($hasCollegeColumn) {
+                $columns[] = 'college';
+                $types .= 's';
+                $values[] = $oldInput['college'];
+            }
+            $columns[] = 'contact';
+            $types .= 's';
+            $values[] = $oldInput['contact'];
+            $columns[] = 'gender';
+            $types .= 's';
+            $values[] = $oldInput['gender'];
+        }
+
+        if ($role === 'program_chairperson') {
+            if ($hasProgramColumn) {
+                $columns[] = 'program';
+                $types .= 's';
+                $values[] = $program;
+            }
+            if ($hasPhotoColumn && $photoPath !== null) {
+                $columns[] = 'photo';
+                $types .= 's';
+                $values[] = $photoPath;
+            }
+        }
+
+        if ($role === 'faculty') {
+            if ($hasSpecializationColumn) {
+                $columns[] = 'specialization';
+                $types .= 's';
+                $values[] = $oldInput['specialization'];
+            }
+        }
+
+        if ($role === 'student') {
+            if ($hasStudentIdColumn) {
+                $columns[] = 'student_id';
+                $types .= 's';
+                $values[] = $oldInput['student_id'];
+            }
+            if ($hasProgramColumn) {
+                $columns[] = 'program';
+                $types .= 's';
+                $values[] = $oldInput['program'];
+            }
+            if ($hasDepartmentColumn) {
+                $columns[] = 'department';
+                $types .= 's';
+                $values[] = $oldInput['department'];
+            }
+            if ($hasCollegeColumn) {
+                $columns[] = 'college';
+                $types .= 's';
+                $values[] = $oldInput['college'];
+            }
+            if ($hasYearLevelColumn) {
+                $columns[] = 'year_level';
+                $types .= 's';
+                $values[] = $oldInput['year_level'];
+            }
+        }
+
+        if ($hasAccountStatusColumn) {
+            $columns[] = 'account_status';
+            $types .= 's';
+            $values[] = $accountStatus;
+        }
+
+        $insertSql = sprintf(
+            "INSERT INTO users (%s) VALUES (%s)",
+            implode(', ', $columns),
+            implode(', ', array_fill(0, count($columns), '?'))
+        );
+        $insertStmt = $conn->prepare($insertSql);
+        if (!$insertStmt) {
+            $message = "<div class='alert alert-danger'>Unable to create account right now.</div>";
+        } else {
+            bindParams($insertStmt, $types, $values);
+            if ($insertStmt->execute()) {
+                if ($role === 'dean') {
+                    $message = "<div class='alert alert-success'>Registration successful! Redirecting...</div>";
+                    header("refresh:2; url=login.php");
+                } else {
+                    $verifier = $role === 'program_chairperson' ? 'Dean' : ($role === 'faculty' ? 'Program Chairperson' : 'Faculty');
+                    $message = "<div class='alert alert-success'>Registration successful! Your account is pending verification by the {$verifier}.</div>";
+                }
+                foreach ($oldInput as $key => $value) {
+                    $oldInput[$key] = '';
+                }
+            } else {
+                $message = "<div class='alert alert-danger'>Error: Could not register.</div>";
+            }
+            $insertStmt->close();
         }
     }
 }
@@ -45,13 +407,12 @@ if (isset($_POST['register'])) {
             font-family: 'Segoe UI', sans-serif;
         }
         .register-container {
-            max-width: 450px;
-            margin: auto;
-            margin-top: 3%;
+            max-width: 760px;
+            margin: 3% auto;
             background: #fff;
-            padding: 35px;
-            border-radius: 10px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         }
         .register-title {
             font-weight: bold;
@@ -66,36 +427,194 @@ if (isset($_POST['register'])) {
         .btn-register:hover {
             background: #146c43;
         }
+        .role-section {
+            display: none;
+        }
+        .section-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #1f5132;
+            margin: 16px 0 10px;
+        }
     </style>
 </head>
-<body class="d-flex justify-content-center align-items-center vh-100">
+<body class="d-flex justify-content-center align-items-start py-4">
     <div class="register-container">
         <h3 class="register-title">Create Your Account</h3>
         <?php echo $message; ?>
-        <form method="POST">
-            <div class="row mb-3">
-                <div class="col">
-                    <input type="text" name="firstname" class="form-control" placeholder="First Name" required>
-                </div>
-                <div class="col">
-                    <input type="text" name="lastname" class="form-control" placeholder="Last Name" required>
-                </div>
-            </div>
+        <form method="POST" enctype="multipart/form-data">
             <div class="mb-3">
-                <input type="email" name="email" class="form-control" placeholder="Email" required>
-            </div>
-            <div class="mb-3">
-                <input type="password" name="password" class="form-control" placeholder="Password" required>
-            </div>
-            <div class="mb-3">
-                <select name="role" class="form-select" required>
-                    <option value="" disabled selected>Select Role</option>
-                    <option value="student">Student</option>
-                    <option value="dean">Dean</option>
-                    <option value="program_chairperson">Program Chairperson</option>
-                    <option value="faculty">Faculty</option>
+                <label class="form-label">Role</label>
+                <select name="role" id="role" class="form-select" required>
+                    <option value="" disabled <?php echo $oldInput['role'] === '' ? 'selected' : ''; ?>>Select Role</option>
+                    <option value="dean" <?php echo $oldInput['role'] === 'dean' ? 'selected' : ''; ?>>Dean</option>
+                    <option value="program_chairperson" <?php echo $oldInput['role'] === 'program_chairperson' ? 'selected' : ''; ?>>Program Chairperson</option>
+                    <option value="faculty" <?php echo $oldInput['role'] === 'faculty' ? 'selected' : ''; ?>>Faculty</option>
+                    <option value="student" <?php echo $oldInput['role'] === 'student' ? 'selected' : ''; ?>>Student</option>
                 </select>
             </div>
+
+            <div class="section-title">Account Credentials</div>
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <input type="email" name="email" class="form-control" placeholder="Email" value="<?php echo htmlspecialchars($oldInput['email']); ?>" required>
+                </div>
+                <div class="col-md-3">
+                    <input type="password" name="password" class="form-control" placeholder="Password" required>
+                </div>
+                <div class="col-md-3">
+                    <input type="password" name="confirm_password" class="form-control" placeholder="Confirm Password" required>
+                </div>
+            </div>
+
+            <div class="role-section" data-roles="dean">
+                <div class="section-title">Dean Profile</div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" name="firstname" class="form-control" placeholder="First Name" value="<?php echo htmlspecialchars($oldInput['firstname']); ?>" data-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <input type="text" name="lastname" class="form-control" placeholder="Last Name" value="<?php echo htmlspecialchars($oldInput['lastname']); ?>" data-required="true">
+                    </div>
+                </div>
+            </div>
+
+            <div class="role-section" data-roles="program_chairperson">
+                <div class="section-title">Program Chairperson Profile</div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" name="fullname" class="form-control" placeholder="Full Name" value="<?php echo htmlspecialchars($oldInput['fullname']); ?>" data-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <input type="text" name="username" class="form-control" placeholder="Username" value="<?php echo htmlspecialchars($oldInput['username']); ?>" data-required="true">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" name="contact" class="form-control" placeholder="Contact Number" value="<?php echo htmlspecialchars($oldInput['contact']); ?>" data-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <select name="gender" class="form-select" data-required="true">
+                            <option value="" disabled <?php echo $oldInput['gender'] === '' ? 'selected' : ''; ?>>Select Gender</option>
+                            <option value="Male" <?php echo $oldInput['gender'] === 'Male' ? 'selected' : ''; ?>>Male</option>
+                            <option value="Female" <?php echo $oldInput['gender'] === 'Female' ? 'selected' : ''; ?>>Female</option>
+                            <option value="Prefer not to say" <?php echo $oldInput['gender'] === 'Prefer not to say' ? 'selected' : ''; ?>>Prefer not to say</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" name="college" class="form-control" placeholder="Institute / College" value="<?php echo htmlspecialchars($oldInput['college']); ?>" data-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <input type="text" name="department" class="form-control" placeholder="Department / Program Unit" value="<?php echo htmlspecialchars($oldInput['department']); ?>" data-required="true">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <select name="program_focus" class="form-select" data-required="true">
+                            <option value="" disabled <?php echo $oldInput['program_focus'] === '' ? 'selected' : ''; ?>>Select Program</option>
+                            <?php foreach ($programOptions as $code => $label): ?>
+                                <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['program_focus'] === $code ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($label); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <input type="file" name="photo" class="form-control" accept="image/*">
+                    </div>
+                </div>
+            </div>
+
+            <div class="role-section" data-roles="faculty">
+                <div class="section-title">Faculty Profile</div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" name="fullname" class="form-control" placeholder="Full Name" value="<?php echo htmlspecialchars($oldInput['fullname']); ?>" data-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <input type="text" name="username" class="form-control" placeholder="Username" value="<?php echo htmlspecialchars($oldInput['username']); ?>" data-required="true">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" name="contact" class="form-control" placeholder="Contact Number" value="<?php echo htmlspecialchars($oldInput['contact']); ?>" data-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <select name="gender" class="form-select" data-required="true">
+                            <option value="" disabled <?php echo $oldInput['gender'] === '' ? 'selected' : ''; ?>>Select Gender</option>
+                            <option value="Male" <?php echo $oldInput['gender'] === 'Male' ? 'selected' : ''; ?>>Male</option>
+                            <option value="Female" <?php echo $oldInput['gender'] === 'Female' ? 'selected' : ''; ?>>Female</option>
+                            <option value="Prefer not to say" <?php echo $oldInput['gender'] === 'Prefer not to say' ? 'selected' : ''; ?>>Prefer not to say</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" name="college" class="form-control" placeholder="Institute / College" value="<?php echo htmlspecialchars($oldInput['college']); ?>" data-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <select name="department" class="form-select" data-required="true">
+                            <option value="" disabled <?php echo $oldInput['department'] === '' ? 'selected' : ''; ?>>Select Program</option>
+                            <?php foreach ($programOptions as $code => $label): ?>
+                                <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['department'] === $code ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($label); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <input type="text" name="specialization" class="form-control" placeholder="Specialization (optional)" value="<?php echo htmlspecialchars($oldInput['specialization']); ?>">
+                </div>
+            </div>
+
+            <div class="role-section" data-roles="student">
+                <div class="section-title">Student Profile</div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" name="firstname" class="form-control" placeholder="First Name" value="<?php echo htmlspecialchars($oldInput['firstname']); ?>" data-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <input type="text" name="lastname" class="form-control" placeholder="Last Name" value="<?php echo htmlspecialchars($oldInput['lastname']); ?>" data-required="true">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" name="student_id" class="form-control" placeholder="Student ID" value="<?php echo htmlspecialchars($oldInput['student_id']); ?>" data-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <select name="program" class="form-select" data-required="true">
+                            <option value="" disabled <?php echo $oldInput['program'] === '' ? 'selected' : ''; ?>>Select Program</option>
+                            <?php foreach ($programOptions as $code => $label): ?>
+                                <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['program'] === $code ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($label); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" name="department" class="form-control" placeholder="Department / Program Unit" value="<?php echo htmlspecialchars($oldInput['department']); ?>" data-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <input type="text" name="college" class="form-control" placeholder="Institute / College" value="<?php echo htmlspecialchars($oldInput['college']); ?>" data-required="true">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <select name="year_level" class="form-select" data-required="true">
+                        <option value="" disabled <?php echo $oldInput['year_level'] === '' ? 'selected' : ''; ?>>Select Year Level</option>
+                        <?php foreach ($yearOptions as $year): ?>
+                            <option value="<?php echo htmlspecialchars($year, ENT_QUOTES); ?>" <?php echo $oldInput['year_level'] === $year ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($year); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+
             <div class="mb-3 form-check">
                 <input type="checkbox" class="form-check-input" id="terms" required>
                 <label for="terms" class="form-check-label">I agree to the Terms & Conditions</label>
@@ -104,5 +623,33 @@ if (isset($_POST['register'])) {
         </form>
         <p class="text-center mt-3">Already have an account? <a href="login.php" class="text-decoration-none text-success">Login</a></p>
     </div>
+
+    <script>
+        const roleSelect = document.getElementById('role');
+        const sections = document.querySelectorAll('.role-section');
+
+        function updateSections() {
+            const role = roleSelect.value;
+            sections.forEach(section => {
+                const roles = (section.dataset.roles || '').split(' ');
+                const isActive = roles.includes(role);
+                section.style.display = isActive ? 'block' : 'none';
+                section.querySelectorAll('input, select, textarea').forEach(input => {
+                    if (isActive) {
+                        input.disabled = false;
+                        if (input.dataset.required === 'true') {
+                            input.required = true;
+                        }
+                    } else {
+                        input.disabled = true;
+                        input.required = false;
+                    }
+                });
+            });
+        }
+
+        roleSelect.addEventListener('change', updateSections);
+        updateSections();
+    </script>
 </body>
 </html>
