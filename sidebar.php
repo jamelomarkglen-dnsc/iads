@@ -66,10 +66,16 @@ $accountSettingsOpen = false;
 $userProfile = [
     'firstname' => '',
     'lastname' => '',
+    'username' => '',
     'email' => '',
     'contact' => '',
     'program' => '',
     'department' => '',
+    'college' => '',
+    'gender' => '',
+    'student_id' => '',
+    'year_level' => '',
+    'specialization' => '',
     'photo' => '',
     'created_at' => '',
     'notify_enabled' => 1,
@@ -78,6 +84,11 @@ $userProfile = [
 ];
 $userPasswordHash = '';
 $userLastLogin = '';
+$hasCollegeColumn = false;
+$hasGenderColumn = false;
+$hasStudentIdColumn = false;
+$hasYearLevelColumn = false;
+$hasSpecializationColumn = false;
 
 if ($userFullName === '' && $userId) {
     $nameStmt = $conn->prepare("SELECT CONCAT(COALESCE(firstname, ''), ' ', COALESCE(lastname, '')) AS full_name FROM users WHERE id = ? LIMIT 1");
@@ -97,7 +108,27 @@ if ($userFullName === '' && $userId) {
 }
 
 if ($userId) {
-    $columns = ['firstname', 'lastname', 'email', 'contact', 'program', 'department', 'photo', 'created_at', 'password'];
+    $columns = ['firstname', 'lastname', 'username', 'email', 'contact', 'program', 'department', 'photo', 'created_at', 'password'];
+    $hasCollegeColumn = sidebar_user_column_exists($conn, 'college');
+    $hasGenderColumn = sidebar_user_column_exists($conn, 'gender');
+    $hasStudentIdColumn = sidebar_user_column_exists($conn, 'student_id');
+    $hasYearLevelColumn = sidebar_user_column_exists($conn, 'year_level');
+    $hasSpecializationColumn = sidebar_user_column_exists($conn, 'specialization');
+    if ($hasCollegeColumn) {
+        $columns[] = 'college';
+    }
+    if ($hasGenderColumn) {
+        $columns[] = 'gender';
+    }
+    if ($hasStudentIdColumn) {
+        $columns[] = 'student_id';
+    }
+    if ($hasYearLevelColumn) {
+        $columns[] = 'year_level';
+    }
+    if ($hasSpecializationColumn) {
+        $columns[] = 'specialization';
+    }
     if (sidebar_user_column_exists($conn, 'notify_enabled')) {
         $columns[] = 'notify_enabled';
     }
@@ -122,10 +153,26 @@ if ($userId) {
             if ($row) {
                 $userProfile['firstname'] = (string)($row['firstname'] ?? '');
                 $userProfile['lastname'] = (string)($row['lastname'] ?? '');
+                $userProfile['username'] = (string)($row['username'] ?? '');
                 $userProfile['email'] = (string)($row['email'] ?? '');
                 $userProfile['contact'] = (string)($row['contact'] ?? '');
                 $userProfile['program'] = (string)($row['program'] ?? '');
                 $userProfile['department'] = (string)($row['department'] ?? '');
+                if ($hasCollegeColumn) {
+                    $userProfile['college'] = (string)($row['college'] ?? '');
+                }
+                if ($hasGenderColumn) {
+                    $userProfile['gender'] = (string)($row['gender'] ?? '');
+                }
+                if ($hasStudentIdColumn) {
+                    $userProfile['student_id'] = (string)($row['student_id'] ?? '');
+                }
+                if ($hasYearLevelColumn) {
+                    $userProfile['year_level'] = (string)($row['year_level'] ?? '');
+                }
+                if ($hasSpecializationColumn) {
+                    $userProfile['specialization'] = (string)($row['specialization'] ?? '');
+                }
                 $userProfile['photo'] = (string)($row['photo'] ?? '');
                 $userProfile['created_at'] = (string)($row['created_at'] ?? '');
                 $userProfile['notify_enabled'] = isset($row['notify_enabled']) ? (int)$row['notify_enabled'] : 1;
@@ -788,9 +835,19 @@ if ($userLastLogin !== '') {
                                 <div class="form-text">Email is used for login.</div>
                             </div>
                             <div class="col-md-6">
+                                <label class="form-label">Username</label>
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($userProfile['username']); ?>" readonly>
+                            </div>
+                            <div class="col-md-6">
                                 <label class="form-label">Contact Number</label>
                                 <input type="text" name="contact" class="form-control" value="<?php echo htmlspecialchars($userProfile['contact']); ?>">
                             </div>
+                            <?php if ($hasGenderColumn && in_array($role, ['program_chairperson', 'faculty', 'student'], true)): ?>
+                            <div class="col-md-6">
+                                <label class="form-label">Gender</label>
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($userProfile['gender']); ?>" readonly>
+                            </div>
+                            <?php endif; ?>
                             <div class="col-md-6">
                                 <label class="form-label">Program</label>
                                 <input type="text" class="form-control" value="<?php echo htmlspecialchars($userProfile['program']); ?>" readonly>
@@ -799,6 +856,28 @@ if ($userLastLogin !== '') {
                                 <label class="form-label">Department</label>
                                 <input type="text" class="form-control" value="<?php echo htmlspecialchars($userProfile['department']); ?>" readonly>
                             </div>
+                            <?php if ($hasCollegeColumn && in_array($role, ['program_chairperson', 'faculty', 'student'], true)): ?>
+                            <div class="col-md-6">
+                                <label class="form-label">College / Institute</label>
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($userProfile['college']); ?>" readonly>
+                            </div>
+                            <?php endif; ?>
+                            <?php if ($role === 'student'): ?>
+                            <div class="col-md-6">
+                                <label class="form-label">Student ID</label>
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($userProfile['student_id']); ?>" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Year Level</label>
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($userProfile['year_level']); ?>" readonly>
+                            </div>
+                            <?php endif; ?>
+                            <?php if ($role === 'faculty' && $hasSpecializationColumn): ?>
+                            <div class="col-md-6">
+                                <label class="form-label">Specialization</label>
+                                <input type="text" class="form-control" value="<?php echo htmlspecialchars($userProfile['specialization']); ?>" readonly>
+                            </div>
+                            <?php endif; ?>
                         </div>
                     </div>
 
