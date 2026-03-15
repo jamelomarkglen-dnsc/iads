@@ -327,6 +327,11 @@ if (isset($_POST['register'])) {
         }
 
         if ($role === 'faculty') {
+            if ($hasProgramColumn) {
+                $columns[] = 'program';
+                $types .= 's';
+                $values[] = $oldInput['department'];
+            }
             if ($hasSpecializationColumn) {
                 $columns[] = 'specialization';
                 $types .= 's';
