@@ -192,8 +192,8 @@ if (isset($_POST['register'])) {
                 $accountStatus = 'pending';
             }
         } elseif ($role === 'faculty') {
-            if ($oldInput['fullname'] === '' || $oldInput['username'] === '') {
-                $errors[] = "Full name and username are required.";
+            if ($oldInput['firstname'] === '' || $oldInput['lastname'] === '' || $oldInput['username'] === '') {
+                $errors[] = "First name, last name, and username are required.";
             }
             if (!preg_match('/^\d{10,15}$/', $oldInput['contact'])) {
                 $errors[] = "Contact number should contain 10-15 digits.";
@@ -202,7 +202,8 @@ if (isset($_POST['register'])) {
                 $errors[] = "Gender, institute, and program are required.";
             }
             if (empty($errors)) {
-                [$firstname, $lastname] = split_name($oldInput['fullname']);
+                $firstname = $oldInput['firstname'];
+                $lastname = $oldInput['lastname'];
                 $username = $oldInput['username'];
                 $accountStatus = 'pending';
             }
@@ -402,6 +403,7 @@ if (isset($_POST['register'])) {
     <meta charset="UTF-8">
     <title>Register - Institute of Advanced Studies</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         body {
             background: #f8f9fa;
@@ -461,10 +463,20 @@ if (isset($_POST['register'])) {
                     <input type="email" name="email" class="form-control" placeholder="Email" value="<?php echo htmlspecialchars($oldInput['email']); ?>" required>
                 </div>
                 <div class="col-md-3">
-                    <input type="password" name="password" class="form-control" placeholder="Password" required>
+                    <div class="input-group">
+                        <input type="password" id="password" name="password" class="form-control" placeholder="Password" required>
+                        <button class="btn btn-outline-secondary" type="button" id="togglePassword" aria-label="Toggle password visibility">
+                            <i class="bi bi-eye-slash" id="togglePasswordIcon"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="col-md-3">
-                    <input type="password" name="confirm_password" class="form-control" placeholder="Confirm Password" required>
+                    <div class="input-group">
+                        <input type="password" id="confirm_password" name="confirm_password" class="form-control" placeholder="Confirm Password" required>
+                        <button class="btn btn-outline-secondary" type="button" id="toggleConfirmPassword" aria-label="Toggle confirm password visibility">
+                            <i class="bi bi-eye-slash" id="toggleConfirmPasswordIcon"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -537,8 +549,13 @@ if (isset($_POST['register'])) {
                 <div class="section-title">Faculty Profile</div>
                 <div class="row mb-3">
                     <div class="col-md-6">
-                        <input type="text" name="fullname" class="form-control" placeholder="Full Name" value="<?php echo htmlspecialchars($oldInput['fullname']); ?>" data-required="true">
+                        <input type="text" name="firstname" class="form-control" placeholder="First Name" value="<?php echo htmlspecialchars($oldInput['firstname']); ?>" data-required="true">
                     </div>
+                    <div class="col-md-6">
+                        <input type="text" name="lastname" class="form-control" placeholder="Last Name" value="<?php echo htmlspecialchars($oldInput['lastname']); ?>" data-required="true">
+                    </div>
+                </div>
+                <div class="row mb-3">
                     <div class="col-md-6">
                         <input type="text" name="username" class="form-control" placeholder="Username" value="<?php echo htmlspecialchars($oldInput['username']); ?>" data-required="true">
                     </div>
@@ -633,6 +650,24 @@ if (isset($_POST['register'])) {
     <script>
         const roleSelect = document.getElementById('role');
         const sections = document.querySelectorAll('.role-section');
+        const passwordField = document.getElementById('password');
+        const confirmPasswordField = document.getElementById('confirm_password');
+        const togglePassword = document.getElementById('togglePassword');
+        const toggleConfirmPassword = document.getElementById('toggleConfirmPassword');
+        const togglePasswordIcon = document.getElementById('togglePasswordIcon');
+        const toggleConfirmPasswordIcon = document.getElementById('toggleConfirmPasswordIcon');
+
+        function toggleFieldVisibility(field, icon) {
+            if (!field) {
+                return;
+            }
+            const isHidden = field.type === 'password';
+            field.type = isHidden ? 'text' : 'password';
+            if (icon) {
+                icon.classList.toggle('bi-eye', isHidden);
+                icon.classList.toggle('bi-eye-slash', !isHidden);
+            }
+        }
 
         function updateSections() {
             const role = roleSelect.value;
@@ -656,6 +691,13 @@ if (isset($_POST['register'])) {
 
         roleSelect.addEventListener('change', updateSections);
         updateSections();
+
+        if (togglePassword) {
+            togglePassword.addEventListener('click', () => toggleFieldVisibility(passwordField, togglePasswordIcon));
+        }
+        if (toggleConfirmPassword) {
+            toggleConfirmPassword.addEventListener('click', () => toggleFieldVisibility(confirmPasswordField, toggleConfirmPasswordIcon));
+        }
     </script>
 </body>
 </html>
