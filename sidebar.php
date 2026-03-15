@@ -578,9 +578,6 @@ if ($userLastLogin !== '') {
                 <?php endif; ?>
 
                 <?php if ($role === 'dean'): ?>
-                    <a href="create_progchair.php" class="nav-link <?php echo ($currentPage == 'create_progchair.php') ? 'active' : ''; ?>">
-                        <i class="bi bi-person-badge"></i> <span class="link-text">Create Program Chair</span>
-                    </a>
                     <a href="verify_program_chair.php" class="nav-link <?php echo ($currentPage == 'verify_program_chair.php') ? 'active' : ''; ?>">
                         <i class="bi bi-person-check"></i> <span class="link-text">Verify Program Chair</span>
                     </a>
