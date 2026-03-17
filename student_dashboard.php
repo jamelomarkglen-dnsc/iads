@@ -570,6 +570,313 @@ if ($pdfStmt = $conn->prepare($pdfSubmissionsSql)) {
     $pdfStmt->close();
 }
 
+$conceptSubmissionComplete = $totalSubmissions > 0;
+$conceptReviewAssigned = false;
+if (columnExists($conn, 'concept_reviewer_assignments', 'id')) {
+    $stmt = $conn->prepare("SELECT 1 FROM concept_reviewer_assignments WHERE student_id = ? LIMIT 1");
+    if ($stmt) {
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $stmt->store_result();
+        $conceptReviewAssigned = $stmt->num_rows > 0;
+        $stmt->close();
+    }
+}
+$conceptRecommended = $hasFinalPickRecommendation;
+$conceptPdfSubmitted = !empty($pdfSubmissions);
+
+$endorsementStatus = null;
+if (columnExists($conn, 'endorsement_requests', 'id')) {
+    $stmt = $conn->prepare("
+        SELECT status
+        FROM endorsement_requests
+        WHERE student_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+    ");
+    if ($stmt) {
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $endorsementStatus = $row ? trim((string)($row['status'] ?? '')) : null;
+        $stmt->close();
+    }
+}
+$endorsementSubmitted = $endorsementStatus !== null;
+$endorsementVerified = $endorsementStatus === 'Verified';
+
+$paymentStatus = null;
+$paymentTimestamp = null;
+if (columnExists($conn, 'payment_proofs', 'id')) {
+    $stmt = $conn->prepare("
+        SELECT status, created_at, updated_at
+        FROM payment_proofs
+        WHERE user_id = ?
+        ORDER BY COALESCE(updated_at, created_at) DESC, id DESC
+        LIMIT 1
+    ");
+    if ($stmt) {
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        if ($row) {
+            $paymentStatus = $row['status'] ?? null;
+            $paymentTimestamp = $row['updated_at'] ?? $row['created_at'] ?? null;
+        }
+        $stmt->close();
+    }
+}
+$paymentSubmitted = $paymentStatus !== null;
+$paymentVerified = $paymentStatus === 'payment_accepted';
+
+$committeeMemoIssued = $committeeMemoAvailable;
+$outlineSubmitted = $finalPaperSubmission !== null;
+$outlineReviewCompleted = false;
+if ($finalPaperSubmission) {
+    $completedAt = $finalPaperSubmission['committee_reviews_completed_at'] ?? null;
+    if (!empty($completedAt)) {
+        $outlineReviewCompleted = true;
+    } elseif (columnExists($conn, 'final_paper_reviews', 'id')) {
+        $stmt = $conn->prepare("
+            SELECT
+                COUNT(*) AS total_reviews,
+                SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END) AS pending_reviews
+            FROM final_paper_reviews
+            WHERE submission_id = ?
+        ");
+        if ($stmt) {
+            $submissionId = (int)($finalPaperSubmission['id'] ?? 0);
+            $stmt->bind_param('i', $submissionId);
+            $stmt->execute();
+            $row = $stmt->get_result()->fetch_assoc();
+            $totalReviews = (int)($row['total_reviews'] ?? 0);
+            $pendingReviews = (int)($row['pending_reviews'] ?? 0);
+            $outlineReviewCompleted = $totalReviews > 0 && $pendingReviews === 0;
+            $stmt->close();
+        }
+    }
+}
+$outlineVerdictReleased = !empty(trim((string)($finalPaperSubmission['outline_defense_verdict'] ?? '')));
+$revisionCompleted = strcasecmp($finalPaperStatusLabel, 'Approved') === 0;
+$routeSlipDecision = strtolower(trim((string)($finalPaperSubmission['route_slip_overall_decision'] ?? '')));
+$routeSlipSignedAt = $finalPaperSubmission['route_slip_signed_at'] ?? null;
+$routeSlipIssued = !empty($routeSlipSignedAt)
+    || in_array($routeSlipDecision, ['approved', 'passed with minor revision', 'passed with major revision'], true);
+
+$noticeStatus = null;
+if (columnExists($conn, 'notice_to_commence_requests', 'id')) {
+    $stmt = $conn->prepare("
+        SELECT status
+        FROM notice_to_commence_requests
+        WHERE student_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1
+    ");
+    if ($stmt) {
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $noticeStatus = $row ? trim((string)($row['status'] ?? '')) : null;
+        $stmt->close();
+    }
+}
+$noticeSubmitted = $noticeStatus !== null;
+$noticeApproved = $noticeStatus === 'Approved';
+
+$finalRoutingStatus = null;
+$finalRoutingTimestamp = null;
+if (columnExists($conn, 'final_routing_submissions', 'id')) {
+    $stmt = $conn->prepare("
+        SELECT status, submitted_at, updated_at
+        FROM final_routing_submissions
+        WHERE student_id = ?
+        ORDER BY COALESCE(updated_at, submitted_at) DESC, id DESC
+        LIMIT 1
+    ");
+    if ($stmt) {
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        if ($row) {
+            $finalRoutingStatus = $row['status'] ?? null;
+            $finalRoutingTimestamp = $row['updated_at'] ?? $row['submitted_at'] ?? null;
+        }
+        $stmt->close();
+    }
+}
+$finalRoutingSubmitted = $finalRoutingStatus !== null;
+$finalRoutingPassed = $finalRoutingStatus === 'Passed';
+$finalPaymentSubmitted = false;
+$finalPaymentVerified = false;
+if ($finalRoutingPassed && $finalRoutingTimestamp && $paymentTimestamp) {
+    $finalPaymentSubmitted = strtotime($paymentTimestamp) >= strtotime($finalRoutingTimestamp);
+    $finalPaymentVerified = $finalPaymentSubmitted && $paymentStatus === 'payment_accepted';
+}
+
+$finalDefenseScheduled = !empty($nextDefense) && !empty($nextDefense['defense_date'] ?? '');
+$finalDefenseOutcome = false;
+if (columnExists($conn, 'defense_outcomes', 'id')) {
+    $stmt = $conn->prepare("
+        SELECT 1
+        FROM defense_outcomes
+        WHERE student_id = ?
+        LIMIT 1
+    ");
+    if ($stmt) {
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $stmt->store_result();
+        $finalDefenseOutcome = $stmt->num_rows > 0;
+        $stmt->close();
+    }
+}
+
+$finalEndorsementStatus = null;
+if (columnExists($conn, 'final_endorsement_submissions', 'id')) {
+    $stmt = $conn->prepare("
+        SELECT status
+        FROM final_endorsement_submissions
+        WHERE student_id = ?
+        ORDER BY submitted_at DESC, id DESC
+        LIMIT 1
+    ");
+    if ($stmt) {
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $finalEndorsementStatus = $row ? trim((string)($row['status'] ?? '')) : null;
+        $stmt->close();
+    }
+}
+$finalEndorsementSubmitted = $finalEndorsementStatus !== null;
+$finalEndorsementApproved = $finalEndorsementStatus === 'Approved';
+
+$finalHardboundStatus = null;
+if (columnExists($conn, 'final_hardbound_submissions', 'id')) {
+    $stmt = $conn->prepare("
+        SELECT status
+        FROM final_hardbound_submissions
+        WHERE student_id = ?
+        ORDER BY submitted_at DESC, id DESC
+        LIMIT 1
+    ");
+    if ($stmt) {
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $finalHardboundStatus = $row ? trim((string)($row['status'] ?? '')) : null;
+        $stmt->close();
+    }
+}
+$finalHardboundSubmitted = $finalHardboundStatus !== null;
+$finalHardboundPassed = in_array($finalHardboundStatus, ['Passed', 'Verified', 'Approved'], true);
+
+$institutionalCopyStored = false;
+if (columnExists($conn, 'institutional_final_copies', 'id')) {
+    $stmt = $conn->prepare("
+        SELECT 1
+        FROM institutional_final_copies
+        WHERE student_id = ?
+        LIMIT 1
+    ");
+    if ($stmt) {
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $stmt->store_result();
+        $institutionalCopyStored = $stmt->num_rows > 0;
+        $stmt->close();
+    }
+}
+
+$archived = false;
+if (columnExists($conn, 'research_archive', 'id')) {
+    $stmt = $conn->prepare("
+        SELECT 1
+        FROM research_archive
+        WHERE student_id = ? AND status = 'Archived'
+        LIMIT 1
+    ");
+    if ($stmt) {
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $stmt->store_result();
+        $archived = $stmt->num_rows > 0;
+        $stmt->close();
+    }
+}
+if (!$archived && $submissionHasUpdatedAt && columnExists($conn, 'submissions', 'archived_at')) {
+    $stmt = $conn->prepare("
+        SELECT 1
+        FROM submissions
+        WHERE student_id = ? AND archived_at IS NOT NULL
+        LIMIT 1
+    ");
+    if ($stmt) {
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $stmt->store_result();
+        $archived = $stmt->num_rows > 0;
+        $stmt->close();
+    }
+}
+
+$progressSteps = [
+    ['label' => 'Concept / Thesis / Capstone / Dissertation Submitted', 'complete' => $conceptSubmissionComplete],
+    ['label' => 'Concept Review Assigned / In Review', 'complete' => $conceptReviewAssigned],
+    ['label' => 'Final Concept Recommended', 'complete' => $conceptRecommended],
+    ['label' => 'Concept Paper Submitted to Adviser (PDF Submission)', 'complete' => $conceptPdfSubmitted],
+    ['label' => 'Endorsement Request Submitted', 'complete' => $endorsementSubmitted],
+    ['label' => 'Endorsement Verified', 'complete' => $endorsementVerified],
+    ['label' => 'Payment Proof Submitted', 'complete' => $paymentSubmitted],
+    ['label' => 'Payment Verified', 'complete' => $paymentVerified],
+    ['label' => 'Defense Committee Memo Issued', 'complete' => $committeeMemoIssued],
+    ['label' => 'Outline Defense Manuscript Submitted', 'complete' => $outlineSubmitted],
+    ['label' => 'Outline Defense Review Completed', 'complete' => $outlineReviewCompleted],
+    ['label' => 'Outline Defense Verdict Released', 'complete' => $outlineVerdictReleased],
+    ['label' => 'Student/Adviser Revision Completed', 'complete' => $revisionCompleted],
+    ['label' => 'Route Slip for Outline Issued', 'complete' => $routeSlipIssued],
+    ['label' => 'Notice to Commence Submitted', 'complete' => $noticeSubmitted],
+    ['label' => 'Notice to Commence Approved', 'complete' => $noticeApproved],
+    ['label' => 'Final Routing Submitted', 'complete' => $finalRoutingSubmitted],
+    ['label' => 'Final Routing Passed', 'complete' => $finalRoutingPassed],
+    ['label' => 'Payment Proof Submitted (Final)', 'complete' => $finalPaymentSubmitted],
+    ['label' => 'Payment Verified (Final)', 'complete' => $finalPaymentVerified],
+    ['label' => 'Final Defense Scheduled', 'complete' => $finalDefenseScheduled],
+    ['label' => 'Final Defense Outcome Recorded', 'complete' => $finalDefenseOutcome],
+    ['label' => 'Final Endorsement Submitted', 'complete' => $finalEndorsementSubmitted],
+    ['label' => 'Final Endorsement Approved', 'complete' => $finalEndorsementApproved],
+    ['label' => 'Final Hardbound Submitted', 'complete' => $finalHardboundSubmitted],
+    ['label' => 'Final Hardbound Passed / Verified', 'complete' => $finalHardboundPassed],
+    ['label' => 'Institutional Final Research Copy', 'complete' => $institutionalCopyStored],
+    ['label' => 'Archived', 'complete' => $archived],
+];
+$firstIncompleteIndex = null;
+foreach ($progressSteps as $index => $step) {
+    if (empty($step['complete'])) {
+        $firstIncompleteIndex = $index;
+        break;
+    }
+}
+foreach ($progressSteps as $index => $step) {
+    if (!empty($step['complete'])) {
+        $progressSteps[$index]['state'] = 'complete';
+    } elseif ($firstIncompleteIndex === $index) {
+        $progressSteps[$index]['state'] = 'current';
+    } else {
+        $progressSteps[$index]['state'] = 'pending';
+    }
+}
+$completedSteps = 0;
+foreach ($progressSteps as $step) {
+    if (!empty($step['complete'])) {
+        $completedSteps++;
+    }
+}
+$totalSteps = count($progressSteps);
+$currentStepLabel = $firstIncompleteIndex === null
+    ? 'All steps completed'
+    : ($progressSteps[$firstIncompleteIndex]['label'] ?? 'In progress');
+
 $studentFullName = trim(($studentInfo['firstname'] ?? '') . ' ' . ($studentInfo['lastname'] ?? ''));
 if ($studentFullName === '') {
     $studentFullName = 'Student';
@@ -677,6 +984,105 @@ if ($studentFullName === '') {
             transform: translateX(4px);
             color: #16562c;
         }
+        .progress-summary {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .progress-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+        }
+        .progress-column {
+            background: #f8faf8;
+            border: 1px solid rgba(22, 86, 44, 0.12);
+            border-radius: 1rem;
+            padding: 16px;
+            min-height: 100%;
+        }
+        .progress-column-title {
+            font-size: 0.75rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #6d7a6f;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+        .progress-item {
+            position: relative;
+            padding-left: 26px;
+            padding-bottom: 16px;
+        }
+        .progress-item::before {
+            content: '';
+            position: absolute;
+            left: 7px;
+            top: 2px;
+            bottom: -14px;
+            width: 2px;
+            background: #d7ddd6;
+        }
+        .progress-item:last-child {
+            padding-bottom: 0;
+        }
+        .progress-item:last-child::before {
+            bottom: 6px;
+        }
+        .progress-dot {
+            position: absolute;
+            left: 0;
+            top: 2px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #d7ddd6;
+            border: 2px solid #fff;
+            box-shadow: 0 0 0 2px rgba(22, 86, 44, 0.08);
+        }
+        .progress-step-index {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #87948a;
+            margin-bottom: 2px;
+        }
+        .progress-label {
+            font-size: 0.88rem;
+            line-height: 1.35;
+            color: #6d7a6f;
+        }
+        .progress-item.complete .progress-dot {
+            background: #0f6b35;
+            box-shadow: 0 0 0 4px rgba(15, 107, 53, 0.15);
+        }
+        .progress-item.complete::before {
+            background: #0f6b35;
+        }
+        .progress-item.complete .progress-label {
+            color: #16562c;
+            font-weight: 600;
+        }
+        .progress-item.current .progress-dot {
+            background: #1f8b4c;
+            box-shadow: 0 0 0 4px rgba(31, 139, 76, 0.18);
+        }
+        .progress-item.current::before {
+            background: linear-gradient(180deg, rgba(31, 139, 76, 0.9), rgba(215, 221, 214, 0.9));
+        }
+        .progress-item.current .progress-label {
+            color: #1d3522;
+            font-weight: 600;
+        }
+        @media (max-width: 1200px) {
+            .progress-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        @media (max-width: 768px) {
+            .progress-grid {
+                grid-template-columns: 1fr;
+            }
+        }
         @media (max-width: 992px) {
             .content {
                 margin-left: 0;
@@ -777,6 +1183,45 @@ if ($studentFullName === '') {
                     <h6 class="text-uppercase text-muted small mb-1">Unread Notifications</h6>
                     <h2 class="fw-bold text-success mb-1"><?php echo number_format($unreadNotifications); ?></h2>
                     <p class="text-muted small mb-0">Alerts from faculty and administrators.</p>
+                </div>
+            </div>
+        </div>
+        <div class="card mb-4">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <h5 class="mb-0">Progress Tracker</h5>
+                <span class="badge bg-success-subtle text-success">
+                    <?php echo number_format($completedSteps); ?> / <?php echo number_format($totalSteps); ?> completed
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="progress-summary mb-3">
+                    <div class="text-muted small">Current step</div>
+                    <div class="fw-semibold text-success"><?php echo htmlspecialchars($currentStepLabel); ?></div>
+                </div>
+                <div class="progress-grid">
+                    <?php $progressColumns = array_chunk($progressSteps, 7); ?>
+                    <?php foreach ($progressColumns as $columnIndex => $columnSteps): ?>
+                        <?php
+                            $startStep = ($columnIndex * 7) + 1;
+                            $endStep = $startStep + count($columnSteps) - 1;
+                        ?>
+                        <div class="progress-column">
+                            <div class="progress-column-title">
+                                Steps <?php echo (int)$startStep; ?>-<?php echo (int)$endStep; ?>
+                            </div>
+                            <?php foreach ($columnSteps as $stepIndex => $step): ?>
+                                <?php
+                                    $state = $step['state'] ?? 'pending';
+                                    $stepNumber = $startStep + $stepIndex;
+                                ?>
+                                <div class="progress-item <?php echo htmlspecialchars($state); ?>">
+                                    <span class="progress-dot"></span>
+                                    <div class="progress-step-index">Step <?php echo (int)$stepNumber; ?></div>
+                                    <div class="progress-label"><?php echo htmlspecialchars($step['label']); ?></div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
             </div>
         </div>
