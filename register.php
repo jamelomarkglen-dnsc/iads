@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'db.php';
+require_once 'notifications_helper.php';
 
 $message = "";
 $oldInput = [
@@ -104,6 +105,154 @@ function generateUniqueUsername(mysqli $conn, string $seed): string
     }
     $stmt->close();
     return $username;
+}
+
+function normalize_scope_value(?string $value): string
+{
+    return trim((string)$value);
+}
+
+function scope_value_equals(string $left, string $right): bool
+{
+    if ($left === '' || $right === '') {
+        return false;
+    }
+    return strcasecmp($left, $right) === 0;
+}
+
+function fetch_role_users(mysqli $conn, string $role, bool $hasProgram, bool $hasDepartment, bool $hasCollege): array
+{
+    $fields = ['id'];
+    if ($hasProgram) {
+        $fields[] = 'program';
+    }
+    if ($hasDepartment) {
+        $fields[] = 'department';
+    }
+    if ($hasCollege) {
+        $fields[] = 'college';
+    }
+
+    $sql = sprintf("SELECT %s FROM users WHERE role = ?", implode(', ', $fields));
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        return [];
+    }
+    $stmt->bind_param('s', $role);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $rows = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+    $stmt->close();
+    return $rows ?: [];
+}
+
+function chair_matches_faculty(array $chair, string $facultyDepartment, string $facultyCollege): bool
+{
+    $program = normalize_scope_value($chair['program'] ?? '');
+    $department = normalize_scope_value($chair['department'] ?? '');
+    $college = normalize_scope_value($chair['college'] ?? '');
+
+    if ($program !== '') {
+        return scope_value_equals($facultyDepartment, $program);
+    }
+    if ($department !== '') {
+        return scope_value_equals($facultyDepartment, $department);
+    }
+    if ($college !== '') {
+        return scope_value_equals($facultyCollege, $college);
+    }
+    return true;
+}
+
+function faculty_matches_student(array $faculty, string $studentProgram, string $studentDepartment, string $studentCollege): bool
+{
+    $program = normalize_scope_value($faculty['program'] ?? '');
+    $department = normalize_scope_value($faculty['department'] ?? '');
+    $college = normalize_scope_value($faculty['college'] ?? '');
+
+    if ($program !== '') {
+        return scope_value_equals($studentProgram, $program) || scope_value_equals($studentDepartment, $program);
+    }
+    if ($department !== '') {
+        return scope_value_equals($studentProgram, $department) || scope_value_equals($studentDepartment, $department);
+    }
+    if ($college !== '') {
+        return scope_value_equals($studentCollege, $college);
+    }
+    return true;
+}
+
+function notify_verification_for_registration(
+    mysqli $conn,
+    string $role,
+    string $fullname,
+    string $department,
+    string $college,
+    string $program,
+    string $studentProgram,
+    string $studentDepartment,
+    string $studentCollege,
+    bool $hasProgramColumn,
+    bool $hasDepartmentColumn,
+    bool $hasCollegeColumn
+): void {
+    $role = trim($role);
+    $fullname = trim($fullname);
+
+    if ($role === 'program_chairperson') {
+        $title = 'Program Chairperson Verification Required';
+        $message = $fullname !== '' ? "New program chairperson account pending verification: {$fullname}." : 'New program chairperson account pending verification.';
+        notify_role($conn, 'dean', $title, $message, 'verify_program_chair.php');
+        return;
+    }
+
+    if ($role === 'faculty') {
+        $title = 'Faculty Verification Required';
+        $details = $department !== '' ? " Program: {$department}." : '';
+        $message = $fullname !== '' ? "New faculty account pending verification: {$fullname}.{$details}" : "New faculty account pending verification.{$details}";
+
+        if ($hasDepartmentColumn || $hasCollegeColumn || $hasProgramColumn) {
+            $chairs = fetch_role_users($conn, 'program_chairperson', $hasProgramColumn, $hasDepartmentColumn, $hasCollegeColumn);
+            $targets = [];
+            foreach ($chairs as $chair) {
+                if (chair_matches_faculty($chair, $department, $college)) {
+                    $targets[] = (int)($chair['id'] ?? 0);
+                }
+            }
+            $targets = array_values(array_unique(array_filter($targets)));
+            if (!empty($targets)) {
+                notify_users($conn, $targets, $title, $message, 'verify_faculty.php');
+                return;
+            }
+        }
+
+        notify_role($conn, 'program_chairperson', $title, $message, 'verify_faculty.php');
+        return;
+    }
+
+    if ($role === 'student') {
+        $title = 'Student Verification Required';
+        $programLabel = $studentProgram !== '' ? " Program: {$studentProgram}." : '';
+        $message = $fullname !== '' ? "New student account pending verification: {$fullname}.{$programLabel}" : "New student account pending verification.{$programLabel}";
+
+        if ($hasDepartmentColumn || $hasCollegeColumn || $hasProgramColumn) {
+            $faculty = fetch_role_users($conn, 'faculty', $hasProgramColumn, $hasDepartmentColumn, $hasCollegeColumn);
+            $targets = [];
+            foreach ($faculty as $member) {
+                if (faculty_matches_student($member, $studentProgram, $studentDepartment, $studentCollege)) {
+                    $targets[] = (int)($member['id'] ?? 0);
+                }
+            }
+            $targets = array_values(array_unique(array_filter($targets)));
+            if (!empty($targets)) {
+                notify_users($conn, $targets, $title, $message, 'verify_students.php');
+                return;
+            }
+        }
+
+        notify_role($conn, 'faculty', $title, $message, 'verify_students.php');
+        return;
+    }
 }
 
 $programOptions = [
@@ -384,6 +533,23 @@ if (isset($_POST['register'])) {
         } else {
             bindParams($insertStmt, $types, $values);
             if ($insertStmt->execute()) {
+                if ($role !== 'dean' && $accountStatus === 'pending') {
+                    $fullName = trim($firstname . ' ' . $lastname);
+                    notify_verification_for_registration(
+                        $conn,
+                        $role,
+                        $fullName,
+                        trim((string)($oldInput['department'] ?? '')),
+                        trim((string)($oldInput['college'] ?? '')),
+                        trim((string)($program ?? '')),
+                        trim((string)($oldInput['program'] ?? '')),
+                        trim((string)($oldInput['department'] ?? '')),
+                        trim((string)($oldInput['college'] ?? '')),
+                        $hasProgramColumn,
+                        $hasDepartmentColumn,
+                        $hasCollegeColumn
+                    );
+                }
                 if ($role === 'dean') {
                     $message = "<div class='alert alert-success'>Registration successful! Redirecting...</div>";
                     header("refresh:2; url=login.php");
