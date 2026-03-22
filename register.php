@@ -120,6 +120,24 @@ function scope_value_equals(string $left, string $right): bool
     return strcasecmp($left, $right) === 0;
 }
 
+function verifier_matches_scope(array $verifier, string $candidateProgram, string $candidateDepartment, string $candidateCollege): bool
+{
+    $program = normalize_scope_value($verifier['program'] ?? '');
+    $department = normalize_scope_value($verifier['department'] ?? '');
+    $college = normalize_scope_value($verifier['college'] ?? '');
+
+    if ($program !== '') {
+        return scope_value_equals($candidateProgram, $program) || scope_value_equals($candidateDepartment, $program);
+    }
+    if ($department !== '') {
+        return scope_value_equals($candidateDepartment, $department) || scope_value_equals($candidateProgram, $department);
+    }
+    if ($college !== '') {
+        return scope_value_equals($candidateCollege, $college);
+    }
+    return false;
+}
+
 function fetch_role_users(mysqli $conn, string $role, bool $hasProgram, bool $hasDepartment, bool $hasCollege): array
 {
     $fields = ['id'];
@@ -161,7 +179,7 @@ function chair_matches_faculty(array $chair, string $facultyDepartment, string $
     if ($college !== '') {
         return scope_value_equals($facultyCollege, $college);
     }
-    return true;
+    return false;
 }
 
 function faculty_matches_student(array $faculty, string $studentProgram, string $studentDepartment, string $studentCollege): bool
@@ -179,7 +197,7 @@ function faculty_matches_student(array $faculty, string $studentProgram, string 
     if ($college !== '') {
         return scope_value_equals($studentCollege, $college);
     }
-    return true;
+    return false;
 }
 
 function notify_verification_for_registration(
@@ -202,7 +220,19 @@ function notify_verification_for_registration(
     if ($role === 'program_chairperson') {
         $title = 'Program Chairperson Verification Required';
         $message = $fullname !== '' ? "New program chairperson account pending verification: {$fullname}." : 'New program chairperson account pending verification.';
-        notify_role($conn, 'dean', $title, $message, 'verify_program_chair.php');
+        if ($hasDepartmentColumn || $hasCollegeColumn || $hasProgramColumn) {
+            $deans = fetch_role_users($conn, 'dean', $hasProgramColumn, $hasDepartmentColumn, $hasCollegeColumn);
+            $targets = [];
+            foreach ($deans as $dean) {
+                if (verifier_matches_scope($dean, $program, $department, $college)) {
+                    $targets[] = (int)($dean['id'] ?? 0);
+                }
+            }
+            $targets = array_values(array_unique(array_filter($targets)));
+            if (!empty($targets)) {
+                notify_users($conn, $targets, $title, $message, 'verify_program_chair.php');
+            }
+        }
         return;
     }
 
@@ -225,8 +255,6 @@ function notify_verification_for_registration(
                 return;
             }
         }
-
-        notify_role($conn, 'program_chairperson', $title, $message, 'verify_faculty.php');
         return;
     }
 
@@ -249,8 +277,6 @@ function notify_verification_for_registration(
                 return;
             }
         }
-
-        notify_role($conn, 'faculty', $title, $message, 'verify_students.php');
         return;
     }
 }
