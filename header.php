@@ -152,7 +152,7 @@ if (isset($_SESSION['role'])) {
 
 <?php if ($progressTrackerEnabled): ?>
 <div class="modal fade" id="progressTrackerModal" tabindex="-1" aria-labelledby="progressTrackerModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable progress-modal">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl progress-modal">
         <div class="modal-content">
             <div class="modal-header">
                 <div>
@@ -245,11 +245,27 @@ if (isset($_SESSION['role'])) {
         border: none;
     }
     .progress-menu {
-        min-width: 280px;
+        width: 360px;
+        min-width: 360px;
+        max-width: calc(100vw - 24px);
+        border-radius: 14px;
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+        border: 1px solid rgba(0, 0, 0, 0.08);
+    }
+    .progress-menu .dropdown-header {
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: #5f6f66;
+    }
+    .progress-menu .btn {
+        border-radius: 10px;
+        padding: 10px 16px;
+        font-weight: 600;
+        box-shadow: none;
     }
     .progress-modal {
-        max-width: 960px;
-        width: min(960px, 92vw);
+        max-width: 1100px;
+        width: 96vw;
     }
     .progress-modal .modal-content {
         border-radius: 16px;
