@@ -876,6 +876,15 @@ $totalSteps = count($progressSteps);
 $currentStepLabel = $firstIncompleteIndex === null
     ? 'All steps completed'
     : ($progressSteps[$firstIncompleteIndex]['label'] ?? 'In progress');
+$progressCompletionPercent = $totalSteps > 0 ? (int)round(($completedSteps / $totalSteps) * 100) : 0;
+$progressCompletionPercent = min(100, max(0, $progressCompletionPercent));
+$progressTrackerData = [
+    'steps' => $progressSteps,
+    'completed' => $completedSteps,
+    'total' => $totalSteps,
+    'current' => $currentStepLabel,
+    'percent' => $progressCompletionPercent,
+];
 
 $studentFullName = trim(($studentInfo['firstname'] ?? '') . ' ' . ($studentInfo['lastname'] ?? ''));
 if ($studentFullName === '') {
@@ -1183,45 +1192,6 @@ if ($studentFullName === '') {
                     <h6 class="text-uppercase text-muted small mb-1">Unread Notifications</h6>
                     <h2 class="fw-bold text-success mb-1"><?php echo number_format($unreadNotifications); ?></h2>
                     <p class="text-muted small mb-0">Alerts from faculty and administrators.</p>
-                </div>
-            </div>
-        </div>
-        <div class="card mb-4">
-            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <h5 class="mb-0">Progress Tracker</h5>
-                <span class="badge bg-success-subtle text-success">
-                    <?php echo number_format($completedSteps); ?> / <?php echo number_format($totalSteps); ?> completed
-                </span>
-            </div>
-            <div class="card-body">
-                <div class="progress-summary mb-3">
-                    <div class="text-muted small">Current step</div>
-                    <div class="fw-semibold text-success"><?php echo htmlspecialchars($currentStepLabel); ?></div>
-                </div>
-                <div class="progress-grid">
-                    <?php $progressColumns = array_chunk($progressSteps, 7); ?>
-                    <?php foreach ($progressColumns as $columnIndex => $columnSteps): ?>
-                        <?php
-                            $startStep = ($columnIndex * 7) + 1;
-                            $endStep = $startStep + count($columnSteps) - 1;
-                        ?>
-                        <div class="progress-column">
-                            <div class="progress-column-title">
-                                Steps <?php echo (int)$startStep; ?>-<?php echo (int)$endStep; ?>
-                            </div>
-                            <?php foreach ($columnSteps as $stepIndex => $step): ?>
-                                <?php
-                                    $state = $step['state'] ?? 'pending';
-                                    $stepNumber = $startStep + $stepIndex;
-                                ?>
-                                <div class="progress-item <?php echo htmlspecialchars($state); ?>">
-                                    <span class="progress-dot"></span>
-                                    <div class="progress-step-index">Step <?php echo (int)$stepNumber; ?></div>
-                                    <div class="progress-label"><?php echo htmlspecialchars($step['label']); ?></div>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php endforeach; ?>
                 </div>
             </div>
         </div>

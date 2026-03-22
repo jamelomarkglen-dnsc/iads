@@ -11,6 +11,12 @@ $userRole = $_SESSION['role'] ?? null;
 
 $notifications = fetch_user_notifications($conn, $userId, $userRole, 25);
 $unreadCount = count_unread_notifications($conn, $userId, $userRole);
+$progressTrackerEnabled = ($userRole === 'student' && isset($progressTrackerData) && is_array($progressTrackerData));
+$progressSteps = $progressTrackerEnabled ? ($progressTrackerData['steps'] ?? []) : [];
+$progressCompleted = $progressTrackerEnabled ? (int)($progressTrackerData['completed'] ?? 0) : 0;
+$progressTotal = $progressTrackerEnabled ? (int)($progressTrackerData['total'] ?? 0) : 0;
+$progressPercent = $progressTrackerEnabled ? (int)($progressTrackerData['percent'] ?? 0) : 0;
+$progressCurrent = $progressTrackerEnabled ? (string)($progressTrackerData['current'] ?? '') : '';
 
 // Determine dashboard link based on role.
 $dashboardLink = 'login.php';
@@ -59,6 +65,32 @@ if (isset($_SESSION['role'])) {
     </div>
 
     <div class="ms-auto d-flex align-items-center gap-4 pe-3">
+        <?php if ($progressTrackerEnabled): ?>
+            <div class="dropdown me-1">
+                <button type="button" class="btn btn-link text-white position-relative p-0 progress-trigger" id="progressDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-graph-up fs-4"></i>
+                    <span class="progress-mini-badge">
+                        <?php echo htmlspecialchars((string)$progressPercent); ?>%
+                    </span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end p-0 progress-menu" aria-labelledby="progressDropdown" id="progressMenu">
+                    <li class="dropdown-header d-flex justify-content-between align-items-center px-3 py-2">
+                        <span>Progress Tracker</span>
+                        <span class="badge bg-success-subtle text-success">
+                            <?php echo number_format($progressCompleted); ?> / <?php echo number_format($progressTotal); ?>
+                        </span>
+                    </li>
+                    <li><hr class="dropdown-divider my-0"></li>
+                    <li class="px-3 py-3">
+                        <div class="text-muted small">Current step</div>
+                        <div class="fw-semibold text-success"><?php echo htmlspecialchars($progressCurrent ?: 'In progress'); ?></div>
+                        <button class="btn btn-success w-100 mt-3" type="button" id="progressModalTrigger" data-bs-toggle="modal" data-bs-target="#progressTrackerModal">
+                            View Full Tracker
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        <?php endif; ?>
         <div class="dropdown me-2">
             <button type="button" class="btn btn-link text-white position-relative p-0" id="notifDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="bi bi-bell-fill fs-4"></i>
@@ -111,6 +143,55 @@ if (isset($_SESSION['role'])) {
     </div>
 </nav>
 
+<?php if ($progressTrackerEnabled): ?>
+<div class="modal fade" id="progressTrackerModal" tabindex="-1" aria-labelledby="progressTrackerModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable progress-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title" id="progressTrackerModalLabel">Progress Tracker</h5>
+                    <div class="text-muted small">Current step: <?php echo htmlspecialchars($progressCurrent ?: 'In progress'); ?></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="progress-summary mb-3">
+                    <div class="text-muted small">Completed</div>
+                    <div class="fw-semibold text-success">
+                        <?php echo number_format($progressCompleted); ?> / <?php echo number_format($progressTotal); ?> steps
+                    </div>
+                </div>
+                <div class="progress-grid">
+                    <?php $progressColumns = array_chunk($progressSteps, 7); ?>
+                    <?php foreach ($progressColumns as $columnIndex => $columnSteps): ?>
+                        <?php
+                            $startStep = ($columnIndex * 7) + 1;
+                            $endStep = $startStep + count($columnSteps) - 1;
+                        ?>
+                        <div class="progress-column">
+                            <div class="progress-column-title">
+                                Steps <?php echo (int)$startStep; ?>-<?php echo (int)$endStep; ?>
+                            </div>
+                            <?php foreach ($columnSteps as $stepIndex => $step): ?>
+                                <?php
+                                    $state = $step['state'] ?? 'pending';
+                                    $stepNumber = $startStep + $stepIndex;
+                                ?>
+                                <div class="progress-item <?php echo htmlspecialchars($state); ?>">
+                                    <span class="progress-dot"></span>
+                                    <div class="progress-step-index">Step <?php echo (int)$stepNumber; ?></div>
+                                    <div class="progress-label"><?php echo htmlspecialchars($step['label']); ?></div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <style>
     .notif-item {
         background-color: #fff;
@@ -126,6 +207,52 @@ if (isset($_SESSION['role'])) {
     .notif-item:focus {
         background-color: #eef2f5;
     }
+    .progress-trigger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.16);
+        border: none;
+        color: #ffda77;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+        transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+    .progress-trigger:hover,
+    .progress-trigger:focus {
+        background: rgba(255, 255, 255, 0.26);
+        transform: translateY(-1px);
+        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.25);
+        color: #ffe5a7;
+    }
+    .progress-mini-badge {
+        position: absolute;
+        top: -6px;
+        right: -10px;
+        background: #ffc107;
+        color: #1c2b14;
+        font-size: 0.65rem;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 999px;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+    }
+    .progress-menu {
+        min-width: 280px;
+    }
+    .progress-modal {
+        max-width: 960px;
+        width: min(960px, 92vw);
+    }
+    .progress-modal .modal-content {
+        border-radius: 16px;
+    }
+    .progress-modal .modal-body {
+        max-height: 75vh;
+        overflow: auto;
+    }
 </style>
 
 <script>
@@ -137,6 +264,120 @@ if (isset($_SESSION['role'])) {
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const progressDropdown = document.getElementById('progressDropdown');
+    const progressMenu = document.getElementById('progressMenu');
+    const progressModal = document.getElementById('progressTrackerModal');
+    const progressModalTrigger = document.getElementById('progressModalTrigger');
+    let progressDropdownOpen = false;
+    let progressCleanupFn = null;
+    let progressBackdrop = null;
+
+    function closeProgressDropdown() {
+        progressDropdownOpen = false;
+        if (progressCleanupFn) {
+            document.removeEventListener('click', progressCleanupFn);
+            progressCleanupFn = null;
+        }
+        if (progressMenu) {
+            progressMenu.classList.remove('show');
+        }
+        if (progressDropdown) {
+            progressDropdown.classList.remove('show');
+            progressDropdown.setAttribute('aria-expanded', 'false');
+        }
+    }
+
+    function openProgressDropdown() {
+        if (!progressDropdown || !progressMenu) {
+            return;
+        }
+        progressDropdownOpen = true;
+        progressMenu.classList.add('show');
+        progressDropdown.classList.add('show');
+        progressDropdown.setAttribute('aria-expanded', 'true');
+        progressCleanupFn = function (event) {
+            if (progressMenu.contains(event.target) || progressDropdown.contains(event.target)) {
+                return;
+            }
+            closeProgressDropdown();
+        };
+        document.addEventListener('click', progressCleanupFn);
+    }
+
+    function toggleProgressDropdown() {
+        if (progressDropdownOpen) {
+            closeProgressDropdown();
+        } else {
+            openProgressDropdown();
+        }
+    }
+
+    function showProgressModalFallback() {
+        if (!progressModal) {
+            return;
+        }
+        progressModal.classList.add('show');
+        progressModal.style.display = 'block';
+        progressModal.removeAttribute('aria-hidden');
+        document.body.classList.add('modal-open');
+        progressBackdrop = document.createElement('div');
+        progressBackdrop.className = 'modal-backdrop fade show';
+        document.body.appendChild(progressBackdrop);
+    }
+
+    function hideProgressModalFallback() {
+        if (!progressModal) {
+            return;
+        }
+        progressModal.classList.remove('show');
+        progressModal.style.display = 'none';
+        progressModal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+        if (progressBackdrop) {
+            progressBackdrop.remove();
+            progressBackdrop = null;
+        }
+    }
+
+    if (progressDropdown && progressMenu) {
+        progressDropdown.addEventListener('click', function (event) {
+            event.preventDefault();
+            const DropdownConstructor = window.bootstrap && window.bootstrap.Dropdown;
+            if (DropdownConstructor) {
+                event.stopPropagation();
+                const instance = DropdownConstructor.getOrCreateInstance(progressDropdown);
+                instance.toggle();
+            } else {
+                toggleProgressDropdown();
+            }
+        });
+    }
+
+    if (progressModalTrigger && progressModal) {
+        progressModalTrigger.addEventListener('click', function (event) {
+            const ModalConstructor = window.bootstrap && window.bootstrap.Modal;
+            if (ModalConstructor) {
+                event.preventDefault();
+                ModalConstructor.getOrCreateInstance(progressModal).show();
+            } else {
+                showProgressModalFallback();
+            }
+            closeProgressDropdown();
+        });
+    }
+
+    if (progressModal) {
+        progressModal.addEventListener('click', function (event) {
+            const ModalConstructor = window.bootstrap && window.bootstrap.Modal;
+            if (ModalConstructor) {
+                return;
+            }
+            if (event.target === progressModal || event.target.matches('[data-bs-dismiss="modal"]') || event.target.closest('.btn-close')) {
+                hideProgressModalFallback();
+            }
+        });
+    }
+
     const dropdown = document.getElementById('notifDropdown');
     const menu = document.getElementById('notifMenu');
     const itemsContainer = document.getElementById('notifItems');
