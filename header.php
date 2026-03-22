@@ -11,7 +11,14 @@ $userRole = $_SESSION['role'] ?? null;
 
 $notifications = fetch_user_notifications($conn, $userId, $userRole, 25);
 $unreadCount = count_unread_notifications($conn, $userId, $userRole);
-$progressTrackerEnabled = ($userRole === 'student' && isset($progressTrackerData) && is_array($progressTrackerData));
+$progressTrackerData = $progressTrackerData ?? null;
+if ($userRole === 'student' && !is_array($progressTrackerData)) {
+    require_once __DIR__ . '/progress_tracker_helper.php';
+    if (function_exists('get_student_progress_tracker_data')) {
+        $progressTrackerData = get_student_progress_tracker_data($conn, (int)$userId);
+    }
+}
+$progressTrackerEnabled = ($userRole === 'student' && is_array($progressTrackerData));
 $progressSteps = $progressTrackerEnabled ? ($progressTrackerData['steps'] ?? []) : [];
 $progressCompleted = $progressTrackerEnabled ? (int)($progressTrackerData['completed'] ?? 0) : 0;
 $progressTotal = $progressTrackerEnabled ? (int)($progressTrackerData['total'] ?? 0) : 0;
@@ -66,7 +73,7 @@ if (isset($_SESSION['role'])) {
 
     <div class="ms-auto d-flex align-items-center gap-4 pe-3">
         <?php if ($progressTrackerEnabled): ?>
-            <div class="dropdown me-1">
+            <div class="dropdown">
                 <button type="button" class="btn btn-link text-white position-relative p-0 progress-trigger" id="progressDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                     <i class="bi bi-graph-up fs-4"></i>
                     <span class="progress-mini-badge">
@@ -211,21 +218,19 @@ if (isset($_SESSION['role'])) {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 44px;
-        height: 44px;
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.16);
         border: none;
-        color: #ffda77;
-        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
-        transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+        background: transparent;
+        padding: 0;
+        margin: 0;
+        color: #ffd24d;
+        box-shadow: none;
+        transition: color 0.2s ease;
     }
     .progress-trigger:hover,
     .progress-trigger:focus {
-        background: rgba(255, 255, 255, 0.26);
-        transform: translateY(-1px);
-        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.25);
+        background: transparent;
         color: #ffe5a7;
+        box-shadow: none;
     }
     .progress-mini-badge {
         position: absolute;
@@ -237,7 +242,7 @@ if (isset($_SESSION['role'])) {
         font-weight: 700;
         padding: 2px 6px;
         border-radius: 999px;
-        border: 1px solid rgba(0, 0, 0, 0.15);
+        border: none;
     }
     .progress-menu {
         min-width: 280px;
@@ -252,6 +257,105 @@ if (isset($_SESSION['role'])) {
     .progress-modal .modal-body {
         max-height: 75vh;
         overflow: auto;
+    }
+    .progress-modal .progress-summary {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .progress-modal .progress-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+    }
+    .progress-modal .progress-column {
+        background: #f8faf8;
+        border: 1px solid rgba(22, 86, 44, 0.12);
+        border-radius: 1rem;
+        padding: 16px;
+        min-height: 100%;
+    }
+    .progress-modal .progress-column-title {
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #6d7a6f;
+        margin-bottom: 12px;
+        font-weight: 600;
+    }
+    .progress-modal .progress-item {
+        position: relative;
+        padding-left: 26px;
+        padding-bottom: 16px;
+    }
+    .progress-modal .progress-item::before {
+        content: '';
+        position: absolute;
+        left: 7px;
+        top: 2px;
+        bottom: -14px;
+        width: 2px;
+        background: #d7ddd6;
+    }
+    .progress-modal .progress-item:last-child {
+        padding-bottom: 0;
+    }
+    .progress-modal .progress-item:last-child::before {
+        bottom: 6px;
+    }
+    .progress-modal .progress-dot {
+        position: absolute;
+        left: 0;
+        top: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #d7ddd6;
+        border: 2px solid #fff;
+        box-shadow: 0 0 0 2px rgba(22, 86, 44, 0.08);
+    }
+    .progress-modal .progress-step-index {
+        font-size: 0.75rem;
+        font-weight: 700;
+        color: #87948a;
+        margin-bottom: 2px;
+    }
+    .progress-modal .progress-label {
+        font-size: 0.88rem;
+        line-height: 1.35;
+        color: #6d7a6f;
+    }
+    .progress-modal .progress-item.complete .progress-dot {
+        background: #0f6b35;
+        box-shadow: 0 0 0 4px rgba(15, 107, 53, 0.15);
+    }
+    .progress-modal .progress-item.complete::before {
+        background: #0f6b35;
+    }
+    .progress-modal .progress-item.complete .progress-label {
+        color: #16562c;
+        font-weight: 600;
+    }
+    .progress-modal .progress-item.current .progress-dot {
+        background: #1f8b4c;
+        box-shadow: 0 0 0 4px rgba(31, 139, 76, 0.18);
+    }
+    .progress-modal .progress-item.current::before {
+        background: linear-gradient(180deg, rgba(31, 139, 76, 0.9), rgba(215, 221, 214, 0.9));
+    }
+    .progress-modal .progress-item.current .progress-label {
+        color: #1d3522;
+        font-weight: 600;
+    }
+    @media (max-width: 1200px) {
+        .progress-modal .progress-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    @media (max-width: 768px) {
+        .progress-modal .progress-grid {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 
