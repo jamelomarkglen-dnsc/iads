@@ -72,6 +72,64 @@ if (!function_exists('get_student_progress_tracker_data')) {
             }
         }
 
+        if ($totalSubmissions === 0) {
+            $progressSteps = [
+                ['label' => 'Concept / Thesis / Capstone / Dissertation Submitted', 'complete' => false],
+                ['label' => 'Concept Review Assigned / In Review', 'complete' => false],
+                ['label' => 'Final Concept Recommended', 'complete' => false],
+                ['label' => 'Concept Paper Submitted to Adviser (PDF Submission)', 'complete' => false],
+                ['label' => 'Endorsement Request Submitted', 'complete' => false],
+                ['label' => 'Endorsement Verified', 'complete' => false],
+                ['label' => 'Payment Proof Submitted', 'complete' => false],
+                ['label' => 'Payment Verified', 'complete' => false],
+                ['label' => 'Defense Committee Memo Issued', 'complete' => false],
+                ['label' => 'Outline Defense Manuscript Submitted', 'complete' => false],
+                ['label' => 'Outline Defense Review Completed', 'complete' => false],
+                ['label' => 'Outline Defense Verdict Released', 'complete' => false],
+                ['label' => 'Student/Adviser Revision Completed', 'complete' => false],
+                ['label' => 'Route Slip for Outline Issued', 'complete' => false],
+                ['label' => 'Notice to Commence Submitted', 'complete' => false],
+                ['label' => 'Notice to Commence Approved', 'complete' => false],
+                ['label' => 'Final Routing Submitted', 'complete' => false],
+                ['label' => 'Final Routing Passed', 'complete' => false],
+                ['label' => 'Payment Proof Submitted (Final)', 'complete' => false],
+                ['label' => 'Payment Verified (Final)', 'complete' => false],
+                ['label' => 'Final Defense Scheduled', 'complete' => false],
+                ['label' => 'Final Defense Outcome Recorded', 'complete' => false],
+                ['label' => 'Final Endorsement Submitted', 'complete' => false],
+                ['label' => 'Final Endorsement Approved', 'complete' => false],
+                ['label' => 'Final Hardbound Submitted', 'complete' => false],
+                ['label' => 'Final Hardbound Passed / Verified', 'complete' => false],
+                ['label' => 'Institutional Final Research Copy', 'complete' => false],
+                ['label' => 'Archived', 'complete' => false],
+            ];
+
+            $firstIncompleteIndex = 0;
+            foreach ($progressSteps as $index => $step) {
+                if (!empty($step['complete'])) {
+                    $progressSteps[$index]['state'] = 'complete';
+                } elseif ($firstIncompleteIndex === $index) {
+                    $progressSteps[$index]['state'] = 'current';
+                } else {
+                    $progressSteps[$index]['state'] = 'pending';
+                }
+            }
+            $completedSteps = 0;
+            $totalSteps = count($progressSteps);
+            $currentStepLabel = $progressSteps[$firstIncompleteIndex]['label'] ?? 'In progress';
+            $progressPercent = 0;
+
+            $cache[$studentId] = [
+                'steps' => $progressSteps,
+                'completed' => $completedSteps,
+                'total' => $totalSteps,
+                'current' => $currentStepLabel,
+                'percent' => $progressPercent,
+            ];
+
+            return $cache[$studentId];
+        }
+
         $conceptSubmissionComplete = $totalSubmissions > 0;
         $conceptReviewAssigned = false;
         if (progress_tracker_column_exists($conn, 'concept_reviewer_assignments', 'id')) {

@@ -820,71 +820,125 @@ if (!$archived && $submissionHasUpdatedAt && columnExists($conn, 'submissions', 
     }
 }
 
-$progressSteps = [
-    ['label' => 'Concept / Thesis / Capstone / Dissertation Submitted', 'complete' => $conceptSubmissionComplete],
-    ['label' => 'Concept Review Assigned / In Review', 'complete' => $conceptReviewAssigned],
-    ['label' => 'Final Concept Recommended', 'complete' => $conceptRecommended],
-    ['label' => 'Concept Paper Submitted to Adviser (PDF Submission)', 'complete' => $conceptPdfSubmitted],
-    ['label' => 'Endorsement Request Submitted', 'complete' => $endorsementSubmitted],
-    ['label' => 'Endorsement Verified', 'complete' => $endorsementVerified],
-    ['label' => 'Payment Proof Submitted', 'complete' => $paymentSubmitted],
-    ['label' => 'Payment Verified', 'complete' => $paymentVerified],
-    ['label' => 'Defense Committee Memo Issued', 'complete' => $committeeMemoIssued],
-    ['label' => 'Outline Defense Manuscript Submitted', 'complete' => $outlineSubmitted],
-    ['label' => 'Outline Defense Review Completed', 'complete' => $outlineReviewCompleted],
-    ['label' => 'Outline Defense Verdict Released', 'complete' => $outlineVerdictReleased],
-    ['label' => 'Student/Adviser Revision Completed', 'complete' => $revisionCompleted],
-    ['label' => 'Route Slip for Outline Issued', 'complete' => $routeSlipIssued],
-    ['label' => 'Notice to Commence Submitted', 'complete' => $noticeSubmitted],
-    ['label' => 'Notice to Commence Approved', 'complete' => $noticeApproved],
-    ['label' => 'Final Routing Submitted', 'complete' => $finalRoutingSubmitted],
-    ['label' => 'Final Routing Passed', 'complete' => $finalRoutingPassed],
-    ['label' => 'Payment Proof Submitted (Final)', 'complete' => $finalPaymentSubmitted],
-    ['label' => 'Payment Verified (Final)', 'complete' => $finalPaymentVerified],
-    ['label' => 'Final Defense Scheduled', 'complete' => $finalDefenseScheduled],
-    ['label' => 'Final Defense Outcome Recorded', 'complete' => $finalDefenseOutcome],
-    ['label' => 'Final Endorsement Submitted', 'complete' => $finalEndorsementSubmitted],
-    ['label' => 'Final Endorsement Approved', 'complete' => $finalEndorsementApproved],
-    ['label' => 'Final Hardbound Submitted', 'complete' => $finalHardboundSubmitted],
-    ['label' => 'Final Hardbound Passed / Verified', 'complete' => $finalHardboundPassed],
-    ['label' => 'Institutional Final Research Copy', 'complete' => $institutionalCopyStored],
-    ['label' => 'Archived', 'complete' => $archived],
-];
-$firstIncompleteIndex = null;
-foreach ($progressSteps as $index => $step) {
-    if (empty($step['complete'])) {
-        $firstIncompleteIndex = $index;
-        break;
+if ($totalSubmissions === 0) {
+    $progressSteps = [
+        ['label' => 'Concept / Thesis / Capstone / Dissertation Submitted', 'complete' => false],
+        ['label' => 'Concept Review Assigned / In Review', 'complete' => false],
+        ['label' => 'Final Concept Recommended', 'complete' => false],
+        ['label' => 'Concept Paper Submitted to Adviser (PDF Submission)', 'complete' => false],
+        ['label' => 'Endorsement Request Submitted', 'complete' => false],
+        ['label' => 'Endorsement Verified', 'complete' => false],
+        ['label' => 'Payment Proof Submitted', 'complete' => false],
+        ['label' => 'Payment Verified', 'complete' => false],
+        ['label' => 'Defense Committee Memo Issued', 'complete' => false],
+        ['label' => 'Outline Defense Manuscript Submitted', 'complete' => false],
+        ['label' => 'Outline Defense Review Completed', 'complete' => false],
+        ['label' => 'Outline Defense Verdict Released', 'complete' => false],
+        ['label' => 'Student/Adviser Revision Completed', 'complete' => false],
+        ['label' => 'Route Slip for Outline Issued', 'complete' => false],
+        ['label' => 'Notice to Commence Submitted', 'complete' => false],
+        ['label' => 'Notice to Commence Approved', 'complete' => false],
+        ['label' => 'Final Routing Submitted', 'complete' => false],
+        ['label' => 'Final Routing Passed', 'complete' => false],
+        ['label' => 'Payment Proof Submitted (Final)', 'complete' => false],
+        ['label' => 'Payment Verified (Final)', 'complete' => false],
+        ['label' => 'Final Defense Scheduled', 'complete' => false],
+        ['label' => 'Final Defense Outcome Recorded', 'complete' => false],
+        ['label' => 'Final Endorsement Submitted', 'complete' => false],
+        ['label' => 'Final Endorsement Approved', 'complete' => false],
+        ['label' => 'Final Hardbound Submitted', 'complete' => false],
+        ['label' => 'Final Hardbound Passed / Verified', 'complete' => false],
+        ['label' => 'Institutional Final Research Copy', 'complete' => false],
+        ['label' => 'Archived', 'complete' => false],
+    ];
+    $firstIncompleteIndex = 0;
+    foreach ($progressSteps as $index => $step) {
+        if (!empty($step['complete'])) {
+            $progressSteps[$index]['state'] = 'complete';
+        } elseif ($firstIncompleteIndex === $index) {
+            $progressSteps[$index]['state'] = 'current';
+        } else {
+            $progressSteps[$index]['state'] = 'pending';
+        }
     }
-}
-foreach ($progressSteps as $index => $step) {
-    if (!empty($step['complete'])) {
-        $progressSteps[$index]['state'] = 'complete';
-    } elseif ($firstIncompleteIndex === $index) {
-        $progressSteps[$index]['state'] = 'current';
-    } else {
-        $progressSteps[$index]['state'] = 'pending';
+    $completedSteps = 0;
+    $totalSteps = count($progressSteps);
+    $currentStepLabel = $progressSteps[$firstIncompleteIndex]['label'] ?? 'In progress';
+    $progressCompletionPercent = 0;
+    $progressTrackerData = [
+        'steps' => $progressSteps,
+        'completed' => $completedSteps,
+        'total' => $totalSteps,
+        'current' => $currentStepLabel,
+        'percent' => $progressCompletionPercent,
+    ];
+} else {
+    $progressSteps = [
+        ['label' => 'Concept / Thesis / Capstone / Dissertation Submitted', 'complete' => $conceptSubmissionComplete],
+        ['label' => 'Concept Review Assigned / In Review', 'complete' => $conceptReviewAssigned],
+        ['label' => 'Final Concept Recommended', 'complete' => $conceptRecommended],
+        ['label' => 'Concept Paper Submitted to Adviser (PDF Submission)', 'complete' => $conceptPdfSubmitted],
+        ['label' => 'Endorsement Request Submitted', 'complete' => $endorsementSubmitted],
+        ['label' => 'Endorsement Verified', 'complete' => $endorsementVerified],
+        ['label' => 'Payment Proof Submitted', 'complete' => $paymentSubmitted],
+        ['label' => 'Payment Verified', 'complete' => $paymentVerified],
+        ['label' => 'Defense Committee Memo Issued', 'complete' => $committeeMemoIssued],
+        ['label' => 'Outline Defense Manuscript Submitted', 'complete' => $outlineSubmitted],
+        ['label' => 'Outline Defense Review Completed', 'complete' => $outlineReviewCompleted],
+        ['label' => 'Outline Defense Verdict Released', 'complete' => $outlineVerdictReleased],
+        ['label' => 'Student/Adviser Revision Completed', 'complete' => $revisionCompleted],
+        ['label' => 'Route Slip for Outline Issued', 'complete' => $routeSlipIssued],
+        ['label' => 'Notice to Commence Submitted', 'complete' => $noticeSubmitted],
+        ['label' => 'Notice to Commence Approved', 'complete' => $noticeApproved],
+        ['label' => 'Final Routing Submitted', 'complete' => $finalRoutingSubmitted],
+        ['label' => 'Final Routing Passed', 'complete' => $finalRoutingPassed],
+        ['label' => 'Payment Proof Submitted (Final)', 'complete' => $finalPaymentSubmitted],
+        ['label' => 'Payment Verified (Final)', 'complete' => $finalPaymentVerified],
+        ['label' => 'Final Defense Scheduled', 'complete' => $finalDefenseScheduled],
+        ['label' => 'Final Defense Outcome Recorded', 'complete' => $finalDefenseOutcome],
+        ['label' => 'Final Endorsement Submitted', 'complete' => $finalEndorsementSubmitted],
+        ['label' => 'Final Endorsement Approved', 'complete' => $finalEndorsementApproved],
+        ['label' => 'Final Hardbound Submitted', 'complete' => $finalHardboundSubmitted],
+        ['label' => 'Final Hardbound Passed / Verified', 'complete' => $finalHardboundPassed],
+        ['label' => 'Institutional Final Research Copy', 'complete' => $institutionalCopyStored],
+        ['label' => 'Archived', 'complete' => $archived],
+    ];
+    $firstIncompleteIndex = null;
+    foreach ($progressSteps as $index => $step) {
+        if (empty($step['complete'])) {
+            $firstIncompleteIndex = $index;
+            break;
+        }
     }
-}
-$completedSteps = 0;
-foreach ($progressSteps as $step) {
-    if (!empty($step['complete'])) {
-        $completedSteps++;
+    foreach ($progressSteps as $index => $step) {
+        if (!empty($step['complete'])) {
+            $progressSteps[$index]['state'] = 'complete';
+        } elseif ($firstIncompleteIndex === $index) {
+            $progressSteps[$index]['state'] = 'current';
+        } else {
+            $progressSteps[$index]['state'] = 'pending';
+        }
     }
+    $completedSteps = 0;
+    foreach ($progressSteps as $step) {
+        if (!empty($step['complete'])) {
+            $completedSteps++;
+        }
+    }
+    $totalSteps = count($progressSteps);
+    $currentStepLabel = $firstIncompleteIndex === null
+        ? 'All steps completed'
+        : ($progressSteps[$firstIncompleteIndex]['label'] ?? 'In progress');
+    $progressCompletionPercent = $totalSteps > 0 ? (int)round(($completedSteps / $totalSteps) * 100) : 0;
+    $progressCompletionPercent = min(100, max(0, $progressCompletionPercent));
+    $progressTrackerData = [
+        'steps' => $progressSteps,
+        'completed' => $completedSteps,
+        'total' => $totalSteps,
+        'current' => $currentStepLabel,
+        'percent' => $progressCompletionPercent,
+    ];
 }
-$totalSteps = count($progressSteps);
-$currentStepLabel = $firstIncompleteIndex === null
-    ? 'All steps completed'
-    : ($progressSteps[$firstIncompleteIndex]['label'] ?? 'In progress');
-$progressCompletionPercent = $totalSteps > 0 ? (int)round(($completedSteps / $totalSteps) * 100) : 0;
-$progressCompletionPercent = min(100, max(0, $progressCompletionPercent));
-$progressTrackerData = [
-    'steps' => $progressSteps,
-    'completed' => $completedSteps,
-    'total' => $totalSteps,
-    'current' => $currentStepLabel,
-    'percent' => $progressCompletionPercent,
-];
 
 $studentFullName = trim(($studentInfo['firstname'] ?? '') . ' ' . ($studentInfo['lastname'] ?? ''));
 if ($studentFullName === '') {
