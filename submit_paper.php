@@ -29,6 +29,110 @@ function columnExists(mysqli $conn, string $table, string $column): bool
     return $exists;
 }
 
+function deleteRecordsByColumn(mysqli $conn, string $table, string $column, string $type, $value): void
+{
+    if (!columnExists($conn, $table, $column)) {
+        return;
+    }
+    $sql = "DELETE FROM {$table} WHERE {$column} = ?";
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        return;
+    }
+    $stmt->bind_param($type, $value);
+    $stmt->execute();
+    $stmt->close();
+}
+
+function deleteNotificationsByTitle(mysqli $conn, int $userId, string $title): void
+{
+    if (!columnExists($conn, 'notifications', 'user_id') || !columnExists($conn, 'notifications', 'title')) {
+        return;
+    }
+    $stmt = $conn->prepare("DELETE FROM notifications WHERE user_id = ? AND title = ?");
+    if (!$stmt) {
+        return;
+    }
+    $stmt->bind_param('is', $userId, $title);
+    $stmt->execute();
+    $stmt->close();
+}
+
+function deleteFinalPaperReviewsForStudent(mysqli $conn, int $studentId): void
+{
+    if (
+        !columnExists($conn, 'final_paper_reviews', 'submission_id')
+        || !columnExists($conn, 'final_paper_submissions', 'id')
+        || !columnExists($conn, 'final_paper_submissions', 'student_id')
+    ) {
+        return;
+    }
+    $stmt = $conn->prepare("
+        DELETE fpr
+        FROM final_paper_reviews fpr
+        JOIN final_paper_submissions fps ON fps.id = fpr.submission_id
+        WHERE fps.student_id = ?
+    ");
+    if (!$stmt) {
+        return;
+    }
+    $stmt->bind_param('i', $studentId);
+    $stmt->execute();
+    $stmt->close();
+}
+
+function resetStudentProgressRecords(mysqli $conn, int $studentId): void
+{
+    if ($studentId <= 0) {
+        return;
+    }
+
+    deleteRecordsByColumn($conn, 'concept_papers', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'concept_reviewer_assignments', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'final_pick_messages', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'final_concept_submissions', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'pdf_submissions', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'endorsement_requests', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'payment_proofs', 'user_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'defense_committee_requests', 'student_id', 'i', $studentId);
+    deleteFinalPaperReviewsForStudent($conn, $studentId);
+    deleteRecordsByColumn($conn, 'final_paper_submissions', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'notice_to_commence_requests', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'final_routing_submissions', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'defense_schedules', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'defense_outcomes', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'final_endorsement_submissions', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'final_hardbound_submissions', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'institutional_final_copies', 'student_id', 'i', $studentId);
+    deleteRecordsByColumn($conn, 'research_archive', 'student_id', 'i', $studentId);
+    deleteNotificationsByTitle($conn, $studentId, 'Final concept recommendation');
+}
+
+function deleteSubmissionRelatedRecords(mysqli $conn, int $submissionId): void
+{
+    if ($submissionId <= 0) {
+        return;
+    }
+    deleteRecordsByColumn($conn, 'status_logs', 'submission_id', 'i', $submissionId);
+    deleteRecordsByColumn($conn, 'submission_feedback', 'submission_id', 'i', $submissionId);
+}
+
+function countStudentSubmissions(mysqli $conn, int $studentId): int
+{
+    if ($studentId <= 0 || !columnExists($conn, 'submissions', 'student_id')) {
+        return 0;
+    }
+    $stmt = $conn->prepare("SELECT COUNT(*) AS total FROM submissions WHERE student_id = ?");
+    if (!$stmt) {
+        return 0;
+    }
+    $stmt->bind_param('i', $studentId);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return (int)($row['total'] ?? 0);
+}
+
 function studentExists(mysqli $conn, int $studentId): bool
 {
     if ($studentId <= 0) {
@@ -350,7 +454,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
             $deleteStmt = $conn->prepare("DELETE FROM submissions WHERE id = ? AND student_id = ?");
             if ($deleteStmt) {
                 $deleteStmt->bind_param('ii', $submissionId, $student_id);
-                if ($deleteStmt->execute()) {
+                $transactionStarted = $conn->begin_transaction();
+                $deleteOk = false;
+                if ($transactionStarted) {
+                    deleteSubmissionRelatedRecords($conn, $submissionId);
+                    if ($deleteStmt->execute()) {
+                        $deleteOk = true;
+                        if (countStudentSubmissions($conn, $student_id) === 0) {
+                            resetStudentProgressRecords($conn, $student_id);
+                        }
+                    }
+                    if ($deleteOk) {
+                        $conn->commit();
+                    } else {
+                        $conn->rollback();
+                    }
+                } else {
+                    deleteSubmissionRelatedRecords($conn, $submissionId);
+                    if ($deleteStmt->execute()) {
+                        $deleteOk = true;
+                        if (countStudentSubmissions($conn, $student_id) === 0) {
+                            resetStudentProgressRecords($conn, $student_id);
+                        }
+                    }
+                }
+                if ($deleteOk) {
                     deleteSubmissionFiles($submission);
                     $_SESSION['flash_success'] = "Submission removed successfully.";
                     header("Location: submit_paper.php");
