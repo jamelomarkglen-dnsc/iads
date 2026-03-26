@@ -135,7 +135,7 @@ if ($submission['submission_status'] === 'pending') {
     <title>Review PDF - IAdS</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="pdf_annotation_styles.css">
+    <link rel="stylesheet" href="pdf_annotation_styles.css?v=20260327">
     <style>
         /* Fix sidebar overlap and improve responsiveness */
         body {
@@ -532,7 +532,7 @@ if ($submission['submission_status'] === 'pending') {
     
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="pdf_viewer.js"></script>
+    <script src="pdf_viewer.js?v=20260327"></script>
     <script src="annotation_manager.js"></script>
     
     <script>

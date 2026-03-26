@@ -79,6 +79,8 @@ class PDFViewer {
         const canvasWrapper = document.createElement('div');
         canvasWrapper.style.position = 'relative';
         canvasWrapper.style.display = 'inline-block';
+        canvasWrapper.style.alignSelf = 'flex-start';
+        canvasWrapper.style.justifySelf = 'flex-start';
         
         // Create canvas
         this.canvas = document.createElement('canvas');
@@ -88,6 +90,7 @@ class PDFViewer {
         canvasWrapper.appendChild(this.canvas);
         container.appendChild(canvasWrapper);
         this.canvasWrapper = canvasWrapper;
+        this.scrollToTop();
     }
     
     /**
@@ -118,6 +121,7 @@ class PDFViewer {
             this.currentPage = pageNum;
             this.updatePageInfo();
             this.renderAnnotations(pageNum);
+            this.scrollToTop();
             
             this.isLoading = false;
         } catch (error) {
@@ -344,6 +348,16 @@ class PDFViewer {
         const pageInfo = document.querySelector('.pdf-page-info');
         if (pageInfo) {
             pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages}`;
+        }
+    }
+
+    /**
+     * Ensure the top-left of the page is visible after render
+     */
+    scrollToTop() {
+        const container = document.getElementById(this.containerId);
+        if (container) {
+            container.scrollTo({ top: 0, left: 0 });
         }
     }
     
