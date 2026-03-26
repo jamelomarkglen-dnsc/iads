@@ -6,6 +6,7 @@
 require_once 'db.php';
 require_once 'final_routing_helpers.php';
 require_once 'defense_committee_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 define('FINAL_ROUTING_UPLOAD_DIR', 'uploads/final_routing_submissions/');
 define('FINAL_ROUTING_MAX_SIZE', 52428800);
@@ -254,6 +255,15 @@ function create_final_routing_submission(
     }
     $submission_id = (int)$stmt->insert_id;
     $stmt->close();
+    if (function_exists('progress_tracker_mark_step_complete')) {
+        progress_tracker_mark_step_complete(
+            $conn,
+            $student_id,
+            'final_routing_submitted',
+            'final_routing_submissions',
+            $submission_id
+        );
+    }
     return ['success' => true, 'submission_id' => $submission_id];
 }
 
@@ -569,6 +579,30 @@ function set_final_routing_verdict(
         return ['success' => false, 'error' => 'Failed to submit verdict: ' . $stmt->error];
     }
     $stmt->close();
+    if ($status === 'Passed' && function_exists('progress_tracker_mark_step_complete')) {
+        $studentId = 0;
+        $lookup = $conn->prepare("SELECT student_id FROM final_routing_submissions WHERE id = ? LIMIT 1");
+        if ($lookup) {
+            $lookup->bind_param('i', $submission_id);
+            $lookup->execute();
+            $result = $lookup->get_result();
+            $row = $result ? $result->fetch_assoc() : null;
+            if ($result) {
+                $result->free();
+            }
+            $lookup->close();
+            $studentId = (int)($row['student_id'] ?? 0);
+        }
+        if ($studentId > 0) {
+            progress_tracker_mark_step_complete(
+                $conn,
+                $studentId,
+                'final_routing_passed',
+                'final_routing_submissions',
+                $submission_id
+            );
+        }
+    }
     return ['success' => true];
 }
 

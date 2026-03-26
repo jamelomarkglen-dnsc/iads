@@ -5,6 +5,7 @@ require_once 'role_helpers.php';
 require_once 'notifications_helper.php';
 require_once 'final_concept_helpers.php';
 require_once 'endorsement_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 enforce_role_access(['adviser']);
 
@@ -290,6 +291,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_endorsement'])
                     }
                 } else {
                     notify_role($conn, 'program_chairperson', 'Outline defense endorsement', $message, $link, false);
+                }
+                if (function_exists('progress_tracker_mark_step_complete')) {
+                    progress_tracker_mark_step_complete($conn, $studentId, 'endorsement_submitted', 'endorsement_requests', (int)$insertStmt->insert_id);
                 }
                 $alert = ['type' => 'success', 'message' => 'Endorsement sent to the Program Chairperson.'];
             } else {

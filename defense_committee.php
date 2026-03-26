@@ -6,6 +6,7 @@ require_once 'chair_scope_helper.php';
 require_once 'defense_schedule_helpers.php';
 require_once 'defense_committee_helpers.php';
 require_once 'role_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'program_chairperson') {
     header("Location: login.php");
@@ -169,6 +170,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_committee_requ
             }
             $defenseId = (int)$scheduleStmt->insert_id;
             $scheduleStmt->close();
+            if (function_exists('progress_tracker_mark_step_complete')) {
+                progress_tracker_mark_step_complete(
+                    $conn,
+                    $studentId,
+                    'final_defense_scheduled',
+                    'defense_schedules',
+                    $defenseId
+                );
+            }
 
             $panelStmt = $conn->prepare("
                 INSERT INTO defense_panels (defense_id, panel_member, panel_member_id, panel_role)

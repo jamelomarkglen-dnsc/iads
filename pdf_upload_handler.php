@@ -11,6 +11,7 @@ session_start();
 require_once 'db.php';
 require_once 'pdf_submission_helpers.php';
 require_once 'notifications_helper.php';
+require_once 'progress_tracker_helper.php';
 
 // =====================================================
 // SECURITY: Verify user is logged in
@@ -120,6 +121,9 @@ if ($action === 'upload' && isset($_FILES['pdf_file'])) {
     }
     
     $submission_id = $submission_result['submission_id'];
+    if (function_exists('progress_tracker_mark_step_complete')) {
+        progress_tracker_mark_step_complete($conn, $student_id, 'concept_pdf_submitted', 'pdf_submissions', $submission_id);
+    }
     
     // Get student and adviser names for notification
     $student_query = $conn->prepare("SELECT firstname, lastname FROM users WHERE id = ?");

@@ -6,6 +6,7 @@ require_once 'notifications_helper.php';
 require_once 'final_paper_helpers.php';
 require_once 'final_concept_helpers.php';
 require_once 'final_defense_endorsement_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 enforce_role_access(['adviser']);
 
@@ -164,6 +165,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_final_endorsem
         if ($insertStmt) {
             $insertStmt->bind_param('iisss', $studentId, $advisorId, $finalTitle, $endorsementBody, $signaturePath);
             if ($insertStmt->execute()) {
+                $insertId = (int)$insertStmt->insert_id;
+                if (function_exists('progress_tracker_mark_step_complete')) {
+                    progress_tracker_mark_step_complete(
+                        $conn,
+                        $studentId,
+                        'final_endorsement_submitted',
+                        'final_defense_endorsements',
+                        $insertId
+                    );
+                }
                 $studentName = trim(($studentInfo['firstname'] ?? '') . ' ' . ($studentInfo['lastname'] ?? '')) ?: 'the student';
                 $message = "{$advisorName} submitted a final defense endorsement for {$studentName}.";
                 $link = 'program_chair_final_endorsement.php';

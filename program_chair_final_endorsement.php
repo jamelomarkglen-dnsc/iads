@@ -5,6 +5,7 @@ require_once 'role_helpers.php';
 require_once 'notifications_helper.php';
 require_once 'chair_scope_helper.php';
 require_once 'final_defense_endorsement_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 enforce_role_access(['program_chairperson']);
 
@@ -58,6 +59,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_final_endorsem
                     $studentName = $endorsement['student_name'] ?? 'the student';
                     $adviserId = (int)($endorsement['adviser_id'] ?? 0);
                     $studentId = (int)($endorsement['student_id'] ?? 0);
+                    if ($decision === 'Verified' && $studentId > 0 && function_exists('progress_tracker_mark_step_complete')) {
+                        progress_tracker_mark_step_complete(
+                            $conn,
+                            $studentId,
+                            'final_endorsement_approved',
+                            'final_defense_endorsements',
+                            $endorsementId
+                        );
+                    }
                     if ($adviserId > 0) {
                         notify_user(
                             $conn,

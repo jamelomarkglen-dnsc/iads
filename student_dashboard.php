@@ -7,6 +7,7 @@ require_once 'role_helpers.php';
 require_once 'final_paper_helpers.php';
 require_once 'defense_committee_helpers.php';
 require_once 'pdf_submission_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 enforce_role_access(['student']);
 
@@ -943,6 +944,12 @@ if ($totalSubmissions === 0) {
 $studentFullName = trim(($studentInfo['firstname'] ?? '') . ' ' . ($studentInfo['lastname'] ?? ''));
 if ($studentFullName === '') {
     $studentFullName = 'Student';
+}
+if (function_exists('get_student_progress_tracker_data')) {
+    $freshProgress = get_student_progress_tracker_data($conn, $studentId);
+    if (is_array($freshProgress)) {
+        $progressTrackerData = $freshProgress;
+    }
 }
 ?>
 <!DOCTYPE html>

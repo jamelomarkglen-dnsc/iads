@@ -7,6 +7,7 @@ require_once 'final_concept_helpers.php';
 require_once 'endorsement_helpers.php';
 require_once 'chair_scope_helper.php';
 require_once 'role_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 enforce_role_access(['program_chairperson']);
 
@@ -60,6 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_final_pick_messa
             $saveStmt->bind_param('iissi', $studentId, $conceptId, $finalTitle, $messageBody, $programChairId);
             $saveStmt->execute();
             $saveStmt->close();
+            if (function_exists('progress_tracker_mark_step_complete')) {
+                progress_tracker_mark_step_complete($conn, $studentId, 'final_concept_recommended', 'final_pick_messages', null);
+            }
             $finalPickAlert = ['type' => 'success', 'message' => "Final pick message sent to {$studentName}."];
         } else {
             $finalPickAlert = ['type' => 'warning', 'message' => "Final pick message sent to {$studentName}, but the directory status was not updated."];
@@ -269,6 +273,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['verify_endorsement'])
                     if ($studentId > 0) {
                         $studentMessage = "Your adviser endorsement for outline defense has been verified. Please coordinate with the Program Chairperson for the next steps.";
                         notify_user($conn, $studentId, 'Outline defense endorsement verified', $studentMessage, 'student_dashboard.php', false);
+                        if (function_exists('progress_tracker_mark_step_complete')) {
+                            progress_tracker_mark_step_complete($conn, $studentId, 'endorsement_verified', 'endorsement_requests', $endorsementId);
+                        }
                     }
                     $endorsementAlert = ['type' => 'success', 'message' => 'Endorsement verified successfully.'];
                 } else {

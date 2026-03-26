@@ -4,6 +4,7 @@ require_once 'db.php';
 require_once 'role_helpers.php';
 require_once 'notifications_helper.php';
 require_once 'final_paper_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 $allowedRoles = ['adviser', 'panel', 'committee_chairperson', 'committee_chair'];
 enforce_role_access($allowedRoles);
@@ -122,6 +123,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_review'])) {
                         if ($updateNotify) {
                             $updateNotify->bind_param('i', $submissionId);
                             if ($updateNotify->execute()) {
+                                if (function_exists('progress_tracker_mark_step_complete')) {
+                                    progress_tracker_mark_step_complete(
+                                        $conn,
+                                        (int)($submission['student_id'] ?? 0),
+                                        'outline_review_completed',
+                                        'final_paper_submissions',
+                                        $submissionId
+                                    );
+                                }
                                 $adviserId = 0;
                                 foreach ($reviews as $review) {
                                     if (($review['reviewer_role'] ?? '') === 'adviser') {
@@ -224,6 +234,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['final_decision']) && 
                     "Your outline defense manuscript has been marked as " . finalPaperStatusLabel($decision) . ".",
                     'submit_final_paper.php'
                 );
+                if ($decision === 'Approved' && function_exists('progress_tracker_mark_step_complete')) {
+                    progress_tracker_mark_step_complete(
+                        $conn,
+                        (int)($submission['student_id'] ?? 0),
+                        'revision_completed',
+                        'final_paper_submissions',
+                        $submissionId
+                    );
+                }
                 if ($decision === 'Approved') {
                     $adviserReview = null;
                     foreach ($reviews as $review) {

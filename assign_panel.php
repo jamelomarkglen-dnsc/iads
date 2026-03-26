@@ -5,6 +5,7 @@ require_once 'notifications_helper.php';
 require_once 'chair_scope_helper.php';
 require_once 'defense_schedule_helpers.php';
 require_once 'role_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 if (!isset($_SESSION)) {
     session_start();
@@ -434,6 +435,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add')
     $stmt->execute();
     $defenseId = $stmt->insert_id;
     $stmt->close();
+    if (function_exists('progress_tracker_mark_step_complete')) {
+        progress_tracker_mark_step_complete(
+            $conn,
+            $studentId,
+            'final_defense_scheduled',
+            'defense_schedules',
+            $defenseId
+        );
+    }
 
     $insertPanel = $conn->prepare(
         "INSERT INTO defense_panels (defense_id, panel_member, panel_member_id, panel_role) VALUES (?, ?, ?, ?)"

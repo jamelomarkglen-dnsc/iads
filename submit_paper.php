@@ -2,6 +2,7 @@
 session_start();
 require_once 'db.php';
 require_once 'notifications_helper.php';
+require_once 'progress_tracker_helper.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'student') {
     header("Location: login.php");
@@ -85,6 +86,10 @@ function resetStudentProgressRecords(mysqli $conn, int $studentId): void
 {
     if ($studentId <= 0) {
         return;
+    }
+
+    if (function_exists('progress_tracker_reset_student_progress')) {
+        progress_tracker_reset_student_progress($conn, $studentId);
     }
 
     deleteRecordsByColumn($conn, 'concept_papers', 'student_id', 'i', $studentId);
@@ -759,6 +764,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
 
             if ($stmt && bindStatementParams($stmt, $insertTypes, $insertValues)) {
                 if ($stmt->execute()) {
+                $submissionId = (int)$stmt->insert_id;
                 $_SESSION['flash_success'] = "Your concept paper and proposals were submitted successfully. Track the live status on the right.";
                 $formData = array_map(fn() => '', $formData);
 
@@ -785,6 +791,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
                     $message,
                     'submissions.php?view=all'
                 );
+                if (function_exists('progress_tracker_mark_step_complete')) {
+                    progress_tracker_mark_step_complete($conn, $student_id, 'concept_submitted', 'submissions', $submissionId);
+                }
                 header("Location: submit_paper.php");
                 exit;
             } else {

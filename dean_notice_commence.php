@@ -6,6 +6,7 @@ require_once 'notifications_helper.php';
 require_once 'final_paper_helpers.php';
 require_once 'defense_committee_helpers.php';
 require_once 'notice_commence_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 enforce_role_access(['dean']);
 
@@ -84,6 +85,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_notice_commenc
                                 'Notice to commence approved',
                                 "Your notice to commence for \"{$finalTitle}\" is approved. You may now proceed.",
                                 $viewLink
+                            );
+                        }
+                        if ($studentId > 0 && function_exists('progress_tracker_mark_step_complete')) {
+                            progress_tracker_mark_step_complete(
+                                $conn,
+                                $studentId,
+                                'notice_approved',
+                                'notice_to_commence_requests',
+                                $noticeId
                             );
                         }
                         $alert = ['type' => 'success', 'message' => 'Notice approved and notifications sent.'];

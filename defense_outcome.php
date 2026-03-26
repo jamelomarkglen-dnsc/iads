@@ -5,6 +5,7 @@ require_once 'role_helpers.php';
 require_once 'chair_scope_helper.php';
 require_once 'notifications_helper.php';
 require_once 'defense_outcome_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 enforce_role_access(['program_chairperson']);
 
@@ -41,6 +42,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_outcome'])) {
             $stmt->bind_param('iissi', $defenseId, $studentId, $outcome, $notes, $programChairId);
             if ($stmt->execute()) {
                 $message = ['type' => 'success', 'text' => 'Defense outcome saved.'];
+                if (function_exists('progress_tracker_mark_step_complete')) {
+                    $outcomeId = (int)$stmt->insert_id;
+                    progress_tracker_mark_step_complete(
+                        $conn,
+                        $studentId,
+                        'final_defense_outcome',
+                        'defense_outcomes',
+                        $outcomeId > 0 ? $outcomeId : null
+                    );
+                }
                 notify_user(
                     $conn,
                     $studentId,

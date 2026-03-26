@@ -5,6 +5,7 @@ require_once 'concept_review_helpers.php';
 require_once 'notifications_helper.php';
 require_once 'final_defense_submission_helpers.php';
 require_once 'final_hardbound_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'program_chairperson') {
     header('Location: login.php');
@@ -292,6 +293,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['archive_submission'])
                         $chairId
                     );
                         if ($archiveStmt->execute()) {
+                            if (function_exists('progress_tracker_mark_step_complete')) {
+                                $archiveId = (int)$archiveStmt->insert_id;
+                                $studentId = (int)($submission['student_id'] ?? 0);
+                                if ($studentId > 0) {
+                                    progress_tracker_mark_step_complete(
+                                        $conn,
+                                        $studentId,
+                                        'archived',
+                                        'research_archive',
+                                        $archiveId > 0 ? $archiveId : null
+                                    );
+                                }
+                            }
                             $conn->query("UPDATE submissions SET archived_at = NOW() WHERE id = {$submissionId}");
 
                             $pendingUpload = fetch_pending_final_hardbound_archive_upload_for_submission($conn, $submissionId);

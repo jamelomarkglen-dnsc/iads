@@ -5,6 +5,7 @@ require_once 'role_helpers.php';
 require_once 'notifications_helper.php';
 require_once 'final_paper_helpers.php';
 require_once 'notice_commence_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 $allowedRoles = ['adviser', 'panel', 'committee_chairperson', 'committee_chair'];
 enforce_role_access($allowedRoles);
@@ -360,6 +361,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_overall_route_sl
             if ($stmt->execute()) {
                 $reviewSuccess = 'Overall route slip decision saved successfully.';
                 $submission = fetchFinalPaperSubmission($conn, $submissionId);
+                if (
+                    function_exists('progress_tracker_mark_step_complete')
+                    && in_array($overallDecision, ['Approved', 'Minor Revision', 'Major Revision'], true)
+                ) {
+                    progress_tracker_mark_step_complete(
+                        $conn,
+                        (int)($submission['student_id'] ?? 0),
+                        'route_slip_issued',
+                        'final_paper_submissions',
+                        $submissionId
+                    );
+                }
 
                 if ($overallDecision === 'Approved') {
                     $statusStmt = $conn->prepare("

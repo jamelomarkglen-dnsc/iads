@@ -6,6 +6,308 @@ require_once __DIR__ . '/defense_committee_helpers.php';
 require_once __DIR__ . '/pdf_submission_helpers.php';
 require_once __DIR__ . '/submission_helpers.php';
 
+if (!defined('PROGRESS_TRACKER_SEED_ON_EMPTY')) {
+    define('PROGRESS_TRACKER_SEED_ON_EMPTY', true);
+}
+
+if (!function_exists('progress_tracker_step_definitions')) {
+    function progress_tracker_step_definitions(): array
+    {
+        return [
+            ['key' => 'concept_submitted', 'label' => 'Concept / Thesis / Capstone / Dissertation Submitted'],
+            ['key' => 'concept_review_assigned', 'label' => 'Concept Review Assigned / In Review'],
+            ['key' => 'final_concept_recommended', 'label' => 'Final Concept Recommended'],
+            ['key' => 'concept_pdf_submitted', 'label' => 'Concept Paper Submitted to Adviser (PDF Submission)'],
+            ['key' => 'endorsement_submitted', 'label' => 'Endorsement Request Submitted'],
+            ['key' => 'endorsement_verified', 'label' => 'Endorsement Verified'],
+            ['key' => 'payment_submitted', 'label' => 'Payment Proof Submitted'],
+            ['key' => 'payment_verified', 'label' => 'Payment Verified'],
+            ['key' => 'committee_memo_issued', 'label' => 'Defense Committee Memo Issued'],
+            ['key' => 'outline_submitted', 'label' => 'Outline Defense Manuscript Submitted'],
+            ['key' => 'outline_review_completed', 'label' => 'Outline Defense Review Completed'],
+            ['key' => 'outline_verdict_released', 'label' => 'Outline Defense Verdict Released'],
+            ['key' => 'revision_completed', 'label' => 'Student/Adviser Revision Completed'],
+            ['key' => 'route_slip_issued', 'label' => 'Route Slip for Outline Issued'],
+            ['key' => 'notice_submitted', 'label' => 'Notice to Commence Submitted'],
+            ['key' => 'notice_approved', 'label' => 'Notice to Commence Approved'],
+            ['key' => 'final_routing_submitted', 'label' => 'Final Routing Submitted'],
+            ['key' => 'final_routing_passed', 'label' => 'Final Routing Passed'],
+            ['key' => 'final_payment_submitted', 'label' => 'Payment Proof Submitted (Final)'],
+            ['key' => 'final_payment_verified', 'label' => 'Payment Verified (Final)'],
+            ['key' => 'final_defense_scheduled', 'label' => 'Final Defense Scheduled'],
+            ['key' => 'final_defense_outcome', 'label' => 'Final Defense Outcome Recorded'],
+            ['key' => 'final_endorsement_submitted', 'label' => 'Final Endorsement Submitted'],
+            ['key' => 'final_endorsement_approved', 'label' => 'Final Endorsement Approved'],
+            ['key' => 'final_hardbound_submitted', 'label' => 'Final Hardbound Submitted'],
+            ['key' => 'final_hardbound_passed', 'label' => 'Final Hardbound Passed / Verified'],
+            ['key' => 'institutional_copy', 'label' => 'Institutional Final Research Copy'],
+            ['key' => 'archived', 'label' => 'Archived'],
+        ];
+    }
+}
+
+if (!function_exists('progress_tracker_label_to_key_map')) {
+    function progress_tracker_label_to_key_map(): array
+    {
+        $map = [];
+        foreach (progress_tracker_step_definitions() as $step) {
+            $map[$step['label']] = $step['key'];
+        }
+        return $map;
+    }
+}
+
+if (!function_exists('ensure_progress_tracker_table')) {
+    function ensure_progress_tracker_table(mysqli $conn): void
+    {
+        static $ensured = false;
+        if ($ensured) {
+            return;
+        }
+        $conn->query("
+            CREATE TABLE IF NOT EXISTS progress_tracker_steps (
+                student_id INT NOT NULL,
+                step_key VARCHAR(64) NOT NULL,
+                status ENUM('pending','complete') NOT NULL DEFAULT 'pending',
+                completed_at DATETIME NULL,
+                source_table VARCHAR(64) NULL,
+                source_id INT NULL,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                PRIMARY KEY (student_id, step_key),
+                INDEX idx_progress_student (student_id),
+                CONSTRAINT fk_progress_tracker_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+        ");
+        $ensured = true;
+    }
+}
+
+if (!function_exists('progress_tracker_count_rows')) {
+    function progress_tracker_count_rows(mysqli $conn, int $studentId): int
+    {
+        if ($studentId <= 0) {
+            return 0;
+        }
+        $stmt = $conn->prepare("SELECT COUNT(*) AS total FROM progress_tracker_steps WHERE student_id = ?");
+        if (!$stmt) {
+            return 0;
+        }
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        return (int)($row['total'] ?? 0);
+    }
+}
+
+if (!function_exists('ensure_progress_tracker_rows')) {
+    function ensure_progress_tracker_rows(mysqli $conn, int $studentId): void
+    {
+        if ($studentId <= 0) {
+            return;
+        }
+        $stmt = $conn->prepare("
+            INSERT INTO progress_tracker_steps (student_id, step_key)
+            VALUES (?, ?)
+            ON DUPLICATE KEY UPDATE step_key = VALUES(step_key)
+        ");
+        if (!$stmt) {
+            return;
+        }
+        foreach (progress_tracker_step_definitions() as $step) {
+            $key = $step['key'];
+            $stmt->bind_param('is', $studentId, $key);
+            $stmt->execute();
+        }
+        $stmt->close();
+    }
+}
+
+if (!function_exists('progress_tracker_fetch_rows')) {
+    function progress_tracker_fetch_rows(mysqli $conn, int $studentId): array
+    {
+        if ($studentId <= 0) {
+            return [];
+        }
+        $stmt = $conn->prepare("
+            SELECT step_key, status, completed_at
+            FROM progress_tracker_steps
+            WHERE student_id = ?
+        ");
+        if (!$stmt) {
+            return [];
+        }
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $rows = [];
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $rows[$row['step_key']] = $row;
+            }
+            $result->free();
+        }
+        $stmt->close();
+        return $rows;
+    }
+}
+
+if (!function_exists('progress_tracker_mark_step_complete')) {
+    function progress_tracker_mark_step_complete(
+        mysqli $conn,
+        int $studentId,
+        string $stepKey,
+        ?string $sourceTable = null,
+        ?int $sourceId = null,
+        ?string $completedAt = null
+    ): bool {
+        if ($studentId <= 0 || $stepKey === '') {
+            return false;
+        }
+        ensure_progress_tracker_table($conn);
+        ensure_progress_tracker_rows($conn, $studentId);
+        $completedAt = $completedAt ?: date('Y-m-d H:i:s');
+        $stmt = $conn->prepare("
+            UPDATE progress_tracker_steps
+            SET status = 'complete',
+                completed_at = COALESCE(completed_at, ?),
+                source_table = COALESCE(?, source_table),
+                source_id = COALESCE(?, source_id)
+            WHERE student_id = ? AND step_key = ?
+        ");
+        if (!$stmt) {
+            return false;
+        }
+        $stmt->bind_param('ssiss', $completedAt, $sourceTable, $sourceId, $studentId, $stepKey);
+        $ok = $stmt->execute();
+        $stmt->close();
+        return $ok;
+    }
+}
+
+if (!function_exists('progress_tracker_reset_student_progress')) {
+    function progress_tracker_reset_student_progress(mysqli $conn, int $studentId): void
+    {
+        if ($studentId <= 0) {
+            return;
+        }
+        ensure_progress_tracker_table($conn);
+        $stmt = $conn->prepare("
+            UPDATE progress_tracker_steps
+            SET status = 'pending',
+                completed_at = NULL,
+                source_table = NULL,
+                source_id = NULL
+            WHERE student_id = ?
+        ");
+        if ($stmt) {
+            $stmt->bind_param('i', $studentId);
+            $stmt->execute();
+            $stmt->close();
+        }
+    }
+}
+
+if (!function_exists('progress_tracker_build_data_from_rows')) {
+    function progress_tracker_build_data_from_rows(array $rows): array
+    {
+        $progressSteps = [];
+        foreach (progress_tracker_step_definitions() as $stepDef) {
+            $key = $stepDef['key'];
+            $status = $rows[$key]['status'] ?? 'pending';
+            $progressSteps[] = [
+                'label' => $stepDef['label'],
+                'complete' => ($status === 'complete'),
+            ];
+        }
+
+        $firstIncompleteIndex = null;
+        foreach ($progressSteps as $index => $step) {
+            if (empty($step['complete'])) {
+                $firstIncompleteIndex = $index;
+                break;
+            }
+        }
+        foreach ($progressSteps as $index => $step) {
+            if (!empty($step['complete'])) {
+                $progressSteps[$index]['state'] = 'complete';
+            } elseif ($firstIncompleteIndex === $index) {
+                $progressSteps[$index]['state'] = 'current';
+            } else {
+                $progressSteps[$index]['state'] = 'pending';
+            }
+        }
+
+        $completedSteps = 0;
+        foreach ($progressSteps as $step) {
+            if (!empty($step['complete'])) {
+                $completedSteps++;
+            }
+        }
+        $totalSteps = count($progressSteps);
+        $currentStepLabel = $firstIncompleteIndex === null
+            ? 'All steps completed'
+            : ($progressSteps[$firstIncompleteIndex]['label'] ?? 'In progress');
+        $progressPercent = $totalSteps > 0 ? (int)round(($completedSteps / $totalSteps) * 100) : 0;
+        $progressPercent = min(100, max(0, $progressPercent));
+
+        return [
+            'steps' => $progressSteps,
+            'completed' => $completedSteps,
+            'total' => $totalSteps,
+            'current' => $currentStepLabel,
+            'percent' => $progressPercent,
+        ];
+    }
+}
+
+if (!function_exists('progress_tracker_seed_from_legacy')) {
+    function progress_tracker_seed_from_legacy(mysqli $conn, int $studentId, array $legacyData): void
+    {
+        if ($studentId <= 0 || empty($legacyData['steps'])) {
+            return;
+        }
+        $labelMap = progress_tracker_label_to_key_map();
+        foreach ($legacyData['steps'] as $step) {
+            $label = $step['label'] ?? '';
+            if ($label === '' || empty($step['complete'])) {
+                continue;
+            }
+            $key = $labelMap[$label] ?? null;
+            if ($key) {
+                progress_tracker_mark_step_complete($conn, $studentId, $key, 'legacy_seed', null);
+            }
+        }
+    }
+}
+
+if (!function_exists('progress_tracker_student_has_final_routing_passed')) {
+    function progress_tracker_student_has_final_routing_passed(mysqli $conn, int $studentId): bool
+    {
+        if ($studentId <= 0) {
+            return false;
+        }
+        if (!progress_tracker_column_exists($conn, 'final_routing_submissions', 'status')) {
+            return false;
+        }
+        $stmt = $conn->prepare("
+            SELECT 1
+            FROM final_routing_submissions
+            WHERE student_id = ? AND status = 'Passed'
+            LIMIT 1
+        ");
+        if (!$stmt) {
+            return false;
+        }
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $stmt->store_result();
+        $exists = $stmt->num_rows > 0;
+        $stmt->close();
+        return $exists;
+    }
+}
+
 if (!function_exists('progress_tracker_column_exists')) {
     function progress_tracker_column_exists(mysqli $conn, string $table, string $column): bool
     {
@@ -34,8 +336,8 @@ if (!function_exists('progress_tracker_column_exists')) {
     }
 }
 
-if (!function_exists('get_student_progress_tracker_data')) {
-    function get_student_progress_tracker_data(mysqli $conn, int $studentId): ?array
+if (!function_exists('progress_tracker_compute_legacy_data')) {
+    function progress_tracker_compute_legacy_data(mysqli $conn, int $studentId): ?array
     {
         static $cache = [];
         if ($studentId <= 0) {
@@ -411,8 +713,27 @@ if (!function_exists('get_student_progress_tracker_data')) {
                 $stmt->close();
             }
         }
+        if (
+            $finalEndorsementStatus === null
+            && progress_tracker_column_exists($conn, 'final_defense_endorsements', 'id')
+        ) {
+            $stmt = $conn->prepare("
+                SELECT status
+                FROM final_defense_endorsements
+                WHERE student_id = ?
+                ORDER BY submitted_at DESC, id DESC
+                LIMIT 1
+            ");
+            if ($stmt) {
+                $stmt->bind_param('i', $studentId);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                $finalEndorsementStatus = $row ? trim((string)($row['status'] ?? '')) : null;
+                $stmt->close();
+            }
+        }
         $finalEndorsementSubmitted = $finalEndorsementStatus !== null;
-        $finalEndorsementApproved = $finalEndorsementStatus === 'Approved';
+        $finalEndorsementApproved = in_array($finalEndorsementStatus, ['Approved', 'Verified'], true);
 
         $finalHardboundStatus = null;
         if (progress_tracker_column_exists($conn, 'final_hardbound_submissions', 'id')) {
@@ -547,6 +868,40 @@ if (!function_exists('get_student_progress_tracker_data')) {
             'percent' => $progressPercent,
         ];
 
+        return $cache[$studentId];
+    }
+}
+
+if (!function_exists('get_student_progress_tracker_data')) {
+    function get_student_progress_tracker_data(mysqli $conn, int $studentId): ?array
+    {
+        static $cache = [];
+        if ($studentId <= 0) {
+            return null;
+        }
+        if (isset($cache[$studentId])) {
+            return $cache[$studentId];
+        }
+
+        ensure_progress_tracker_table($conn);
+        $existingCount = progress_tracker_count_rows($conn, $studentId);
+        if ($existingCount === 0) {
+            ensure_progress_tracker_rows($conn, $studentId);
+            if (PROGRESS_TRACKER_SEED_ON_EMPTY && function_exists('progress_tracker_compute_legacy_data')) {
+                $legacyData = progress_tracker_compute_legacy_data($conn, $studentId);
+                if ($legacyData) {
+                    progress_tracker_seed_from_legacy($conn, $studentId, $legacyData);
+                }
+            }
+        }
+
+        $rows = progress_tracker_fetch_rows($conn, $studentId);
+        if (!$rows && function_exists('progress_tracker_compute_legacy_data')) {
+            $cache[$studentId] = progress_tracker_compute_legacy_data($conn, $studentId);
+            return $cache[$studentId];
+        }
+
+        $cache[$studentId] = progress_tracker_build_data_from_rows($rows);
         return $cache[$studentId];
     }
 }

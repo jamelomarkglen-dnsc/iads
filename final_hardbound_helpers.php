@@ -7,6 +7,7 @@ require_once 'db.php';
 require_once 'final_routing_helpers.php';
 require_once 'final_concept_helpers.php';
 require_once 'defense_committee_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 define('FINAL_HARDBOUND_UPLOAD_DIR', 'uploads/final_hardbound_submissions/');
 define('FINAL_HARDBOUND_MAX_SIZE', 52428800);
@@ -283,6 +284,7 @@ function upsert_institutional_final_copy(
     chmod($destination_path, 0644);
 
     $existing = fetch_institutional_final_copy_by_hardbound($conn, $hardbound_submission_id);
+    $copyId = 0;
     if ($existing) {
         $stmt = $conn->prepare("
             UPDATE institutional_final_copies
@@ -301,6 +303,7 @@ function upsert_institutional_final_copy(
             @unlink($destination_path);
             return ['success' => false, 'error' => 'Unable to update institutional copy.'];
         }
+        $copyId = $existingId;
 
         $oldPath = (string)($existing['file_path'] ?? '');
         if ($oldPath !== '' && $oldPath !== $destination_path && strpos($oldPath, INSTITUTIONAL_FINAL_COPY_DIR) === 0 && is_file($oldPath)) {
@@ -327,11 +330,21 @@ function upsert_institutional_final_copy(
             $mime_type
         );
         $ok = $stmt->execute();
+        $copyId = (int)$stmt->insert_id;
         $stmt->close();
         if (!$ok) {
             @unlink($destination_path);
             return ['success' => false, 'error' => 'Unable to create institutional copy.'];
         }
+    }
+    if ($student_id > 0 && function_exists('progress_tracker_mark_step_complete')) {
+        progress_tracker_mark_step_complete(
+            $conn,
+            $student_id,
+            'institutional_copy',
+            'institutional_final_copies',
+            $copyId > 0 ? $copyId : null
+        );
     }
 
     return ['success' => true, 'file_path' => $destination_path];
@@ -655,6 +668,15 @@ function create_final_hardbound_submission(
     }
     $new_id = (int)$stmt->insert_id;
     $stmt->close();
+    if (function_exists('progress_tracker_mark_step_complete')) {
+        progress_tracker_mark_step_complete(
+            $conn,
+            $student_id,
+            'final_hardbound_submitted',
+            'final_hardbound_submissions',
+            $new_id
+        );
+    }
     return ['success' => true, 'submission_id' => $new_id];
 }
 
@@ -1035,6 +1057,38 @@ function update_final_hardbound_committee_review(
         $submissionUpdate->execute();
         $submissionUpdate->close();
     }
+    if ($submissionStatus === 'Passed' && function_exists('progress_tracker_mark_step_complete')) {
+        $studentId = 0;
+        $hardboundId = 0;
+        $lookup = $conn->prepare("
+            SELECT s.id, s.student_id
+            FROM final_hardbound_submissions s
+            JOIN final_hardbound_committee_requests r ON r.hardbound_submission_id = s.id
+            WHERE r.id = ?
+            LIMIT 1
+        ");
+        if ($lookup) {
+            $lookup->bind_param('i', $request_id);
+            $lookup->execute();
+            $result = $lookup->get_result();
+            $row = $result ? $result->fetch_assoc() : null;
+            if ($result) {
+                $result->free();
+            }
+            $lookup->close();
+            $hardboundId = (int)($row['id'] ?? 0);
+            $studentId = (int)($row['student_id'] ?? 0);
+        }
+        if ($studentId > 0) {
+            progress_tracker_mark_step_complete(
+                $conn,
+                $studentId,
+                'final_hardbound_passed',
+                'final_hardbound_submissions',
+                $hardboundId > 0 ? $hardboundId : null
+            );
+        }
+    }
 
     return ['success' => true, 'overall_status' => $overall, 'submission_status' => $submissionStatus];
 }
@@ -1177,6 +1231,30 @@ function update_final_hardbound_request(
         $update->bind_param('sisi', $submissionStatus, $program_chair_id, $remarks, $hardbound_submission_id);
         $update->execute();
         $update->close();
+    }
+    if ($status === 'Verified' && function_exists('progress_tracker_mark_step_complete')) {
+        $studentId = 0;
+        $lookup = $conn->prepare("SELECT student_id FROM final_hardbound_submissions WHERE id = ? LIMIT 1");
+        if ($lookup) {
+            $lookup->bind_param('i', $hardbound_submission_id);
+            $lookup->execute();
+            $result = $lookup->get_result();
+            $row = $result ? $result->fetch_assoc() : null;
+            if ($result) {
+                $result->free();
+            }
+            $lookup->close();
+            $studentId = (int)($row['student_id'] ?? 0);
+        }
+        if ($studentId > 0) {
+            progress_tracker_mark_step_complete(
+                $conn,
+                $studentId,
+                'final_hardbound_passed',
+                'final_hardbound_submissions',
+                $hardbound_submission_id
+            );
+        }
     }
     return true;
 }

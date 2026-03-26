@@ -2,6 +2,7 @@
 session_start();
 require_once 'db.php';
 require_once 'notifications_helper.php';
+require_once 'progress_tracker_helper.php';
 
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'], ['student', 'program_chairperson'])) {
     header("Location: login.php");
@@ -86,6 +87,15 @@ if ($role === 'student' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILE
 
             if ($stmt && $stmt->execute()) {
                 $success = 'Payment proof uploaded successfully.';
+                $proofId = $existingId ?: (int)$stmt->insert_id;
+                if (function_exists('progress_tracker_mark_step_complete')) {
+                    progress_tracker_mark_step_complete($conn, $userId, 'payment_submitted', 'payment_proofs', $proofId);
+                    if (function_exists('progress_tracker_student_has_final_routing_passed')
+                        && progress_tracker_student_has_final_routing_passed($conn, $userId)
+                    ) {
+                        progress_tracker_mark_step_complete($conn, $userId, 'final_payment_submitted', 'payment_proofs', $proofId);
+                    }
+                }
                 notify_roles(
                     $conn,
                     ['program_chairperson', 'committee_chairperson', 'committee_chair'],
@@ -149,6 +159,15 @@ if ($role === 'program_chairperson' && $_SERVER['REQUEST_METHOD'] === 'POST' && 
                     $message,
                     'proof_of_payment.php'
                 );
+                if ($newStatus === 'payment_accepted' && function_exists('progress_tracker_mark_step_complete')) {
+                    $studentId = (int)$ownerResult['user_id'];
+                    progress_tracker_mark_step_complete($conn, $studentId, 'payment_verified', 'payment_proofs', $proofId);
+                    if (function_exists('progress_tracker_student_has_final_routing_passed')
+                        && progress_tracker_student_has_final_routing_passed($conn, $studentId)
+                    ) {
+                        progress_tracker_mark_step_complete($conn, $studentId, 'final_payment_verified', 'payment_proofs', $proofId);
+                    }
+                }
             } else {
                 $error = 'Failed to update payment.';
             }

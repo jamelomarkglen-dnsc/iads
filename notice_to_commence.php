@@ -7,6 +7,7 @@ require_once 'chair_scope_helper.php';
 require_once 'final_paper_helpers.php';
 require_once 'defense_committee_helpers.php';
 require_once 'notice_commence_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 enforce_role_access(['program_chairperson']);
 
@@ -139,6 +140,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_notice_commenc
                 $body
             );
             if ($insertStmt->execute()) {
+                $insertId = (int)$insertStmt->insert_id;
+                if (function_exists('progress_tracker_mark_step_complete')) {
+                    progress_tracker_mark_step_complete(
+                        $conn,
+                        $studentId,
+                        'notice_submitted',
+                        'notice_to_commence_requests',
+                        $insertId
+                    );
+                }
                 $message = "{$chairName} submitted a notice to commence request for {$studentName}.";
                 notify_role($conn, 'dean', 'Notice to commence approval needed', $message, 'dean_notice_commence.php');
                 $alert = ['type' => 'success', 'message' => 'Notice to commence sent to the dean for approval.'];

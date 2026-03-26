@@ -6,6 +6,7 @@ require_once 'notifications_helper.php';
 require_once 'final_concept_helpers.php';
 require_once 'final_paper_helpers.php';
 require_once 'route_slip_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 enforce_role_access(['student']);
 
@@ -400,6 +401,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_final_paper'])
                         }
 
                         if ($submissionId > 0 && $error === '') {
+                            if (function_exists('progress_tracker_mark_step_complete')) {
+                                progress_tracker_mark_step_complete(
+                                    $conn,
+                                    $studentId,
+                                    'outline_submitted',
+                                    'final_paper_submissions',
+                                    $submissionId
+                                );
+                            }
                             replaceFinalPaperReviews($conn, $submissionId, $reviewers);
                             if ($hasNewRouteSlip) {
                                 reset_route_slip_reviews($conn, $submissionId);

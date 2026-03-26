@@ -5,6 +5,7 @@ require_once 'notifications_helper.php';
 require_once 'defense_committee_helpers.php';
 require_once 'defense_schedule_helpers.php';
 require_once 'role_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'dean') {
     header("Location: login.php");
@@ -283,6 +284,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_committee_requ
                     $panelOneId = (int)($requestInfo['panel_member_one_id'] ?? 0);
                     $panelTwoId = (int)($requestInfo['panel_member_two_id'] ?? 0);
                     $studentId = (int)($requestInfo['student_id'] ?? 0);
+                    if ($decision === 'Approved' && $studentId > 0 && function_exists('progress_tracker_mark_step_complete')) {
+                        progress_tracker_mark_step_complete(
+                            $conn,
+                            $studentId,
+                            'committee_memo_issued',
+                            'defense_committee_requests',
+                            $requestId
+                        );
+                    }
                     $memoLink = 'defense_committee_memo.php?request_id=' . $requestId;
                     $adviserName = fetch_user_fullname($conn, $adviserId);
                     $chairName = fetch_user_fullname($conn, $committeeChairId);
