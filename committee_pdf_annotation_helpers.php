@@ -20,7 +20,7 @@ function create_committee_annotation(
     float $position_width = 5,
     float $position_height = 5
 ): array {
-    $valid_types = ['comment', 'highlight', 'suggestion'];
+    $valid_types = ['comment'];
     if (!in_array($annotation_type, $valid_types, true)) {
         return ['success' => false, 'error' => 'Invalid annotation type.'];
     }
@@ -106,7 +106,7 @@ function fetch_committee_submission_annotations(mysqli $conn, int $submission_id
             a.created_at AS creation_timestamp
         FROM committee_pdf_annotations a
         LEFT JOIN users u ON u.id = a.reviewer_id
-        WHERE a.submission_id = ?
+        WHERE a.submission_id = ? AND a.annotation_type = 'comment'
         ORDER BY a.page_number ASC, a.annotation_id ASC
     ");
     if (!$stmt) {
@@ -134,7 +134,7 @@ function fetch_committee_page_annotations(mysqli $conn, int $submission_id, int 
             a.created_at AS creation_timestamp
         FROM committee_pdf_annotations a
         LEFT JOIN users u ON u.id = a.reviewer_id
-        WHERE a.submission_id = ? AND a.page_number = ?
+        WHERE a.submission_id = ? AND a.page_number = ? AND a.annotation_type = 'comment'
         ORDER BY a.annotation_id ASC
     ");
     if (!$stmt) {
@@ -284,7 +284,7 @@ function get_committee_annotation_statistics(mysqli $conn, int $submission_id): 
             SUM(CASE WHEN a.annotation_type = 'highlight' THEN 1 ELSE 0 END) AS highlight_count,
             SUM(CASE WHEN a.annotation_type = 'suggestion' THEN 1 ELSE 0 END) AS suggestion_count
         FROM committee_pdf_annotations a
-        WHERE a.submission_id = ?
+        WHERE a.submission_id = ? AND a.annotation_type = 'comment'
     ");
     if (!$stmt) {
         return [];

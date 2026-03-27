@@ -228,6 +228,9 @@ class PDFViewer {
      * Create annotation overlay element
      */
     createAnnotationOverlay(annotation) {
+        if (annotation.annotation_type !== 'comment') {
+            return null;
+        }
         const overlay = document.createElement('div');
         overlay.className = 'annotation-overlay';
         overlay.dataset.annotationId = annotation.annotation_id;
@@ -245,21 +248,9 @@ class PDFViewer {
         overlay.style.minWidth = '30px';
         overlay.style.minHeight = '30px';
         
-        // Set color based on type
-        const colors = {
-            'comment': 'rgba(255, 193, 7, 0.3)',
-            'highlight': 'rgba(255, 255, 0, 0.4)',
-            'suggestion': 'rgba(135, 206, 235, 0.3)'
-        };
-        overlay.style.backgroundColor = colors[annotation.annotation_type] || colors['comment'];
-        
-        // Add border for better visibility
-        const borderColors = {
-            'comment': '#ffc107',
-            'highlight': '#ffeb3b',
-            'suggestion': '#17a2b8'
-        };
-        overlay.style.border = `2px solid ${borderColors[annotation.annotation_type] || '#ffc107'}`;
+        // Comment styling
+        overlay.style.backgroundColor = 'rgba(255, 193, 7, 0.3)';
+        overlay.style.border = '2px solid #ffc107';
         overlay.style.borderRadius = '4px';
         
         // Add click handler to highlight in sidebar

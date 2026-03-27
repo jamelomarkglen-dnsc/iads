@@ -134,12 +134,6 @@ $stats = get_committee_annotation_statistics($conn, $submission_id);
                         <button class="annotation-tool-btn" data-tool="comment" title="Add Comment">
                             <i class="bi bi-chat-dots"></i>
                         </button>
-                        <button class="annotation-tool-btn" data-tool="highlight" title="Highlight Text">
-                            <i class="bi bi-highlighter"></i>
-                        </button>
-                        <button class="annotation-tool-btn" data-tool="suggestion" title="Add Suggestion">
-                            <i class="bi bi-lightbulb"></i>
-                        </button>
                         <div class="ms-auto d-flex gap-2">
                             <button class="btn btn-sm btn-outline-secondary" id="prevPageBtn">Prev</button>
                             <button class="btn btn-sm btn-outline-secondary" id="nextPageBtn">Next</button>
@@ -270,8 +264,6 @@ $stats = get_committee_annotation_statistics($conn, $submission_id);
             <label>Annotation Type</label>
             <select name="annotation_type">
                 <option value="comment">Comment</option>
-                <option value="highlight">Highlight</option>
-                <option value="suggestion">Suggestion</option>
             </select>
         </div>
         <div class="annotation-form-group">

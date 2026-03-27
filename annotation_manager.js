@@ -266,19 +266,8 @@ class AnnotationManager {
         this.dragPreview.style.boxSizing = 'border-box';
         
         // Set color based on tool type
-        const colors = {
-            'comment': 'rgba(255, 193, 7, 0.3)',
-            'highlight': 'rgba(255, 255, 0, 0.4)',
-            'suggestion': 'rgba(135, 206, 235, 0.3)'
-        };
-        this.dragPreview.style.backgroundColor = colors[this.selectedTool] || colors['comment'];
-        
-        const borderColors = {
-            'comment': '#ffc107',
-            'highlight': '#ffeb3b',
-            'suggestion': '#17a2b8'
-        };
-        this.dragPreview.style.border = `2px dashed ${borderColors[this.selectedTool] || '#ffc107'}`;
+        this.dragPreview.style.backgroundColor = 'rgba(255, 193, 7, 0.3)';
+        this.dragPreview.style.border = '2px dashed #ffc107';
         this.dragPreview.style.borderRadius = '4px';
         
         // Add to canvas wrapper
@@ -464,7 +453,7 @@ class AnnotationManager {
             const result = await response.json();
             
             if (result.success) {
-                const newAnnotations = result.annotations || [];
+                const newAnnotations = (result.annotations || []).filter(annotation => annotation.annotation_type === 'comment');
                 const hasChanges = this.detectAnnotationChanges(newAnnotations);
                 
                 this.annotations = newAnnotations;
@@ -1104,12 +1093,7 @@ class AnnotationManager {
      * Get annotation type label
      */
     getTypeLabel(type) {
-        const labels = {
-            'comment': 'Comment',
-            'highlight': 'Highlight',
-            'suggestion': 'Suggestion'
-        };
-        return labels[type] || type;
+        return 'Comment';
     }
     
     /**

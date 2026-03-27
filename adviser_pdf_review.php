@@ -473,17 +473,11 @@ if ($submission['submission_status'] === 'pending') {
                     
                     <!-- Annotation Toolbar - ANNOTATION TOOLS ARE HERE -->
                     <div class="pdf-toolbar">
-                        <div class="annotation-toolbar">
-                            <button class="annotation-tool-btn" data-tool="comment" title="Add Comment">
-                                <i class="bi bi-chat-left-text"></i> Comment
-                            </button>
-                            <button class="annotation-tool-btn" data-tool="highlight" title="Highlight Text">
-                                <i class="bi bi-highlighter"></i> Highlight
-                            </button>
-                            <button class="annotation-tool-btn" data-tool="suggestion" title="Add Suggestion">
-                                <i class="bi bi-lightbulb"></i> Suggestion
-                            </button>
-                        </div>
+                    <div class="annotation-toolbar">
+                        <button class="annotation-tool-btn" data-tool="comment" title="Add Comment">
+                            <i class="bi bi-chat-left-text"></i> Comment
+                        </button>
+                    </div>
                     </div>
                     
                     <!-- PDF Canvas Container -->
@@ -514,8 +508,6 @@ if ($submission['submission_status'] === 'pending') {
                 <label>Type</label>
                 <select name="annotation_type">
                     <option value="comment">Comment</option>
-                    <option value="highlight">Highlight</option>
-                    <option value="suggestion">Suggestion</option>
                 </select>
             </div>
             <div class="annotation-form-group">
