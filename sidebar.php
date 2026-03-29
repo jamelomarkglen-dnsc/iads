@@ -41,6 +41,7 @@ if (!function_exists('ensure_sidebar_user_settings')) {
             'notify_enabled' => "ALTER TABLE users ADD COLUMN notify_enabled TINYINT(1) NOT NULL DEFAULT 1 AFTER email",
             'timezone' => "ALTER TABLE users ADD COLUMN timezone VARCHAR(64) DEFAULT NULL AFTER notify_enabled",
             'sidebar_compact' => "ALTER TABLE users ADD COLUMN sidebar_compact TINYINT(1) NOT NULL DEFAULT 0 AFTER timezone",
+            'signature_path' => "ALTER TABLE users ADD COLUMN signature_path VARCHAR(255) DEFAULT NULL AFTER photo",
         ];
         foreach ($columns as $column => $sql) {
             if (!sidebar_user_column_exists($conn, $column)) {
@@ -77,6 +78,7 @@ $userProfile = [
     'year_level' => '',
     'specialization' => '',
     'photo' => '',
+    'signature_path' => '',
     'created_at' => '',
     'notify_enabled' => 1,
     'timezone' => '',
@@ -132,6 +134,9 @@ if ($userId) {
     if (sidebar_user_column_exists($conn, 'notify_enabled')) {
         $columns[] = 'notify_enabled';
     }
+    if (sidebar_user_column_exists($conn, 'signature_path')) {
+        $columns[] = 'signature_path';
+    }
     if (sidebar_user_column_exists($conn, 'timezone')) {
         $columns[] = 'timezone';
     }
@@ -174,6 +179,7 @@ if ($userId) {
                     $userProfile['specialization'] = (string)($row['specialization'] ?? '');
                 }
                 $userProfile['photo'] = (string)($row['photo'] ?? '');
+                $userProfile['signature_path'] = (string)($row['signature_path'] ?? '');
                 $userProfile['created_at'] = (string)($row['created_at'] ?? '');
                 $userProfile['notify_enabled'] = isset($row['notify_enabled']) ? (int)$row['notify_enabled'] : 1;
                 $userProfile['timezone'] = (string)($row['timezone'] ?? '');
@@ -259,6 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['account_settings_acti
     }
 
     $avatarUpdated = false;
+    $avatarFilePath = '';
     if (isset($_FILES['avatar']) && ($_FILES['avatar']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
         $fileInfo = $_FILES['avatar'];
         if (($fileInfo['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
@@ -286,8 +293,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['account_settings_acti
                     $params[] = $filePath;
                     $types .= 's';
                     $avatarUpdated = true;
+                    $avatarFilePath = $filePath;
                 }
             }
+        }
+    }
+
+    $signatureUpdated = false;
+    $signatureFilePath = '';
+    if (isset($_FILES['signature']) && ($_FILES['signature']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        $fileInfo = $_FILES['signature'];
+        if (($fileInfo['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            $errors[] = 'Unable to upload the signature image.';
+        } elseif (!isset($fileInfo['size']) || $fileInfo['size'] > 1048576) {
+            $errors[] = 'Signature image must be 1MB or smaller.';
+        } else {
+            $extension = strtolower(pathinfo($fileInfo['name'] ?? '', PATHINFO_EXTENSION));
+            $allowed = ['jpg', 'jpeg', 'png'];
+            if (!in_array($extension, $allowed, true)) {
+                $errors[] = 'Signature must be a JPG or PNG image.';
+            } else {
+                $uploadDir = 'uploads/signatures/';
+                if (!is_dir($uploadDir)) {
+                    mkdir($uploadDir, 0777, true);
+                }
+                $safeName = preg_replace('/[^A-Za-z0-9._-]/', '_', basename($fileInfo['name']));
+                $filename = 'signature_' . $userId . '_' . date('Ymd_His') . '_' . $safeName;
+                $filePath = $uploadDir . $filename;
+                if (!move_uploaded_file($fileInfo['tmp_name'], $filePath)) {
+                    $errors[] = 'Unable to save the signature image.';
+                } else {
+                    if (!empty($userProfile['signature_path']) && $userProfile['signature_path'] !== $filePath && file_exists($userProfile['signature_path'])) {
+                        @unlink($userProfile['signature_path']);
+                    }
+                    $updates[] = 'signature_path = ?';
+                    $params[] = $filePath;
+                    $types .= 's';
+                    $signatureUpdated = true;
+                    $signatureFilePath = $filePath;
+                }
+            }
+        }
+    }
+
+    if (sidebar_user_column_exists($conn, 'signature_path')) {
+        $currentSignature = $userProfile['signature_path'] ?? '';
+        if ($currentSignature === '' && !$signatureUpdated) {
+            $errors[] = 'Signature is required. Please upload your e-signature.';
         }
     }
 
@@ -307,7 +359,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['account_settings_acti
                 $userProfile['notify_enabled'] = $notifyEnabled;
                 $userProfile['sidebar_compact'] = $sidebarCompact;
                 if ($avatarUpdated) {
-                    $userProfile['photo'] = $filePath;
+                    $userProfile['photo'] = $avatarFilePath;
+                }
+                if ($signatureUpdated) {
+                    $userProfile['signature_path'] = $signatureFilePath;
                 }
                 $userFullName = trim($firstName . ' ' . $lastName);
                 $_SESSION['user_fullname'] = $userFullName;
@@ -403,6 +458,8 @@ $roleList = array_filter($roleList);
 if (empty($roleList) && $role !== '') {
     $roleList = [$userRoleLabel];
 }
+$signaturePath = $userProfile['signature_path'] !== '' ? $userProfile['signature_path'] : '';
+$signatureMissing = $signaturePath === '';
 $userLastLoginLabel = $userLastLogin !== '' ? $userLastLogin : 'Not tracked';
 $lastLoginLabel = 'Not tracked';
 if ($userLastLogin !== '') {
@@ -808,6 +865,11 @@ if ($userLastLogin !== '') {
                             <?php echo htmlspecialchars($accountSettingsMessage['text']); ?>
                         </div>
                     <?php endif; ?>
+                    <?php if ($signatureMissing): ?>
+                        <div class="alert alert-warning">
+                            A signature is required for all roles. Please upload your e-signature before proceeding.
+                        </div>
+                    <?php endif; ?>
 
                     <div class="account-settings-section">
                         <h6 class="text-uppercase text-muted small">Profile Info</h6>
@@ -889,6 +951,26 @@ if ($userLastLogin !== '') {
                                 <label class="form-label">Upload New Avatar</label>
                                 <input type="file" name="avatar" class="form-control" accept=".jpg,.jpeg,.png,.webp">
                                 <div class="form-text">Accepted formats: JPG, PNG, WEBP.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="account-settings-section">
+                        <h6 class="text-uppercase text-muted small">E-Signature</h6>
+                        <div class="row g-3 align-items-center">
+                            <div class="col-md-4 text-center">
+                                <?php if ($signaturePath !== ''): ?>
+                                    <img src="<?php echo htmlspecialchars($signaturePath); ?>" alt="Signature preview" class="border rounded" style="width: 100%; max-width: 220px; height: 90px; object-fit: contain; background: #fff;">
+                                <?php else: ?>
+                                    <div class="border rounded d-flex align-items-center justify-content-center text-muted" style="width: 100%; max-width: 220px; height: 90px; background: #fff;">
+                                        No signature uploaded
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label">Upload Signature (Required)</label>
+                                <input type="file" name="signature" class="form-control" accept=".jpg,.jpeg,.png">
+                                <div class="form-text">Recommended: 600x200px PNG with transparent background. Max size: 1MB.</div>
                             </div>
                         </div>
                     </div>
