@@ -8,6 +8,7 @@ require_once 'final_paper_helpers.php';
 require_once 'defense_committee_helpers.php';
 require_once 'notice_commence_helpers.php';
 require_once 'progress_tracker_helper.php';
+require_once 'e_signature_helpers.php';
 
 enforce_role_access(['program_chairperson']);
 
@@ -32,13 +33,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_notice_commenc
     $body = trim((string)($_POST['notice_body'] ?? ''));
 
     $errors = [];
-    $signatureError = '';
-    if (isset($_FILES['chair_signature'])) {
-        save_notice_signature_upload($_FILES['chair_signature'], $chairId, $signatureError);
-        if ($signatureError !== '') {
-            $errors[] = $signatureError;
-        }
-    }
+    require_user_signature(
+        $conn,
+        $chairId,
+        $errors,
+        'Please upload your e-signature in Account Settings before submitting the notice to commence.'
+    );
     if ($submissionId <= 0 || $studentId <= 0) {
         $errors[] = 'Please select an approved submission.';
     }
@@ -221,6 +221,8 @@ if ($submissionStmt) {
     $submissionStmt->close();
 }
 
+$chairSignaturePath = get_user_signature_path($conn, $chairId);
+
 $recentNotices = [];
 $recentStmt = $conn->prepare("
     SELECT n.id, n.status, n.notice_date, n.created_at, n.student_id, n.submission_id,
@@ -399,9 +401,13 @@ include 'sidebar.php';
                         </div>
 
                         <div class="mt-3">
-                            <label class="form-label">Program Chairperson E-Signature (PNG or JPG)</label>
-                            <input type="file" name="chair_signature" class="form-control" accept="image/png,image/jpeg">
-                            <div class="small-muted mt-1">Upload once; it will appear on the printed notice.</div>
+                            <label class="form-label">Program Chairperson E-Signature</label>
+                            <?php if ($chairSignaturePath !== ''): ?>
+                                <div class="small-muted mt-1">Using your Account Settings signature.</div>
+                                <img src="<?= htmlspecialchars($chairSignaturePath); ?>" alt="Program chairperson e-signature" style="max-height: 70px; max-width: 180px; object-fit: contain;">
+                            <?php else: ?>
+                                <div class="small-muted mt-1 text-danger">No signature on file. Please upload your e-signature in Account Settings.</div>
+                            <?php endif; ?>
                         </div>
 
                         <div class="d-flex justify-content-end mt-4">

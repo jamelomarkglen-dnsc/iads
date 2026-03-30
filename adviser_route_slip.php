@@ -7,6 +7,7 @@ require_once 'final_concept_helpers.php';
 require_once 'route_slip_helpers.php';
 require_once 'final_paper_helpers.php';
 require_once 'notice_commence_helpers.php';
+require_once 'e_signature_helpers.php';
 
 enforce_role_access(['adviser']);
 
@@ -190,19 +191,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_route_slip']))
         $errors[] = 'Unable to generate the route slip PDF.';
     }
 
-    $signaturePath = '';
-    if (isset($_FILES['signature_image']) && ($_FILES['signature_image']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
-        $signatureDir = 'uploads/signatures/';
-        if (!is_dir($signatureDir)) {
-            mkdir($signatureDir, 0777, true);
-        }
-        $sigName = preg_replace('/[^A-Za-z0-9._-]/', '_', basename($_FILES['signature_image']['name']));
-        $sigFile = 'signature_' . $advisorId . '_' . date('Ymd_His') . '_' . $sigName;
-        $sigPath = $signatureDir . $sigFile;
-        if (move_uploaded_file($_FILES['signature_image']['tmp_name'], $sigPath)) {
-            $signaturePath = $sigPath;
-        }
-    }
+    $signaturePath = require_user_signature(
+        $conn,
+        $advisorId,
+        $errors,
+        'Please upload your e-signature in Account Settings before generating the route slip.'
+    );
 
     if ($errors) {
         $alert = ['type' => 'danger', 'message' => implode(' ', $errors)];
@@ -300,16 +294,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['finalize_route_slip']
         $errors[] = 'Unable to verify adviser assignment.';
     }
 
-    $signatureError = '';
-    $signaturePath = '';
-    if (isset($_FILES['final_signature'])) {
-        $signaturePath = save_notice_signature_upload($_FILES['final_signature'], $advisorId, $signatureError);
-        if ($signatureError !== '') {
-            $errors[] = $signatureError;
-        }
-    } else {
-        $errors[] = 'Please upload your signature.';
-    }
+    $signaturePath = require_user_signature(
+        $conn,
+        $advisorId,
+        $errors,
+        'Please upload your e-signature in Account Settings before finalizing the route slip.'
+    );
 
     if ($pdfData === '') {
         $errors[] = 'Unable to generate the signed route slip PDF.';
@@ -489,12 +479,14 @@ foreach ($pendingFinalSignatures as $pending) {
     usort($panelSignatures, function ($a, $b) {
         return $a['id'] <=> $b['id'];
     });
-    $finalizeSignaturePaths[$submissionId] = [
+$finalizeSignaturePaths[$submissionId] = [
         'panel1' => $panelSignatures[0]['path'] ?? '',
         'panel2' => $panelSignatures[1]['path'] ?? '',
         'chair' => $chairSignature,
     ];
 }
+
+$advisorSignaturePath = get_user_signature_path($conn, $advisorId);
 
 include 'header.php';
 include 'sidebar.php';
@@ -606,9 +598,13 @@ include 'sidebar.php';
                         </div>
 
                         <div class="mt-3">
-                            <label class="form-label">Signature (PNG or JPG)</label>
-                            <input type="file" name="signature_image" id="signatureImage" class="form-control" accept="image/png,image/jpeg">
-                            <div class="small-muted mt-1">Signature will be embedded into the generated PDF.</div>
+                            <label class="form-label">Signature</label>
+                            <?php if ($advisorSignaturePath !== ''): ?>
+                                <div class="small-muted mt-1">Using your Account Settings signature.</div>
+                                <img src="<?= htmlspecialchars($advisorSignaturePath); ?>" alt="Adviser e-signature" style="max-height: 70px; max-width: 180px; object-fit: contain;">
+                            <?php else: ?>
+                                <div class="small-muted mt-1 text-danger">No signature on file. Please upload your e-signature in Account Settings.</div>
+                            <?php endif; ?>
                         </div>
 
                         <div class="d-flex justify-content-end mt-4">
@@ -621,7 +617,7 @@ include 'sidebar.php';
 
                 <div class="card card-shell p-4 mt-4">
                     <h5 class="fw-bold text-success mb-3">Finalize Route Slip Signatures</h5>
-                    <p class="text-muted small mb-3">Once the committee has signed, upload your final signature to complete the route slip.</p>
+                    <p class="text-muted small mb-3">Once the committee has signed, your account signature will be applied to complete the route slip.</p>
                     <?php if ($finalizeAlert): ?>
                         <div class="alert alert-<?= htmlspecialchars($finalizeAlert['type']); ?>">
                             <?= htmlspecialchars($finalizeAlert['message']); ?>
@@ -642,13 +638,18 @@ include 'sidebar.php';
                                 <div class="border rounded-3 p-3">
                                     <div class="fw-semibold"><?= htmlspecialchars($studentName ?: 'Student'); ?></div>
                                     <div class="small text-muted mb-2">Committee signed on <?= htmlspecialchars($signedAt); ?></div>
-                                    <form class="finalize-route-slip-form" method="post" enctype="multipart/form-data" data-submission-id="<?= $pendingId; ?>">
+                                    <form class="finalize-route-slip-form" method="post" data-submission-id="<?= $pendingId; ?>">
                                         <input type="hidden" name="finalize_route_slip" value="1">
                                         <input type="hidden" name="submission_id" value="<?= $pendingId; ?>">
                                         <input type="hidden" name="final_route_slip_pdf" id="finalRouteSlipPdf<?= $pendingId; ?>">
                                         <div class="mb-2">
-                                            <label class="form-label small text-muted mb-1">Final Adviser Signature (PNG or JPG)</label>
-                                            <input type="file" name="final_signature" class="form-control form-control-sm final-signature-input" accept="image/png,image/jpeg" required>
+                                            <label class="form-label small text-muted mb-1">Final Adviser Signature</label>
+                                            <?php if ($advisorSignaturePath !== ''): ?>
+                                                <div class="small text-muted">Using your Account Settings signature.</div>
+                                                <img src="<?= htmlspecialchars($advisorSignaturePath); ?>" alt="Adviser e-signature" style="max-height: 60px; max-width: 160px; object-fit: contain;">
+                                            <?php else: ?>
+                                                <div class="small text-danger">No signature on file. Please upload your e-signature in Account Settings.</div>
+                                            <?php endif; ?>
                                         </div>
                                         <button type="submit" class="btn btn-success btn-sm">
                                             <i class="bi bi-pen me-1"></i>Sign &amp; Send to Student
@@ -708,11 +709,11 @@ const studentSelect = document.getElementById('studentSelect');
 const courseInput = document.getElementById('courseInput');
 const titleInput = document.getElementById('titleInput');
 const slipDateInput = document.getElementById('slipDate');
-const signatureInput = document.getElementById('signatureImage');
 const routeSlipPdf = document.getElementById('routeSlipPdf');
 const routeSlipForm = document.getElementById('routeSlipForm');
 const letterheadSource = document.getElementById('routeSlipLetterheadSource');
 const adviserName = <?php echo json_encode($advisorName); ?>;
+const adviserSignaturePath = <?php echo json_encode($advisorSignaturePath); ?>;
 const finalizeRouteSlipData = <?php echo json_encode($finalizeRouteSlipData, JSON_UNESCAPED_UNICODE); ?>;
 const finalizeSignaturePaths = <?php echo json_encode($finalizeSignaturePaths, JSON_UNESCAPED_UNICODE); ?>;
 
@@ -1066,25 +1067,20 @@ if (routeSlipForm) {
             alert('Please select a student.');
             return;
         }
+        if (!adviserSignaturePath) {
+            alert('Please upload your e-signature in Account Settings.');
+            return;
+        }
         if (!window.jspdf || !window.jspdf.jsPDF) {
             alert('Unable to load the PDF generator. Please refresh and try again.');
             return;
         }
         const proceed = () => {
-            const file = signatureInput.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    const pdfData = buildRouteSlipPdf(reader.result);
-                    routeSlipPdf.value = pdfData;
-                    routeSlipForm.submit();
-                };
-                reader.readAsDataURL(file);
-            } else {
-                const pdfData = buildRouteSlipPdf('');
+            loadImageAsDataUrl(adviserSignaturePath).then((signatureDataUrl) => {
+                const pdfData = buildRouteSlipPdf(signatureDataUrl || '');
                 routeSlipPdf.value = pdfData;
                 routeSlipForm.submit();
-            }
+            });
         };
         if (letterheadSource && !letterheadSource.complete) {
             letterheadSource.addEventListener('load', proceed, { once: true });
@@ -1098,30 +1094,30 @@ if (routeSlipForm) {
 document.querySelectorAll('.finalize-route-slip-form').forEach((form) => {
     form.addEventListener('submit', (event) => {
         event.preventDefault();
+        if (!adviserSignaturePath) {
+            alert('Please upload your e-signature in Account Settings.');
+            return;
+        }
         if (!window.jspdf || !window.jspdf.jsPDF) {
             alert('Unable to load the PDF generator. Please refresh and try again.');
             return;
         }
         const submissionId = form.dataset.submissionId;
-        const signatureInputField = form.querySelector('.final-signature-input');
         const pdfField = form.querySelector('input[name="final_route_slip_pdf"]');
-        if (!submissionId || !signatureInputField || !signatureInputField.files.length || !pdfField) {
-            alert('Please upload your signature.');
+        if (!submissionId || !pdfField) {
+            alert('Unable to prepare the signed route slip.');
             return;
         }
         const proceed = () => {
-            const file = signatureInputField.files[0];
-            const reader = new FileReader();
-            reader.onload = async () => {
-                const pdfData = await buildSignedRouteSlipPdf(submissionId, reader.result);
+            loadImageAsDataUrl(adviserSignaturePath).then(async (signatureDataUrl) => {
+                const pdfData = await buildSignedRouteSlipPdf(submissionId, signatureDataUrl || '');
                 if (!pdfData) {
                     alert('Unable to generate the signed route slip. Please try again.');
                     return;
                 }
                 pdfField.value = pdfData;
                 form.submit();
-            };
-            reader.readAsDataURL(file);
+            });
         };
         if (letterheadSource && !letterheadSource.complete) {
             letterheadSource.addEventListener('load', proceed, { once: true });

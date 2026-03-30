@@ -4,6 +4,7 @@ require_once 'db.php';
 require_once 'role_helpers.php';
 require_once 'final_paper_helpers.php';
 require_once 'notice_commence_helpers.php';
+require_once 'e_signature_helpers.php';
 
 $allowedRoles = ['dean', 'program_chairperson', 'student'];
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', $allowedRoles, true)) {
@@ -71,22 +72,6 @@ function notice_status_badge(string $status): string
     ][$status] ?? 'bg-secondary-subtle text-secondary';
 }
 
-function resolve_notice_signature_path(?int $userId): string
-{
-    if (!$userId) {
-        return '';
-    }
-
-    $base = 'uploads/signatures/user_' . $userId;
-    foreach (['png', 'jpg', 'jpeg'] as $ext) {
-        $path = $base . '.' . $ext;
-        if (is_file($path)) {
-            return $path;
-        }
-    }
-
-    return '';
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -208,9 +193,9 @@ function resolve_notice_signature_path(?int $userId): string
             $deanApproved = $status === 'Approved';
             $deanName = $notice['dean_name'] ?? 'Dean, Institute of Advanced Studies';
             $deanDisplay = $deanApproved ? $deanName : 'Pending approval';
-            $chairSignaturePath = resolve_notice_signature_path((int)($notice['program_chair_id'] ?? 0));
+            $chairSignaturePath = get_user_signature_path($conn, (int)($notice['program_chair_id'] ?? 0));
             $deanSignaturePath = $deanApproved
-                ? resolve_notice_signature_path((int)($notice['dean_id'] ?? 0))
+                ? get_user_signature_path($conn, (int)($notice['dean_id'] ?? 0))
                 : '';
             ?>
             <div class="card notice-card">
@@ -256,7 +241,7 @@ function resolve_notice_signature_path(?int $userId): string
                                 <?php if ($chairSignaturePath !== ''): ?>
                                     <img src="<?= htmlspecialchars($chairSignaturePath); ?>" alt="Program chairperson e-signature" class="signature-image">
                                 <?php else: ?>
-                                    <div class="signature-placeholder">E-Signature on file</div>
+                                    <div class="signature-placeholder">No signature on file</div>
                                 <?php endif; ?>
                                 <div class="signature-line"></div>
                                 <div class="fw-semibold"><?= htmlspecialchars($chairName); ?></div>
@@ -269,7 +254,7 @@ function resolve_notice_signature_path(?int $userId): string
                                 <?php if ($deanSignaturePath !== ''): ?>
                                     <img src="<?= htmlspecialchars($deanSignaturePath); ?>" alt="Dean e-signature" class="signature-image">
                                 <?php else: ?>
-                                    <div class="signature-placeholder"><?= htmlspecialchars($deanApproved ? 'E-Signature on file' : 'Pending approval'); ?></div>
+                                    <div class="signature-placeholder"><?= htmlspecialchars($deanApproved ? 'No signature on file' : 'Pending approval'); ?></div>
                                 <?php endif; ?>
                                 <div class="signature-line"></div>
                                 <div class="fw-semibold"><?= htmlspecialchars($deanDisplay); ?></div>

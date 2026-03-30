@@ -6,6 +6,7 @@ require_once 'defense_committee_helpers.php';
 require_once 'defense_schedule_helpers.php';
 require_once 'role_helpers.php';
 require_once 'progress_tracker_helper.php';
+require_once 'e_signature_helpers.php';
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'dean') {
     header("Location: login.php");
@@ -224,7 +225,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_committee_requ
                 }
             }
             if ($decision === 'Approved') {
-                if ($memoNumber === '' || $memoDate === null || $memoSubject === '' || $memoBody === '') {
+                $signatureErrors = [];
+                require_user_signature(
+                    $conn,
+                    $deanId,
+                    $signatureErrors,
+                    'Please upload your e-signature in Account Settings before approving the memo.'
+                );
+                if ($signatureErrors) {
+                    $alert = ['type' => 'danger', 'message' => implode(' ', $signatureErrors)];
+                } elseif ($memoNumber === '' || $memoDate === null || $memoSubject === '' || $memoBody === '') {
                     $alert = ['type' => 'danger', 'message' => 'Memo number, date, subject, and body are required before approving.'];
                 }
             }

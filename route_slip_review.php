@@ -6,6 +6,7 @@ require_once 'notifications_helper.php';
 require_once 'final_paper_helpers.php';
 require_once 'notice_commence_helpers.php';
 require_once 'progress_tracker_helper.php';
+require_once 'e_signature_helpers.php';
 
 $allowedRoles = ['adviser', 'panel', 'committee_chairperson', 'committee_chair'];
 enforce_role_access($allowedRoles);
@@ -184,42 +185,30 @@ $reviewError = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_route_slip_review'])) {
     $newStatus = trim($_POST['route_slip_status'] ?? '');
     $comments = trim($_POST['route_slip_comments'] ?? '');
-    $signatureError = '';
-    $signaturePath = '';
-    if (isset($_FILES['route_slip_signature'])) {
-        $signaturePath = save_notice_signature_upload($_FILES['route_slip_signature'], $reviewerId, $signatureError);
-        if ($signatureError !== '') {
-            $reviewError = $signatureError;
-        }
+    $signatureErrors = [];
+    $signaturePath = require_user_signature(
+        $conn,
+        $reviewerId,
+        $signatureErrors,
+        'Please upload your e-signature in Account Settings before submitting the route slip review.'
+    );
+    if ($signatureErrors) {
+        $reviewError = implode(' ', $signatureErrors);
     }
 
     if ($reviewError === '' && !in_array($newStatus, ['Approved', 'Minor Revision', 'Major Revision'], true)) {
         $reviewError = 'Please choose a valid route slip decision.';
     } elseif ($reviewError === '') {
-        if ($signaturePath !== '') {
-            $stmt = $conn->prepare("
-                UPDATE final_paper_reviews
-                SET route_slip_status = ?,
-                    route_slip_comments = ?,
-                    route_slip_signature_path = ?,
-                    route_slip_reviewed_at = NOW()
-                WHERE submission_id = ? AND reviewer_id = ?
-            ");
-        } else {
-            $stmt = $conn->prepare("
-                UPDATE final_paper_reviews
-                SET route_slip_status = ?,
-                    route_slip_comments = ?,
-                    route_slip_reviewed_at = NOW()
-                WHERE submission_id = ? AND reviewer_id = ?
-            ");
-        }
+        $stmt = $conn->prepare("
+            UPDATE final_paper_reviews
+            SET route_slip_status = ?,
+                route_slip_comments = ?,
+                route_slip_signature_path = ?,
+                route_slip_reviewed_at = NOW()
+            WHERE submission_id = ? AND reviewer_id = ?
+        ");
         if ($stmt) {
-            if ($signaturePath !== '') {
-                $stmt->bind_param('sssii', $newStatus, $comments, $signaturePath, $submissionId, $reviewerId);
-            } else {
-                $stmt->bind_param('ssii', $newStatus, $comments, $submissionId, $reviewerId);
-            }
+            $stmt->bind_param('sssii', $newStatus, $comments, $signaturePath, $submissionId, $reviewerId);
             if ($stmt->execute()) {
                 $reviewSuccess = 'Route slip review saved successfully.';
                 $reviewRow = fetchFinalPaperReviewForUser($conn, $submissionId, $reviewerId);
@@ -535,6 +524,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_overall_route_sl
     }
 }
 
+$reviewerSignaturePath = get_user_signature_path($conn, $reviewerId);
+
 include 'header.php';
 include 'sidebar.php';
 $selectedRouteSlipStatus = $reviewRow['route_slip_status'] ?? '';
@@ -628,18 +619,12 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
                             <textarea name="route_slip_comments" class="form-control" rows="4"><?= htmlspecialchars($reviewRow['route_slip_comments'] ?? ''); ?></textarea>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-semibold text-success">E-Signature (PNG or JPG)</label>
-                            <input type="file" name="route_slip_signature" class="form-control" accept="image/png,image/jpeg">
-                            <div class="form-text">Upload your e-signature for the route slip.</div>
-                            <?php if (!empty($reviewRow['route_slip_signature_path'])): ?>
-                                <div class="mt-2">
-                                    <?php
-                                        $currentSigPath = $reviewRow['route_slip_signature_path'];
-                                        $currentCacheBuster = is_file($currentSigPath) ? filemtime($currentSigPath) : time();
-                                        $currentSigSrc = $currentSigPath . '?v=' . $currentCacheBuster;
-                                    ?>
-                                    <img src="<?= htmlspecialchars($currentSigSrc); ?>" alt="Route slip signature" style="max-height: 70px; max-width: 200px; object-fit: contain;">
-                                </div>
+                            <label class="form-label fw-semibold text-success">E-Signature</label>
+                            <?php if ($reviewerSignaturePath !== ''): ?>
+                                <div class="form-text">Using your Account Settings signature.</div>
+                                <img src="<?= htmlspecialchars($reviewerSignaturePath); ?>" alt="Route slip signature" style="max-height: 70px; max-width: 200px; object-fit: contain;">
+                            <?php else: ?>
+                                <div class="form-text text-danger">No signature on file. Please upload your e-signature in Account Settings.</div>
                             <?php endif; ?>
                         </div>
                         <button type="submit" name="save_route_slip_review" class="btn btn-success">Save Route Slip Review</button>

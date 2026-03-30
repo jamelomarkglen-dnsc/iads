@@ -3,6 +3,7 @@ session_start();
 include 'db.php';
 require_once 'defense_committee_helpers.php';
 require_once 'role_helpers.php';
+require_once 'e_signature_helpers.php';
 
 $allowedRoles = ['dean', 'program_chairperson', 'adviser', 'committee_chairperson', 'panel', 'student'];
 if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', $allowedRoles, true)) {
@@ -36,6 +37,7 @@ if ($requestId <= 0) {
             r.memo_final_title,
             r.memo_received_at,
             r.status,
+            r.reviewed_by,
             ds.defense_date,
             ds.defense_time,
             ds.venue,
@@ -43,7 +45,8 @@ if ($requestId <= 0) {
             CONCAT(adv.firstname, ' ', adv.lastname) AS adviser_name,
             CONCAT(ch.firstname, ' ', ch.lastname) AS chair_name,
             CONCAT(p1.firstname, ' ', p1.lastname) AS panel_one_name,
-            CONCAT(p2.firstname, ' ', p2.lastname) AS panel_two_name
+            CONCAT(p2.firstname, ' ', p2.lastname) AS panel_two_name,
+            CONCAT(dn.firstname, ' ', dn.lastname) AS dean_name
         FROM defense_committee_requests r
         JOIN users stu ON stu.id = r.student_id
         JOIN defense_schedules ds ON ds.id = r.defense_id
@@ -51,6 +54,7 @@ if ($requestId <= 0) {
         LEFT JOIN users ch ON ch.id = r.chair_id
         LEFT JOIN users p1 ON p1.id = r.panel_member_one_id
         LEFT JOIN users p2 ON p2.id = r.panel_member_two_id
+        LEFT JOIN users dn ON dn.id = r.reviewed_by
         WHERE r.id = ?
         LIMIT 1
     ");
@@ -165,6 +169,9 @@ function formatMemoDate(?string $date): string
             border-top: 1px solid #d9e2d6;
         }
         .letter-body { padding: 24px 44px; }
+        .signature-block { margin-top: 28px; text-align: left; }
+        .signature-image { max-height: 70px; max-width: 200px; object-fit: contain; display: block; }
+        .signature-line { width: 240px; border-top: 1px solid #1f2d22; margin-top: 6px; }
         @media (max-width: 768px) {
             .letter-body { padding: 20px 24px; }
         }
@@ -225,6 +232,20 @@ function formatMemoDate(?string $date): string
                         </div>
                     </div>
                     <div class="memo-body"><?php echo htmlspecialchars($memo['memo_body'] ?? ''); ?></div>
+                    <?php
+                        $deanName = trim((string)($memo['dean_name'] ?? '')) ?: 'Dean, Institute of Advanced Studies';
+                        $deanSignaturePath = get_user_signature_path($conn, (int)($memo['reviewed_by'] ?? 0));
+                    ?>
+                    <div class="signature-block">
+                        <?php if ($deanSignaturePath !== ''): ?>
+                            <img src="<?php echo htmlspecialchars($deanSignaturePath); ?>" alt="Dean e-signature" class="signature-image">
+                        <?php else: ?>
+                            <div class="text-muted small">Signature not available</div>
+                        <?php endif; ?>
+                        <div class="signature-line"></div>
+                        <div class="text-muted small"><?php echo htmlspecialchars($deanName); ?></div>
+                        <div class="text-muted small">Dean, Institute of Advanced Studies</div>
+                    </div>
                 </div>
                 <div class="letter-foot" aria-hidden="true"></div>
             </div>

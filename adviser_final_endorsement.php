@@ -7,6 +7,7 @@ require_once 'final_paper_helpers.php';
 require_once 'final_concept_helpers.php';
 require_once 'final_defense_endorsement_helpers.php';
 require_once 'progress_tracker_helper.php';
+require_once 'e_signature_helpers.php';
 
 enforce_role_access(['adviser']);
 
@@ -146,14 +147,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_final_endorsem
         }
     }
 
-    $signatureError = '';
-    $signaturePath = '';
-    if (isset($_FILES['adviser_signature'])) {
-        $signaturePath = save_final_defense_signature_upload($_FILES['adviser_signature'], $advisorId, $signatureError);
-        if ($signatureError !== '') {
-            $errors[] = $signatureError;
-        }
-    }
+    $signaturePath = require_user_signature(
+        $conn,
+        $advisorId,
+        $errors,
+        'Please upload your e-signature in Account Settings before submitting the final endorsement.'
+    );
 
     if ($errors) {
         $alert = ['type' => 'danger', 'message' => implode(' ', $errors)];
@@ -219,6 +218,8 @@ if ($endorsementStmt) {
     }
     $endorsementStmt->close();
 }
+
+$signaturePath = get_user_signature_path($conn, $advisorId);
 
 include 'header.php';
 include 'sidebar.php';
@@ -315,9 +316,13 @@ include 'sidebar.php';
                                 <div class="form-text">Text with underline will appear exactly as shown here.</div>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label text-muted small">Adviser E-Signature (PNG or JPG)</label>
-                                <input type="file" name="adviser_signature" class="form-control" accept="image/png,image/jpeg">
-                                <div class="form-text">Upload to include your signature in this endorsement.</div>
+                                <label class="form-label text-muted small">Adviser E-Signature</label>
+                                <?php if ($signaturePath !== ''): ?>
+                                    <div class="form-text">Using your Account Settings signature.</div>
+                                    <img src="<?php echo htmlspecialchars($signaturePath); ?>" alt="Adviser e-signature" class="mt-2" style="max-height: 70px; max-width: 180px; object-fit: contain;">
+                                <?php else: ?>
+                                    <div class="form-text text-danger">No signature on file. Please upload your e-signature in Account Settings.</div>
+                                <?php endif; ?>
                             </div>
                             <button type="submit" class="btn btn-success" id="finalEndorsementSubmitBtn">
                                 <i class="bi bi-send me-1"></i> Send Final Endorsement
