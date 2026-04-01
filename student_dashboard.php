@@ -436,6 +436,7 @@ $committeeMembers = [
     'chair' => '',
     'panel' => '',
 ];
+$committeeVisibilityAllowed = true;
 $committeeSql = "
     SELECT
         r.status,
@@ -629,8 +630,27 @@ if (columnExists($conn, 'payment_proofs', 'id')) {
 }
 $paymentSubmitted = $paymentStatus !== null;
 $paymentVerified = $paymentStatus === 'payment_accepted';
+$committeeVisibilityAllowed = $paymentVerified;
+if (!$committeeVisibilityAllowed) {
+    $committeeRequest = null;
+    $committeeStatusLabel = 'Awaiting payment verification';
+    $committeeStatusClass = 'badge bg-warning-subtle text-warning';
+    $committeeScheduleLabel = 'TBA';
+    $committeeVenueLabel = '';
+    $committeeReviewNotes = '';
+    $committeeMemoTitle = '';
+    $committeeMemoReceivedAt = null;
+    $committeeMemoAvailable = false;
+    $committeeMembers = [
+        'adviser' => '',
+        'chair' => '',
+        'panel' => '',
+    ];
+    $defenseSchedules = [];
+    $nextDefense = null;
+}
 
-$committeeMemoIssued = $committeeMemoAvailable;
+$committeeMemoIssued = $committeeVisibilityAllowed && $committeeMemoAvailable;
 $outlineSubmitted = $finalPaperSubmission !== null;
 $outlineReviewCompleted = false;
 if ($finalPaperSubmission) {
@@ -714,7 +734,9 @@ if ($finalRoutingPassed && $finalRoutingTimestamp && $paymentTimestamp) {
     $finalPaymentVerified = $finalPaymentSubmitted && $paymentStatus === 'payment_accepted';
 }
 
-$finalDefenseScheduled = !empty($nextDefense) && !empty($nextDefense['defense_date'] ?? '');
+$finalDefenseScheduled = $committeeVisibilityAllowed
+    && !empty($nextDefense)
+    && !empty($nextDefense['defense_date'] ?? '');
 $finalDefenseOutcome = false;
 if (columnExists($conn, 'defense_outcomes', 'id')) {
     $stmt = $conn->prepare("
@@ -1508,7 +1530,12 @@ if (function_exists('get_student_progress_tracker_data')) {
                         <span class="<?php echo $committeeStatusClass; ?>"><?php echo htmlspecialchars($committeeStatusLabel); ?></span>
                     </div>
                     <div class="card-body">
-                        <?php if (!$committeeRequest): ?>
+                        <?php if (!$committeeVisibilityAllowed): ?>
+                            <div class="text-center text-muted py-3">
+                                <i class="bi bi-shield-lock fs-1 mb-2"></i>
+                                <p class="mb-0">Committee details will appear after your payment is verified.</p>
+                            </div>
+                        <?php elseif (!$committeeRequest): ?>
                             <div class="text-center text-muted py-3">
                                 <i class="bi bi-people fs-1 mb-2"></i>
                                 <p class="mb-0">No committee request yet. Please wait for the program chairperson.</p>

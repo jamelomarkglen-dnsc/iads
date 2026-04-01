@@ -347,8 +347,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_committee_requ
                                 $title = "Defense: {$studentName}";
                                 $startDateTime = "{$scheduleDate} {$startTime}";
                                 $endDateTime = "{$scheduleDate} {$endTime}";
+                                $studentPaymentVerified = student_has_verified_payment($conn, $studentId);
                                 $calendarUserIds = array_filter([
-                                    $studentId,
+                                    $studentPaymentVerified ? $studentId : 0,
                                     $adviserId,
                                     $committeeChairId,
                                     $panelOneId,
@@ -422,16 +423,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_committee_requ
                         }
                     }
                     if ($decision === 'Approved' && $studentId > 0) {
-                        $studentMessage = "Defense committee approved. {$committeeSummary}."
-                            . " Please submit your outline to the assigned committee members.";
-                        notify_user(
-                            $conn,
-                            $studentId,
-                            'Defense committee approved',
-                            $studentMessage,
-                            $memoLink,
-                            false
-                        );
+                        $studentPaymentVerified = student_has_verified_payment($conn, $studentId);
+                        if ($studentPaymentVerified) {
+                            $studentMessage = "Defense committee approved. {$committeeSummary}."
+                                . " Please submit your outline to the assigned committee members.";
+                            notify_user(
+                                $conn,
+                                $studentId,
+                                'Defense committee approved',
+                                $studentMessage,
+                                $memoLink,
+                                false
+                            );
+                            $notifyStmt = $conn->prepare("
+                                UPDATE defense_committee_requests
+                                SET student_notified_at = NOW()
+                                WHERE id = ? AND student_notified_at IS NULL
+                            ");
+                            if ($notifyStmt) {
+                                $notifyStmt->bind_param('i', $requestId);
+                                $notifyStmt->execute();
+                                $notifyStmt->close();
+                            }
+                        }
                     }
                     $alert = ['type' => 'success', 'message' => "Request {$decision} successfully."];
                 } else {

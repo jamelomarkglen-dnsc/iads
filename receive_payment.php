@@ -3,6 +3,7 @@ session_start();
 require_once 'db.php';
 require_once 'notifications_helper.php';
 require_once 'progress_tracker_helper.php';
+require_once 'defense_committee_helpers.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'program_chairperson') {
     header("Location: login.php");
@@ -61,6 +62,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['payment_id'])) {
                         && progress_tracker_student_has_final_routing_passed($conn, $studentId)
                     ) {
                         progress_tracker_mark_step_complete($conn, $studentId, 'final_payment_verified', 'payment_proofs', $paymentId);
+                    }
+                }
+                if ($status === 'payment_accepted') {
+                    $studentId = (int)$ownerResult['user_id'];
+                    if (function_exists('ensureDefenseCommitteeRequestsTable')) {
+                        ensureDefenseCommitteeRequestsTable($conn);
+                    }
+                    $committeeStmt = $conn->prepare("
+                        SELECT r.id
+                        FROM defense_committee_requests r
+                        WHERE r.student_id = ?
+                          AND r.status = 'Approved'
+                          AND r.student_notified_at IS NULL
+                        ORDER BY r.reviewed_at DESC, r.requested_at DESC
+                        LIMIT 1
+                    ");
+                    if ($committeeStmt) {
+                        $committeeStmt->bind_param('i', $studentId);
+                        $committeeStmt->execute();
+                        $committeeRow = $committeeStmt->get_result()->fetch_assoc();
+                        $committeeStmt->close();
+                        if ($committeeRow) {
+                            $requestId = (int)($committeeRow['id'] ?? 0);
+                            $memoLink = $requestId > 0
+                                ? 'defense_committee_memo.php?request_id=' . $requestId
+                                : 'student_dashboard.php';
+                            $studentMessage = 'Your defense committee has been approved. Committee details are now available on your dashboard.';
+                            notify_user(
+                                $conn,
+                                $studentId,
+                                'Defense committee approved',
+                                $studentMessage,
+                                $memoLink,
+                                false
+                            );
+                            if ($requestId > 0) {
+                                $notifyStmt = $conn->prepare("
+                                    UPDATE defense_committee_requests
+                                    SET student_notified_at = NOW()
+                                    WHERE id = ? AND student_notified_at IS NULL
+                                ");
+                                if ($notifyStmt) {
+                                    $notifyStmt->bind_param('i', $requestId);
+                                    $notifyStmt->execute();
+                                    $notifyStmt->close();
+                                }
+                            }
+                        }
                     }
                 }
             } else {

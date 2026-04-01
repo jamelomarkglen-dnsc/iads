@@ -74,6 +74,7 @@ if (!function_exists('ensureDefenseCommitteeRequestsTable')) {
             'memo_final_title' => "ALTER TABLE defense_committee_requests ADD COLUMN memo_final_title VARCHAR(255) NULL AFTER memo_body",
             'memo_received_at' => "ALTER TABLE defense_committee_requests ADD COLUMN memo_received_at TIMESTAMP NULL DEFAULT NULL AFTER memo_final_title",
             'memo_updated_at' => "ALTER TABLE defense_committee_requests ADD COLUMN memo_updated_at TIMESTAMP NULL DEFAULT NULL AFTER memo_received_at",
+            'student_notified_at' => "ALTER TABLE defense_committee_requests ADD COLUMN student_notified_at TIMESTAMP NULL DEFAULT NULL AFTER memo_updated_at",
         ];
         foreach ($memoColumns as $column => $statement) {
             if (!defense_committee_column_exists($conn, 'defense_committee_requests', $column)) {
@@ -175,6 +176,56 @@ if (!function_exists('fetch_final_pick_title_for_student')) {
         $stmt->close();
         $title = trim((string)($row['title'] ?? ''));
         return $title;
+    }
+}
+
+if (!function_exists('student_has_verified_payment')) {
+    function student_has_verified_payment(mysqli $conn, int $studentId): bool
+    {
+        if ($studentId <= 0) {
+            return false;
+        }
+
+        if (defense_committee_column_exists($conn, 'payment_proofs', 'status')) {
+            $stmt = $conn->prepare("
+                SELECT status
+                FROM payment_proofs
+                WHERE user_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+            ");
+            if ($stmt) {
+                $stmt->bind_param('i', $studentId);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                $stmt->close();
+                return ($row && ($row['status'] ?? '') === 'payment_accepted');
+            }
+        }
+
+        $tableCheck = $conn->query("SHOW TABLES LIKE 'progress_tracker_steps'");
+        $hasProgress = $tableCheck && $tableCheck->num_rows > 0;
+        if ($tableCheck) {
+            $tableCheck->free();
+        }
+        if (!$hasProgress) {
+            return false;
+        }
+
+        $stmt = $conn->prepare("
+            SELECT status
+            FROM progress_tracker_steps
+            WHERE student_id = ? AND step_key = 'payment_verified'
+            LIMIT 1
+        ");
+        if (!$stmt) {
+            return false;
+        }
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        return ($row && ($row['status'] ?? '') === 'complete');
     }
 }
 
