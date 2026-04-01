@@ -267,7 +267,34 @@ if (!function_exists('build_outline_defense_memo_body')) {
         $panelOneName = trim((string)($payload['panel_one_name'] ?? '')) ?: 'Panel Member';
         $panelTwoName = trim((string)($payload['panel_two_name'] ?? '')) ?: 'Panel Member';
         $defenseDate = defense_committee_format_date($payload['defense_date'] ?? '');
-        $defenseTime = defense_committee_format_time($payload['defense_time'] ?? '');
+        $defenseTimeRaw = trim((string)($payload['defense_time'] ?? ''));
+        $defenseTime = defense_committee_format_time($defenseTimeRaw);
+        $durationMinutes = function_exists('defense_schedule_duration_minutes')
+            ? defense_schedule_duration_minutes()
+            : 120;
+        $endTime = '';
+        if ($defenseTimeRaw !== '') {
+            $endTimestamp = strtotime($defenseTimeRaw . " +{$durationMinutes} minutes");
+            if ($endTimestamp !== false) {
+                $endTime = date('g:i A', $endTimestamp);
+            }
+        }
+        $durationLabel = '';
+        if ($durationMinutes > 0) {
+            if ($durationMinutes % 60 === 0) {
+                $hours = (int)($durationMinutes / 60);
+                $durationLabel = $hours === 1 ? '1 hour' : "{$hours} hours";
+            } else {
+                $durationLabel = "{$durationMinutes} minutes";
+            }
+        }
+        $timeLabel = $defenseTime !== '' ? $defenseTime : 'TBA';
+        if ($defenseTime !== '' && $endTime !== '') {
+            $timeLabel = "{$defenseTime} - {$endTime}";
+            if ($durationLabel !== '') {
+                $timeLabel .= " ({$durationLabel})";
+            }
+        }
         $venue = trim((string)($payload['venue'] ?? '')) ?: 'TBA';
         $memoNumber = trim((string)($payload['memo_number'] ?? '')) ?: '___';
         $seriesYear = trim((string)($payload['series_year'] ?? '')) ?: date('Y');
@@ -301,7 +328,7 @@ if (!function_exists('build_outline_defense_memo_body')) {
             'The Outline Defense will be held as follows:',
             "Student: {$studentName}",
             "Date: " . ($defenseDate !== '' ? $defenseDate : 'TBA'),
-            "Time: " . ($defenseTime !== '' ? $defenseTime : 'TBA'),
+            "Time: {$timeLabel}",
             "Location: {$venue}",
             '',
             "Your expertise and insights will be valuable in ensuring a thorough evaluation of the candidate's research work.",
