@@ -319,7 +319,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_committee_requ
                         $scheduleStmt = $conn->prepare("
                             SELECT defense_date,
                                    COALESCE(start_time, defense_time) AS start_time,
-                                   COALESCE(end_time, ADDTIME(COALESCE(start_time, defense_time), '01:00:00')) AS end_time,
+                                   COALESCE(end_time, ADDTIME(COALESCE(start_time, defense_time), '02:00:00')) AS end_time,
                                    venue
                             FROM defense_schedules
                             WHERE id = ?

@@ -31,7 +31,7 @@ function ensureDefenseScheduleTimeColumns(mysqli $conn): void
     ");
     $conn->query("
         UPDATE defense_schedules
-        SET end_time = COALESCE(end_time, ADDTIME(COALESCE(start_time, defense_time), '01:00:00'))
+        SET end_time = COALESCE(end_time, ADDTIME(COALESCE(start_time, defense_time), '02:00:00'))
         WHERE end_time IS NULL
           AND COALESCE(start_time, defense_time) IS NOT NULL
     ");
