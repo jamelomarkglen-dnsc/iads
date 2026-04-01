@@ -1,5 +1,26 @@
 <?php
 
+if (!defined('DEFENSE_SCHEDULE_DURATION_MINUTES')) {
+    define('DEFENSE_SCHEDULE_DURATION_MINUTES', 120);
+}
+
+function defense_schedule_duration_minutes(): int
+{
+    $minutes = (int)DEFENSE_SCHEDULE_DURATION_MINUTES;
+    if ($minutes <= 0) {
+        $minutes = 120;
+    }
+    return $minutes;
+}
+
+function defense_schedule_duration_time_string(): string
+{
+    $minutes = defense_schedule_duration_minutes();
+    $hours = intdiv($minutes, 60);
+    $mins = $minutes % 60;
+    return sprintf('%02d:%02d:00', $hours, $mins);
+}
+
 function ensureDefenseScheduleTimeColumns(mysqli $conn): void
 {
     static $ensured = false;
@@ -29,9 +50,10 @@ function ensureDefenseScheduleTimeColumns(mysqli $conn): void
         WHERE (start_time IS NULL OR start_time = '00:00:00')
           AND defense_time IS NOT NULL
     ");
+    $durationTime = defense_schedule_duration_time_string();
     $conn->query("
         UPDATE defense_schedules
-        SET end_time = COALESCE(end_time, ADDTIME(COALESCE(start_time, defense_time), '02:00:00'))
+        SET end_time = COALESCE(end_time, ADDTIME(COALESCE(start_time, defense_time), '{$durationTime}'))
         WHERE end_time IS NULL
           AND COALESCE(start_time, defense_time) IS NOT NULL
     ");

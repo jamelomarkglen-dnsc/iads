@@ -105,7 +105,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_committee_requ
 
     $dateValue = $defenseDateInput !== '' ? date('Y-m-d', strtotime($defenseDateInput)) : '';
     $startTime = $defenseTimeInput !== '' ? date('H:i:s', strtotime($defenseTimeInput)) : '';
-    $endTime = $startTime !== '' ? date('H:i:s', strtotime($startTime . ' +2 hours')) : '';
+    $durationMinutes = function_exists('defense_schedule_duration_minutes')
+        ? defense_schedule_duration_minutes()
+        : 120;
+    $endTime = $startTime !== ''
+        ? date('H:i:s', strtotime($startTime . " +{$durationMinutes} minutes"))
+        : '';
 
     if ($dateValue !== '' && $startTime !== '' && defenseScheduleHasConflict($conn, $dateValue, $startTime, $endTime)) {
         $errors[] = 'Another defense is already scheduled in this time slot.';
