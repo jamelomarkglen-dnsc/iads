@@ -518,8 +518,12 @@ if ($finalPaperSubmission) {
 $submissionFeedbackFeed = fetch_submission_feedback_for_student($conn, $studentId, 5);
 
 $defenseSchedules = [];
+$defenseColumns = ['id', 'defense_date', 'defense_time', 'venue', 'status'];
+if (columnExists($conn, 'defense_schedules', 'schedule_type')) {
+    $defenseColumns[] = 'schedule_type';
+}
 $defenseSql = "
-    SELECT id, defense_date, defense_time, venue, status
+    SELECT " . implode(', ', $defenseColumns) . "
     FROM defense_schedules
     WHERE student_id = ?
     ORDER BY defense_date ASC, defense_time ASC
@@ -734,9 +738,30 @@ if ($finalRoutingPassed && $finalRoutingTimestamp && $paymentTimestamp) {
     $finalPaymentVerified = $finalPaymentSubmitted && $paymentStatus === 'payment_accepted';
 }
 
-$finalDefenseScheduled = $committeeVisibilityAllowed
-    && !empty($nextDefense)
-    && !empty($nextDefense['defense_date'] ?? '');
+$finalDefenseScheduled = false;
+if ($committeeVisibilityAllowed) {
+    if (columnExists($conn, 'defense_schedules', 'schedule_type')) {
+        $stmt = $conn->prepare("
+            SELECT 1
+            FROM defense_schedules
+            WHERE student_id = ?
+              AND schedule_type = 'final'
+              AND defense_date IS NOT NULL
+              AND defense_date <> '0000-00-00'
+            LIMIT 1
+        ");
+        if ($stmt) {
+            $stmt->bind_param('i', $studentId);
+            $stmt->execute();
+            $stmt->store_result();
+            $finalDefenseScheduled = $stmt->num_rows > 0;
+            $stmt->close();
+        }
+    } else {
+        $finalDefenseScheduled = !empty($nextDefense)
+            && !empty($nextDefense['defense_date'] ?? '');
+    }
+}
 $finalDefenseOutcome = false;
 if (columnExists($conn, 'defense_outcomes', 'id')) {
     $stmt = $conn->prepare("

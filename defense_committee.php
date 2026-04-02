@@ -19,6 +19,7 @@ $chairScope = get_program_chair_scope($conn, $programChairId);
 ensureDefenseCommitteeRequestsTable($conn);
 ensureDefensePanelMemberColumns($conn);
 ensureRoleInfrastructure($conn);
+ensureDefenseScheduleTypeColumn($conn);
 
 $alert = null;
 
@@ -124,6 +125,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_committee_requ
             $scheduleColumns = ['student_id', 'defense_date', 'defense_time', 'start_time', 'end_time', 'venue', 'status'];
             $scheduleValues = [$studentId, $dateValue, $startTime, $startTime, $endTime, $venue, 'Pending'];
             $scheduleTypes = 'issssss';
+            if (defense_committee_column_exists($conn, 'defense_schedules', 'schedule_type')) {
+                $scheduleColumns[] = 'schedule_type';
+                $scheduleValues[] = 'outline';
+                $scheduleTypes .= 's';
+            }
 
             if (defense_committee_column_exists($conn, 'defense_schedules', 'schedule_date')) {
                 $scheduleColumns[] = 'schedule_date';
@@ -155,16 +161,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_committee_requ
             }
             $defenseId = (int)$scheduleStmt->insert_id;
             $scheduleStmt->close();
-            if (function_exists('progress_tracker_mark_step_complete')) {
-                progress_tracker_mark_step_complete(
-                    $conn,
-                    $studentId,
-                    'final_defense_scheduled',
-                    'defense_schedules',
-                    $defenseId
-                );
-            }
-
             $panelStmt = $conn->prepare("
                 INSERT INTO defense_panels (defense_id, panel_member, panel_member_id, panel_role)
                 VALUES (?, ?, ?, ?)

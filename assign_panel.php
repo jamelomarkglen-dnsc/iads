@@ -169,6 +169,7 @@ function ensureDefensePanelMemberColumns(mysqli $conn): void
 }
 ensureDefensePanelMemberColumns($conn);
 ensureDefenseScheduleTimeColumns($conn);
+ensureDefenseScheduleTypeColumn($conn);
 
 function user_events_column_exists(mysqli $conn, string $column): bool
 {
@@ -428,8 +429,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add')
     }
 
     $stmt = $conn->prepare(
-        "INSERT INTO defense_schedules (student_id, defense_date, defense_time, start_time, end_time, venue, status)
-         VALUES (?, ?, ?, ?, ?, ?, 'Pending')"
+        "INSERT INTO defense_schedules (student_id, defense_date, defense_time, start_time, end_time, venue, status, schedule_type)
+         VALUES (?, ?, ?, ?, ?, ?, 'Pending', 'final')"
     );
     $stmt->bind_param('isssss', $studentId, $date, $startTime, $startTime, $endTime, $venue);
     $stmt->execute();

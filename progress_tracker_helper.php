@@ -3,6 +3,7 @@
 require_once __DIR__ . '/notifications_helper.php';
 require_once __DIR__ . '/final_paper_helpers.php';
 require_once __DIR__ . '/defense_committee_helpers.php';
+require_once __DIR__ . '/defense_schedule_helpers.php';
 require_once __DIR__ . '/pdf_submission_helpers.php';
 require_once __DIR__ . '/submission_helpers.php';
 
@@ -356,6 +357,9 @@ if (!function_exists('progress_tracker_compute_legacy_data')) {
         if (function_exists('ensureDefensePanelMemberColumns')) {
             ensureDefensePanelMemberColumns($conn);
         }
+        if (function_exists('ensureDefenseScheduleTypeColumn')) {
+            ensureDefenseScheduleTypeColumn($conn);
+        }
 
         $submissionsTableExists = progress_tracker_column_exists($conn, 'submissions', 'id');
         $submissionHasUpdatedAt = $submissionsTableExists ? progress_tracker_column_exists($conn, 'submissions', 'updated_at') : false;
@@ -666,13 +670,24 @@ if (!function_exists('progress_tracker_compute_legacy_data')) {
 
         $finalDefenseScheduled = false;
         if (progress_tracker_column_exists($conn, 'defense_schedules', 'id')) {
-            $stmt = $conn->prepare("
-                SELECT defense_date
-                FROM defense_schedules
-                WHERE student_id = ?
-                ORDER BY defense_date ASC, defense_time ASC
-                LIMIT 1
-            ");
+            if (progress_tracker_column_exists($conn, 'defense_schedules', 'schedule_type')) {
+                $stmt = $conn->prepare("
+                    SELECT defense_date
+                    FROM defense_schedules
+                    WHERE student_id = ?
+                      AND schedule_type = 'final'
+                    ORDER BY defense_date ASC, defense_time ASC
+                    LIMIT 1
+                ");
+            } else {
+                $stmt = $conn->prepare("
+                    SELECT defense_date
+                    FROM defense_schedules
+                    WHERE student_id = ?
+                    ORDER BY defense_date ASC, defense_time ASC
+                    LIMIT 1
+                ");
+            }
             if ($stmt) {
                 $stmt->bind_param('i', $studentId);
                 $stmt->execute();
@@ -896,6 +911,31 @@ if (!function_exists('get_student_progress_tracker_data')) {
         }
 
         $rows = progress_tracker_fetch_rows($conn, $studentId);
+        if ($rows) {
+            if (function_exists('ensureDefenseScheduleTypeColumn')) {
+                ensureDefenseScheduleTypeColumn($conn);
+            }
+            if (progress_tracker_column_exists($conn, 'defense_schedules', 'schedule_type')) {
+                $stmt = $conn->prepare("
+                    SELECT 1
+                    FROM defense_schedules
+                    WHERE student_id = ? AND schedule_type = 'final'
+                    LIMIT 1
+                ");
+                $hasFinalSchedule = false;
+                if ($stmt) {
+                    $stmt->bind_param('i', $studentId);
+                    $stmt->execute();
+                    $stmt->store_result();
+                    $hasFinalSchedule = $stmt->num_rows > 0;
+                    $stmt->close();
+                }
+                if (!$hasFinalSchedule && isset($rows['final_defense_scheduled'])) {
+                    $rows['final_defense_scheduled']['status'] = 'pending';
+                    $rows['final_defense_scheduled']['completed_at'] = null;
+                }
+            }
+        }
         if (!$rows && function_exists('progress_tracker_compute_legacy_data')) {
             $cache[$studentId] = progress_tracker_compute_legacy_data($conn, $studentId);
             return $cache[$studentId];

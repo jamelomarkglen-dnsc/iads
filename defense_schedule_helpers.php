@@ -61,6 +61,51 @@ function ensureDefenseScheduleTimeColumns(mysqli $conn): void
     $ensured = true;
 }
 
+function ensureDefenseScheduleTypeColumn(mysqli $conn): void
+{
+    static $ensured = false;
+    if ($ensured) {
+        return;
+    }
+
+    $check = $conn->query("SHOW COLUMNS FROM defense_schedules LIKE 'schedule_type'");
+    $exists = $check && $check->num_rows > 0;
+    if ($check) {
+        $check->free();
+    }
+
+    if (!$exists) {
+        $conn->query("
+            ALTER TABLE defense_schedules
+            ADD COLUMN schedule_type ENUM('outline','final') NOT NULL DEFAULT 'outline' AFTER status
+        ");
+    }
+
+    $tableCheck = $conn->query("SHOW TABLES LIKE 'defense_committee_requests'");
+    $hasCommitteeTable = $tableCheck && $tableCheck->num_rows > 0;
+    if ($tableCheck) {
+        $tableCheck->free();
+    }
+    if ($hasCommitteeTable) {
+        $conn->query("
+            UPDATE defense_schedules ds
+            LEFT JOIN defense_committee_requests r ON r.defense_id = ds.id
+            SET ds.schedule_type = CASE
+                WHEN r.defense_id IS NOT NULL THEN 'outline'
+                WHEN ds.schedule_type IS NULL OR ds.schedule_type = '' THEN 'final'
+                ELSE ds.schedule_type
+            END
+        ");
+    } else {
+        $conn->query("
+            UPDATE defense_schedules
+            SET schedule_type = COALESCE(NULLIF(schedule_type, ''), 'final')
+        ");
+    }
+
+    $ensured = true;
+}
+
 function defenseScheduleHasConflict(mysqli $conn, string $date, string $startTime, string $endTime, int $excludeId = 0): bool
 {
     ensureDefenseScheduleTimeColumns($conn);
