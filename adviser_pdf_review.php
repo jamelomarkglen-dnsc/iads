@@ -426,15 +426,13 @@ if (($_SESSION['role'] ?? '') === 'adviser') {
                     <div class="col-md-4 text-end mt-3 mt-md-0">
                         <div class="d-flex justify-content-end gap-2 flex-wrap">
                             <?php if (($_SESSION['role'] ?? '') === 'adviser'): ?>
-                                <form method="POST" action="adviser_committee_pdf_send.php" class="d-inline">
-                                    <input type="hidden" name="submission_id" value="<?php echo (int)$submission_id; ?>">
-                                    <button type="submit"
-                                            class="btn btn-success"
-                                            <?php echo $committeeSendAvailable ? '' : 'disabled'; ?>
-                                            onclick="return <?php echo $committeeSendAvailable ? 'confirm(\'Send this PDF to the defense committee?\')' : 'false'; ?>;">
-                                        <i class="bi bi-send me-1"></i> Send to Committee
-                                    </button>
-                                </form>
+                                <button type="button"
+                                        class="btn btn-success"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#sendCommitteeModal"
+                                        <?php echo $committeeSendAvailable ? '' : 'disabled'; ?>>
+                                    <i class="bi bi-send me-1"></i> Send to Committee
+                                </button>
                             <?php endif; ?>
                             <a href="adviser.php" class="btn btn-outline-secondary">
                                 <i class="bi bi-arrow-left"></i> Back to Dashboard
@@ -593,6 +591,29 @@ if (($_SESSION['role'] ?? '') === 'adviser') {
             <button class="annotation-dialog-btn primary">Save Annotation</button>
         </div>
     </div>
+
+    <?php if (($_SESSION['role'] ?? '') === 'adviser'): ?>
+    <div class="modal fade" id="sendCommitteeModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Send to Defense Committee</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    This will send the latest PDF version to the defense committee for review. Continue?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form method="POST" action="adviser_committee_pdf_send.php" class="d-inline">
+                        <input type="hidden" name="submission_id" value="<?php echo (int)$submission_id; ?>">
+                        <button type="submit" class="btn btn-success">Send PDF</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
     
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
