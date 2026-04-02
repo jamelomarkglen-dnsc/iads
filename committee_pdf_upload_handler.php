@@ -15,6 +15,13 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'student') {
     exit;
 }
 
+$studentUploadsEnabled = false;
+if (!$studentUploadsEnabled) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'error' => 'Committee submissions are sent by your adviser.']);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['success' => false, 'error' => 'Method not allowed.']);

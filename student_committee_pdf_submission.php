@@ -46,7 +46,7 @@ function committee_pdf_status_badge(string $status): string
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div>
                 <h3 class="fw-bold text-success mb-1">Committee PDF Submissions</h3>
-                <p class="text-muted mb-0">Upload your outline defense PDF for committee annotations.</p>
+                <p class="text-muted mb-0">Track outline defense PDFs sent to the committee by your adviser.</p>
             </div>
             <span class="badge bg-success-subtle text-success">
                 <?php echo count($submissions); ?> submitted
@@ -67,18 +67,11 @@ function committee_pdf_status_badge(string $status): string
 
         <div class="card mb-4">
             <div class="card-body">
-                <h5 class="fw-semibold mb-3">Upload New Committee PDF</h5>
-                <form enctype="multipart/form-data" method="POST" action="committee_pdf_upload_handler.php">
-                    <input type="hidden" name="action" value="upload">
-                    <div class="mb-3">
-                        <label class="form-label">Select PDF File</label>
-                        <input type="file" class="form-control" name="pdf_file" accept=".pdf" required>
-                        <small class="text-muted">Maximum file size: 50MB</small>
-                    </div>
-                    <button type="submit" class="btn btn-success">
-                        <i class="bi bi-cloud-upload me-2"></i>Upload PDF
-                    </button>
-                </form>
+                <h5 class="fw-semibold mb-2">Committee Submission</h5>
+                <p class="text-muted mb-0">
+                    Your adviser will send the final PDF to the defense committee once it is ready.
+                    You can track any committee submissions below.
+                </p>
             </div>
         </div>
 

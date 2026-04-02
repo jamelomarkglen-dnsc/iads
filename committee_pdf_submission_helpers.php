@@ -126,6 +126,63 @@ function ensureCommitteePdfTables(mysqli $conn): void
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     ");
 
+    $extra_columns = [
+        'parent_submission_id' => "ALTER TABLE committee_pdf_submissions ADD COLUMN parent_submission_id INT NULL AFTER version_number",
+        'source_pdf_submission_id' => "ALTER TABLE committee_pdf_submissions ADD COLUMN source_pdf_submission_id INT NULL AFTER defense_id"
+    ];
+
+    foreach ($extra_columns as $column => $alter_sql) {
+        $column_stmt = $conn->prepare("
+            SELECT 1
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = 'committee_pdf_submissions'
+              AND COLUMN_NAME = ?
+            LIMIT 1
+        ");
+        if ($column_stmt) {
+            $column_stmt->bind_param('s', $column);
+            $column_stmt->execute();
+            $column_result = $column_stmt->get_result();
+            $exists = $column_result && $column_result->num_rows > 0;
+            if ($column_result) {
+                $column_result->free();
+            }
+            $column_stmt->close();
+            if (!$exists) {
+                $conn->query($alter_sql);
+            }
+        }
+    }
+
+    $index_stmt = $conn->prepare("
+        SELECT 1
+        FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'committee_pdf_submissions'
+          AND INDEX_NAME = ?
+        LIMIT 1
+    ");
+    if ($index_stmt) {
+        $indexes = [
+            'idx_parent_submission' => "CREATE INDEX idx_parent_submission ON committee_pdf_submissions (parent_submission_id)",
+            'idx_source_pdf_submission' => "CREATE INDEX idx_source_pdf_submission ON committee_pdf_submissions (source_pdf_submission_id)"
+        ];
+        foreach ($indexes as $index_name => $index_sql) {
+            $index_stmt->bind_param('s', $index_name);
+            $index_stmt->execute();
+            $index_result = $index_stmt->get_result();
+            $index_exists = $index_result && $index_result->num_rows > 0;
+            if ($index_result) {
+                $index_result->free();
+            }
+            if (!$index_exists) {
+                $conn->query($index_sql);
+            }
+        }
+        $index_stmt->close();
+    }
+
     $conn->query("
         CREATE TABLE IF NOT EXISTS committee_pdf_reviews (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -265,6 +322,65 @@ function ensureCommitteePdfTables(mysqli $conn): void
     }
 
     $ensured = true;
+}
+
+function copy_committee_pdf_from_existing(string $source_path, int $student_id, string $original_filename): array
+{
+    if ($source_path === '' || !file_exists($source_path)) {
+        return ['success' => false, 'errors' => ['Source PDF file not found.']];
+    }
+
+    ensure_committee_pdf_directories();
+
+    $filename = generate_committee_pdf_filename($student_id, $original_filename);
+    $file_path = COMMITTEE_PDF_UPLOAD_DIR . $filename;
+
+    if (!@copy($source_path, $file_path)) {
+        return ['success' => false, 'errors' => ['Failed to copy the PDF to committee storage.']];
+    }
+
+    chmod($file_path, 0644);
+
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mime_type = $finfo ? finfo_file($finfo, $file_path) : 'application/pdf';
+    if ($finfo) {
+        finfo_close($finfo);
+    }
+
+    return [
+        'success' => true,
+        'filename' => $filename,
+        'file_path' => $file_path,
+        'file_size' => filesize($file_path),
+        'mime_type' => $mime_type,
+        'original_filename' => $original_filename,
+    ];
+}
+
+function fetch_committee_submission_by_source(mysqli $conn, int $source_submission_id): ?array
+{
+    if ($source_submission_id <= 0) {
+        return null;
+    }
+    $stmt = $conn->prepare("
+        SELECT *
+        FROM committee_pdf_submissions
+        WHERE source_pdf_submission_id = ?
+        ORDER BY submitted_at DESC, id DESC
+        LIMIT 1
+    ");
+    if (!$stmt) {
+        return null;
+    }
+    $stmt->bind_param('i', $source_submission_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result ? $result->fetch_assoc() : null;
+    if ($result) {
+        $result->free();
+    }
+    $stmt->close();
+    return $row ?: null;
 }
 
 function fetch_latest_defense_id_for_student(mysqli $conn, int $student_id): int

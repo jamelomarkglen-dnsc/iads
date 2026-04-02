@@ -302,31 +302,15 @@ $annotations = fetch_committee_submission_annotations($conn, $submission_id);
             </div>
         <?php endif; ?>
 
-        <!-- Upload New Version Card -->
+        <!-- Adviser Submission Notice -->
         <div class="card mb-4 shadow-sm">
             <div class="card-body">
-                <h5 class="fw-semibold mb-3">
-                    <i class="bi bi-cloud-upload text-success me-2"></i>Upload New Version
+                <h5 class="fw-semibold mb-2">
+                    <i class="bi bi-info-circle text-success me-2"></i>Committee Uploads
                 </h5>
-                <p class="text-muted small mb-3">
-                    Upload a revised version of your committee PDF. The new version will be linked to this submission and reviewers will be notified.
+                <p class="text-muted small mb-0">
+                    Your adviser will send revised versions to the defense committee after you submit updates for review.
                 </p>
-                <form enctype="multipart/form-data" method="POST" action="committee_pdf_upload_handler.php">
-                    <input type="hidden" name="action" value="upload_revision">
-                    <input type="hidden" name="parent_submission_id" value="<?php echo (int)$submission_id; ?>">
-                    <div class="row g-3">
-                        <div class="col-md-8">
-                            <label class="form-label">Select PDF File</label>
-                            <input type="file" class="form-control" name="pdf_file" accept=".pdf" required>
-                            <small class="text-muted">Maximum file size: 50MB</small>
-                        </div>
-                        <div class="col-md-4 d-flex align-items-end">
-                            <button type="submit" class="btn btn-success w-100">
-                                <i class="bi bi-cloud-upload me-2"></i>Upload Version <?php echo ((int)($submission['version_number'] ?? 1)) + 1; ?>
-                            </button>
-                        </div>
-                    </div>
-                </form>
             </div>
         </div>
 

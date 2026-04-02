@@ -11,6 +11,7 @@ session_start();
 require_once 'db.php';
 require_once 'pdf_submission_helpers.php';
 require_once 'pdf_annotation_helpers.php';
+require_once 'committee_pdf_submission_helpers.php';
 
 // =====================================================
 // SECURITY: Verify user is logged in and is adviser
@@ -125,6 +126,34 @@ $version_info = get_version_chain_info($conn, $submission_id);
 // =====================================================
 if ($submission['submission_status'] === 'pending') {
     update_submission_status($conn, $submission_id, 'reviewed');
+}
+
+// =====================================================
+// COMMITTEE SEND AVAILABILITY (Adviser Only)
+// =====================================================
+$committeeSendAvailable = false;
+$committeeSendMessage = '';
+$committeeAlreadySent = null;
+
+if (($_SESSION['role'] ?? '') === 'adviser') {
+    ensureCommitteePdfTables($conn);
+    $committeeAlreadySent = fetch_committee_submission_by_source($conn, $submission_id);
+    if ($committeeAlreadySent) {
+        $committeeSendMessage = 'This PDF has already been sent to the committee.';
+    } elseif ($version_info && !$version_info['is_latest']) {
+        $committeeSendMessage = 'Open the latest version to send it to the committee.';
+    } else {
+        $studentId = (int)($submission['student_id'] ?? 0);
+        $defenseId = fetch_latest_defense_id_for_student($conn, $studentId);
+        $reviewers = fetch_committee_reviewers_for_student($conn, $studentId);
+        if ($defenseId <= 0) {
+            $committeeSendMessage = 'Defense committee is not assigned yet.';
+        } elseif (empty($reviewers)) {
+            $committeeSendMessage = 'Committee reviewers are missing. Please contact the program chairperson.';
+        } else {
+            $committeeSendAvailable = true;
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -395,9 +424,22 @@ if ($submission['submission_status'] === 'pending') {
                         </p>
                     </div>
                     <div class="col-md-4 text-end mt-3 mt-md-0">
-                        <a href="adviser.php" class="btn btn-outline-secondary">
-                            <i class="bi bi-arrow-left"></i> Back to Dashboard
-                        </a>
+                        <div class="d-flex justify-content-end gap-2 flex-wrap">
+                            <?php if (($_SESSION['role'] ?? '') === 'adviser'): ?>
+                                <form method="POST" action="adviser_committee_pdf_send.php" class="d-inline">
+                                    <input type="hidden" name="submission_id" value="<?php echo (int)$submission_id; ?>">
+                                    <button type="submit"
+                                            class="btn btn-success"
+                                            <?php echo $committeeSendAvailable ? '' : 'disabled'; ?>
+                                            onclick="return <?php echo $committeeSendAvailable ? 'confirm(\'Send this PDF to the defense committee?\')' : 'false'; ?>;">
+                                        <i class="bi bi-send me-1"></i> Send to Committee
+                                    </button>
+                                </form>
+                            <?php endif; ?>
+                            <a href="adviser.php" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left"></i> Back to Dashboard
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -443,6 +485,36 @@ if ($submission['submission_status'] === 'pending') {
 
             <!-- PDF Review Wrapper -->
             <div class="pdf-review-wrapper">
+                <?php if (isset($_SESSION['committee_send_success'])): ?>
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        <?php echo htmlspecialchars($_SESSION['committee_send_success']); ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    <?php unset($_SESSION['committee_send_success']); ?>
+                <?php endif; ?>
+                <?php if (isset($_SESSION['committee_send_info'])): ?>
+                    <div class="alert alert-info alert-dismissible fade show" role="alert">
+                        <i class="bi bi-info-circle-fill me-2"></i>
+                        <?php echo htmlspecialchars($_SESSION['committee_send_info']); ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    <?php unset($_SESSION['committee_send_info']); ?>
+                <?php endif; ?>
+                <?php if (isset($_SESSION['committee_send_error'])): ?>
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <?php echo htmlspecialchars($_SESSION['committee_send_error']); ?>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    <?php unset($_SESSION['committee_send_error']); ?>
+                <?php endif; ?>
+                <?php if ($committeeSendMessage !== '' && ($_SESSION['role'] ?? '') === 'adviser'): ?>
+                    <div class="alert alert-warning" role="alert">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <?php echo htmlspecialchars($committeeSendMessage); ?>
+                    </div>
+                <?php endif; ?>
                 <!-- Error/Success Messages (if any) -->
                 <div id="messageContainer"></div>
                 

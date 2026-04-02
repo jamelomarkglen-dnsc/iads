@@ -614,7 +614,7 @@ if ($userLastLogin !== '') {
                         <i class="bi bi-file-earmark-text"></i> <span class="link-text">Outline Defense Submission</span>
                     </a>
                     <a href="student_committee_pdf_submission.php" class="nav-link <?php echo ($currentPage == 'student_committee_pdf_submission.php') ? 'active' : ''; ?>">
-                        <i class="bi bi-file-earmark-pdf"></i> <span class="link-text">Committee PDF Submission</span>
+                        <i class="bi bi-file-earmark-pdf"></i> <span class="link-text">Committee PDF Status</span>
                     </a>
                     <a href="student_final_routing_submission.php" class="nav-link <?php echo ($currentPage == 'student_final_routing_submission.php') ? 'active' : ''; ?>">
                         <i class="bi bi-file-earmark-check"></i> <span class="link-text">Final Routing Submission</span>
