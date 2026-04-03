@@ -232,6 +232,7 @@ class AnnotationManager {
             y_coordinate: Math.round(yPercent * 100) / 100,
             position_width: Math.round(widthPercent * 100) / 100,
             position_height: Math.round(heightPercent * 100) / 100,
+            position_height: Math.round(heightPercent * 100) / 100,
             page_number: this.pdfViewer.getCurrentPage(),
             annotation_type: this.selectedTool,
             selected_text: this.getSelectedText()

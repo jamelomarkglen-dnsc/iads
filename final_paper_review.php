@@ -171,6 +171,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['final_decision']) && 
     if (!in_array($decision, ['Approved', 'Rejected', 'Minor Revision', 'Major Revision'], true)) {
         $reviewError = 'Please choose a valid final decision.';
     } else {
+        $autoVerdict = match ($decision) {
+            'Approved' => 'Passed',
+            'Rejected' => 'Failed',
+            'Minor Revision', 'Major Revision', 'Needs Revision' => 'Passed with Revision',
+            default => '',
+        };
         $autoGateStatus = $currentGateStatus;
         if ($autoGateStatus === '') {
             $autoGateStatus = match ($decision) {
@@ -196,6 +202,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['final_decision']) && 
         if ($stmt) {
             $stmt->bind_param('sissi', $decision, $reviewerId, $notes, $autoGateStatus, $submissionId);
             if ($stmt->execute()) {
+                if ($autoVerdict !== '') {
+                    setOutlineDefenseVerdict($conn, $submissionId, $autoVerdict);
+                }
                 $reviewSuccess = 'Overall decision saved.';
                 $submission['status'] = $decision;
                 $submission['final_decision_by'] = $reviewerId;
