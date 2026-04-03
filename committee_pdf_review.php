@@ -36,6 +36,7 @@ if (!$reviewRow) {
 
 $annotations = fetch_committee_submission_annotations($conn, $submission_id);
 $stats = get_committee_annotation_statistics($conn, $submission_id);
+$verdictLocked = !empty($submission['final_verdict']) && $submission['final_verdict'] !== 'pending';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -220,10 +221,7 @@ $stats = get_committee_annotation_statistics($conn, $submission_id);
                 <!-- Final Verdict Card (Committee Chairperson Only) -->
                 <?php if ($reviewer_role === 'committee_chairperson'): ?>
                 <div class="card p-3 shadow-sm mt-3">
-                    <h6 class="fw-semibold mb-3">
-                        <i class="bi bi-gavel text-warning me-2"></i>
-                        Submit Final Verdict
-                    </h6>
+                    <h6 class="fw-semibold mb-3">Submit Final Verdict</h6>
                     
                     <?php if (isset($_SESSION['verdict_success'])): ?>
                         <div class="alert alert-success alert-dismissible fade show small" role="alert">
@@ -258,26 +256,29 @@ $stats = get_committee_annotation_statistics($conn, $submission_id);
                         
                         <div class="mb-3">
                             <label class="form-label small fw-semibold">Verdict Decision</label>
-                            <select name="final_verdict" class="form-select form-select-sm" required>
+                            <select name="final_verdict" class="form-select form-select-sm" required <?php echo $verdictLocked ? 'disabled' : ''; ?>>
                                 <option value="">-- Select Verdict --</option>
-                                <option value="passed">✅ Passed</option>
-                                <option value="passed_minor_revisions">✏️ Passed with Minor Revisions</option>
-                                <option value="passed_major_revisions">📝 Passed with Major Revisions</option>
-                                <option value="redefense">🔄 Redefense Required</option>
-                                <option value="failed">❌ Failed</option>
+                                <option value="passed">Passed</option>
+                                <option value="passed_minor_revisions">Passed with Minor Revisions</option>
+                                <option value="passed_major_revisions">Passed with Major Revisions</option>
+                                <option value="redefense">Redefense Required</option>
+                                <option value="failed">Failed</option>
                             </select>
                         </div>
                         
                         <div class="mb-3">
                             <label class="form-label small fw-semibold">Comments/Recommendations</label>
                             <textarea name="verdict_comments" class="form-control form-control-sm" rows="4" 
-                                      placeholder="Provide detailed feedback and recommendations..."></textarea>
+                                      placeholder="Provide detailed feedback and recommendations..." <?php echo $verdictLocked ? 'disabled' : ''; ?>></textarea>
                         </div>
                         
-                        <button type="submit" class="btn btn-warning btn-sm w-100">
-                            <i class="bi bi-check-circle me-1"></i>Submit Final Verdict
+                        <button type="submit" class="btn btn-success btn-sm w-100" <?php echo $verdictLocked ? 'disabled' : ''; ?>>
+                            Submit Final Verdict
                         </button>
                     </form>
+                    <?php if ($verdictLocked): ?>
+                        <div class="text-muted small mt-2">Verdict is locked after submission.</div>
+                    <?php endif; ?>
                 </div>
                 <?php endif; ?>
             </div>
@@ -368,3 +369,4 @@ $stats = get_committee_annotation_statistics($conn, $submission_id);
 </script>
 </body>
 </html>
+

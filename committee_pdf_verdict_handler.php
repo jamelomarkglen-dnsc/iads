@@ -52,6 +52,11 @@ if (!$submission) {
     header('Location: committee_pdf_inbox.php');
     exit;
 }
+if (!empty($submission['final_verdict']) && $submission['final_verdict'] !== 'pending') {
+    $_SESSION['verdict_error'] = 'Final verdict is already locked for this submission.';
+    header("Location: committee_pdf_review.php?submission_id={$submission_id}");
+    exit;
+}
 
 // Submit verdict
 $result = submit_committee_final_verdict($conn, $submission_id, $verdict, $comments, $chairperson_id);
