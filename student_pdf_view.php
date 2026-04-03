@@ -411,6 +411,12 @@ $version_info = get_version_chain_info($conn, $submission_id);
                                 <i class="bi bi-chevron-left"></i> Previous
                             </button>
                             <span class="pdf-page-info">Page 1 of 0</span>
+                            <div class="d-flex align-items-center gap-2 ms-2">
+                                <label for="pageJumpInput" class="small text-muted mb-0">Page</label>
+                                <input type="number" id="pageJumpInput" class="form-control form-control-sm" min="1" style="width: 90px;" placeholder="1">
+                                <button class="btn btn-sm btn-outline-primary" id="pageJumpBtn">Go</button>
+                                <span class="small text-muted" id="pageJumpTotal"></span>
+                            </div>
                             <button class="btn btn-sm btn-outline-primary" id="nextPageBtn">
                                 Next <i class="bi bi-chevron-right"></i>
                             </button>
@@ -503,9 +509,68 @@ $version_info = get_version_chain_info($conn, $submission_id);
             pollingInterval: 1000 // Poll every 1 second for real-time updates
         });
         
+        const pageJumpInput = document.getElementById('pageJumpInput');
+        const pageJumpBtn = document.getElementById('pageJumpBtn');
+        const pageJumpTotal = document.getElementById('pageJumpTotal');
+
+        const syncPageJumpMeta = () => {
+            if (!pageJumpInput || !pageJumpTotal) {
+                return;
+            }
+            const totalPages = pdfViewer.getTotalPages();
+            if (totalPages > 0) {
+                pageJumpTotal.textContent = `of ${totalPages}`;
+                pageJumpInput.max = totalPages;
+                if (!pageJumpInput.value) {
+                    pageJumpInput.value = pdfViewer.getCurrentPage();
+                }
+            }
+        };
+
+        const syncPageJumpValue = () => {
+            if (pageJumpInput) {
+                pageJumpInput.value = pdfViewer.getCurrentPage();
+            }
+        };
+
+        const waitForTotalPages = () => {
+            const totalPages = pdfViewer.getTotalPages();
+            if (totalPages > 0) {
+                syncPageJumpMeta();
+                return;
+            }
+            setTimeout(waitForTotalPages, 200);
+        };
+
+        waitForTotalPages();
+
+        if (pageJumpBtn && pageJumpInput) {
+            pageJumpBtn.addEventListener('click', async () => {
+                const value = parseInt(pageJumpInput.value, 10);
+                if (Number.isNaN(value)) {
+                    return;
+                }
+                await pdfViewer.goToPage(value);
+                syncPageJumpValue();
+            });
+
+            pageJumpInput.addEventListener('keydown', async (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    pageJumpBtn.click();
+                }
+            });
+        }
+
         // Page navigation
-        document.getElementById('prevPageBtn').addEventListener('click', () => pdfViewer.previousPage());
-        document.getElementById('nextPageBtn').addEventListener('click', () => pdfViewer.nextPage());
+        document.getElementById('prevPageBtn').addEventListener('click', async () => {
+            await pdfViewer.previousPage();
+            syncPageJumpValue();
+        });
+        document.getElementById('nextPageBtn').addEventListener('click', async () => {
+            await pdfViewer.nextPage();
+            syncPageJumpValue();
+        });
         
         // Zoom controls
         document.getElementById('zoomInBtn').addEventListener('click', () => pdfViewer.zoomIn());
