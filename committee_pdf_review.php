@@ -50,6 +50,36 @@ $stats = get_committee_annotation_statistics($conn, $submission_id);
         .content { margin-left: var(--sidebar-width-expanded, 240px); transition: margin-left 0.3s ease; padding: 20px; min-height: 100vh; }
         #sidebar.collapsed ~ .content { margin-left: var(--sidebar-width-collapsed, 70px); }
         @media (max-width: 992px) { .content { margin-left: 0; padding: 15px; } }
+        nav.navbar {
+            position: fixed !important;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 9999 !important;
+            pointer-events: auto;
+        }
+        body { padding-top: 70px; }
+        #notifDropdown,
+        #notifDropdown * {
+            pointer-events: auto;
+        }
+        #notifMenu {
+            z-index: 10000 !important;
+        }
+        #notifClickProxy {
+            position: fixed;
+            z-index: 10001;
+            cursor: pointer;
+            background: transparent;
+            pointer-events: auto;
+        }
+        .pdf-review-container,
+        .pdf-viewer-wrapper,
+        .pdf-canvas-container,
+        .comment-panel {
+            position: relative;
+            z-index: 1;
+        }
         
         /* User Filter Tabs */
         .annotation-user-tabs {
@@ -108,6 +138,7 @@ $stats = get_committee_annotation_statistics($conn, $submission_id);
 <body>
 <?php include 'header.php'; ?>
 <?php include 'sidebar.php'; ?>
+<div id="notifClickProxy" aria-hidden="true"></div>
 
 <div class="content">
     <div class="container-fluid">
@@ -303,6 +334,37 @@ $stats = get_committee_annotation_statistics($conn, $submission_id);
     document.getElementById('zoomInBtn').addEventListener('click', () => pdfViewer.zoomIn());
     document.getElementById('zoomOutBtn').addEventListener('click', () => pdfViewer.zoomOut());
     document.getElementById('resetZoomBtn').addEventListener('click', () => pdfViewer.resetZoom());
+</script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const proxy = document.getElementById('notifClickProxy');
+        const bell = document.getElementById('notifDropdown');
+        if (!proxy || !bell) {
+            return;
+        }
+
+        const positionProxy = () => {
+            const rect = bell.getBoundingClientRect();
+            proxy.style.top = `${rect.top}px`;
+            proxy.style.left = `${rect.left}px`;
+            proxy.style.width = `${rect.width}px`;
+            proxy.style.height = `${rect.height}px`;
+        };
+
+        positionProxy();
+        window.addEventListener('resize', positionProxy);
+
+        proxy.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const Dropdown = window.bootstrap && window.bootstrap.Dropdown;
+            if (Dropdown) {
+                Dropdown.getOrCreateInstance(bell).toggle();
+            } else {
+                bell.click();
+            }
+        });
+    });
 </script>
 </body>
 </html>
