@@ -457,7 +457,7 @@ include 'sidebar.php';
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Outline Defense Manuscript Submission</title>
+    <title>Route Slip Packet Submission</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
@@ -475,8 +475,8 @@ include 'sidebar.php';
 <div class="content">
     <div class="container-fluid">
         <div class="hero-card mb-4">
-            <h3 class="fw-bold mb-1">Outline Defense Manuscript Submission</h3>
-            <p class="mb-0 text-white-50">Upload your outline defense manuscript (PDF only) for adviser, committee chairperson, and panel review.</p>
+            <h3 class="fw-bold mb-1">Route Slip Packet Submission</h3>
+            <p class="mb-0 text-white-50">Send your adviser-issued route slip (and revised manuscript if required) to the defense committee.</p>
         </div>
 
         <?php if ($success): ?>
@@ -486,7 +486,7 @@ include 'sidebar.php';
         <?php endif; ?>
 
         <div class="row g-4">
-            <div class="col-lg-4">
+            <div class="col-lg-12">
                 <div class="card info-card p-4">
                     <h5 class="fw-bold text-success mb-2">Submission Status</h5>
                     <?php if ($currentSubmission): ?>
@@ -510,39 +510,6 @@ include 'sidebar.php';
                             Your submission is under review. You can resubmit only if it is marked for revision.
                         </div>
                     <?php endif; ?>
-                </div>
-            </div>
-            <div class="col-lg-8">
-                <div class="card form-card p-4">
-                    <h5 class="fw-bold text-success mb-3">Upload Outline Defense Manuscript (PDF)</h5>
-                    <form method="post" enctype="multipart/form-data">
-                        <div class="mb-3">
-                            <label class="form-label">Outline Defense Title</label>
-                            <input type="text"
-                                   name="final_title"
-                                   class="form-control"
-                                   value="<?= htmlspecialchars($formValues['final_title']); ?>"
-                                   <?= ($memoReady && $finalPickTitle !== '') ? 'readonly' : ''; ?>
-                                   required>
-                            <div class="form-text">Auto-filled from your outline defense memo.</div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Notes (optional)</label>
-                            <textarea name="notes" class="form-control" rows="2"><?= htmlspecialchars($formValues['notes']); ?></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Outline Defense Manuscript PDF</label>
-                            <input type="file" name="final_document" class="form-control" accept="application/pdf" required>
-                            <div class="form-text">PDF only to keep the formatting consistent for panel review.</div>
-                        </div>
-                        <div class="alert alert-light border small mb-3">
-                            <strong>Submission tips:</strong> use a clear filename, verify all pages are readable, and confirm the title matches your final pick.
-                        </div>
-                        <button type="submit" name="submit_final_paper" class="btn btn-success"
-                            <?= $canSubmit ? '' : 'disabled'; ?>>
-                            Submit Manuscript
-                        </button>
-                    </form>
                 </div>
             </div>
         </div>
