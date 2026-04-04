@@ -936,6 +936,25 @@ if (!function_exists('get_student_progress_tracker_data')) {
                 }
             }
         }
+
+        $latestFinalPaper = null;
+        if (progress_tracker_column_exists($conn, 'final_paper_submissions', 'id') && function_exists('fetchLatestFinalPaperSubmission')) {
+            $latestFinalPaper = fetchLatestFinalPaperSubmission($conn, $studentId);
+        }
+        $verdictValue = $latestFinalPaper ? trim((string)($latestFinalPaper['outline_defense_verdict'] ?? '')) : '';
+        $verdictStepStatus = $rows['outline_verdict_released']['status'] ?? 'pending';
+        if ($verdictValue !== '' && $verdictStepStatus !== 'complete') {
+            $completedAt = $latestFinalPaper['outline_defense_verdict_at'] ?? null;
+            progress_tracker_mark_step_complete(
+                $conn,
+                $studentId,
+                'outline_verdict_released',
+                'final_paper_submissions',
+                (int)($latestFinalPaper['id'] ?? 0),
+                $completedAt
+            );
+            $rows = progress_tracker_fetch_rows($conn, $studentId);
+        }
         if (!$rows && function_exists('progress_tracker_compute_legacy_data')) {
             $cache[$studentId] = progress_tracker_compute_legacy_data($conn, $studentId);
             return $cache[$studentId];
