@@ -243,7 +243,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['final_decision']) && 
                     "Your outline defense manuscript has been marked as " . finalPaperStatusLabel($decision) . ".",
                     'submit_final_paper.php'
                 );
-                if ($decision === 'Approved' && function_exists('progress_tracker_mark_step_complete')) {
+                $revisionCompleteStatuses = ['Approved', 'Minor Revision', 'Major Revision'];
+                if (in_array($decision, $revisionCompleteStatuses, true) && function_exists('progress_tracker_mark_step_complete')) {
                     progress_tracker_mark_step_complete(
                         $conn,
                         (int)($submission['student_id'] ?? 0),

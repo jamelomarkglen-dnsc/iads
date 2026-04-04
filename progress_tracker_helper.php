@@ -613,6 +613,19 @@ if (!function_exists('progress_tracker_compute_legacy_data')) {
         }
         $outlineVerdictReleased = !empty(trim((string)($finalPaperSubmission['outline_defense_verdict'] ?? '')));
         $revisionCompleted = strcasecmp($finalPaperStatusLabel, 'Approved') === 0;
+        $verdictValue = strtolower(trim((string)($finalPaperSubmission['outline_defense_verdict'] ?? '')));
+        $reviewGateStatus = strtolower(trim((string)($finalPaperSubmission['review_gate_status'] ?? '')));
+        $passedVerdicts = ['passed', 'passed with revision'];
+        $passedGateStatuses = ['passed', 'passed with minor revision', 'passed with major revision'];
+        $hasFailVerdict = $verdictValue !== ''
+            && (in_array($verdictValue, ['failed'], true) || stripos($verdictValue, 'redefense') !== false);
+        $hasFailGate = $reviewGateStatus !== ''
+            && (in_array($reviewGateStatus, ['failed', 'redefense required'], true) || stripos($reviewGateStatus, 'redefense') !== false);
+        if (!$hasFailVerdict && !$hasFailGate) {
+            if (in_array($verdictValue, $passedVerdicts, true) || in_array($reviewGateStatus, $passedGateStatuses, true)) {
+                $revisionCompleted = true;
+            }
+        }
         $routeSlipDecision = strtolower(trim((string)($finalPaperSubmission['route_slip_overall_decision'] ?? '')));
         $routeSlipSignedAt = $finalPaperSubmission['route_slip_signed_at'] ?? null;
         $routeSlipIssued = !empty($routeSlipSignedAt)
@@ -942,6 +955,9 @@ if (!function_exists('get_student_progress_tracker_data')) {
             $latestFinalPaper = fetchLatestFinalPaperSubmission($conn, $studentId);
         }
         $verdictValue = $latestFinalPaper ? trim((string)($latestFinalPaper['outline_defense_verdict'] ?? '')) : '';
+        $verdictValueLower = strtolower($verdictValue);
+        $reviewGateStatus = $latestFinalPaper ? strtolower(trim((string)($latestFinalPaper['review_gate_status'] ?? ''))) : '';
+        $statusValue = $latestFinalPaper ? strtolower(trim((string)($latestFinalPaper['status'] ?? ''))) : '';
         $verdictStepStatus = $rows['outline_verdict_released']['status'] ?? 'pending';
         if ($verdictValue !== '' && $verdictStepStatus !== 'complete') {
             $completedAt = $latestFinalPaper['outline_defense_verdict_at'] ?? null;
@@ -954,6 +970,35 @@ if (!function_exists('get_student_progress_tracker_data')) {
                 $completedAt
             );
             $rows = progress_tracker_fetch_rows($conn, $studentId);
+        }
+        $revisionStepStatus = $rows['revision_completed']['status'] ?? 'pending';
+        if ($latestFinalPaper && $revisionStepStatus !== 'complete') {
+            $passedVerdicts = ['passed', 'passed with revision'];
+            $passedGateStatuses = ['passed', 'passed with minor revision', 'passed with major revision'];
+            $hasFailVerdict = $verdictValueLower !== ''
+                && (in_array($verdictValueLower, ['failed'], true) || stripos($verdictValueLower, 'redefense') !== false);
+            $hasFailGate = $reviewGateStatus !== ''
+                && (in_array($reviewGateStatus, ['failed', 'redefense required'], true) || stripos($reviewGateStatus, 'redefense') !== false);
+            $shouldCompleteRevision = false;
+            if (!$hasFailVerdict && !$hasFailGate) {
+                if (in_array($verdictValueLower, $passedVerdicts, true)
+                    || in_array($reviewGateStatus, $passedGateStatuses, true)
+                    || in_array($statusValue, ['approved', 'minor revision', 'major revision'], true)) {
+                    $shouldCompleteRevision = true;
+                }
+            }
+            if ($shouldCompleteRevision) {
+                $completedAt = $latestFinalPaper['final_decision_at'] ?? $latestFinalPaper['outline_defense_verdict_at'] ?? null;
+                progress_tracker_mark_step_complete(
+                    $conn,
+                    $studentId,
+                    'revision_completed',
+                    'final_paper_submissions',
+                    (int)($latestFinalPaper['id'] ?? 0),
+                    $completedAt
+                );
+                $rows = progress_tracker_fetch_rows($conn, $studentId);
+            }
         }
         if (!$rows && function_exists('progress_tracker_compute_legacy_data')) {
             $cache[$studentId] = progress_tracker_compute_legacy_data($conn, $studentId);
