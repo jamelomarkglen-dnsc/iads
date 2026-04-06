@@ -578,6 +578,27 @@ if (!function_exists('progress_tracker_compute_legacy_data')) {
         if (progress_tracker_column_exists($conn, 'final_paper_submissions', 'id') && function_exists('fetchLatestFinalPaperSubmission')) {
             $finalPaperSubmission = fetchLatestFinalPaperSubmission($conn, $studentId);
         }
+        $committeeSubmissionExists = false;
+        $committeeSubmissionAt = null;
+        if (progress_tracker_column_exists($conn, 'committee_pdf_submissions', 'id')) {
+            $stmt = $conn->prepare("
+                SELECT submitted_at
+                FROM committee_pdf_submissions
+                WHERE student_id = ?
+                ORDER BY submitted_at DESC, id DESC
+                LIMIT 1
+            ");
+            if ($stmt) {
+                $stmt->bind_param('i', $studentId);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                if ($row) {
+                    $committeeSubmissionExists = true;
+                    $committeeSubmissionAt = $row['submitted_at'] ?? null;
+                }
+                $stmt->close();
+            }
+        }
         $finalPaperStatusLabel = 'Not submitted';
         if ($finalPaperSubmission) {
             $finalPaperStatusLabel = trim((string)($finalPaperSubmission['status'] ?? ''));
@@ -585,8 +606,8 @@ if (!function_exists('progress_tracker_compute_legacy_data')) {
                 $finalPaperStatusLabel = 'Submitted';
             }
         }
-        $outlineSubmitted = $finalPaperSubmission !== null;
-        $outlineReviewCompleted = false;
+        $outlineSubmitted = $finalPaperSubmission !== null || $committeeSubmissionExists;
+        $outlineReviewCompleted = $committeeSubmissionExists;
         if ($finalPaperSubmission) {
             $completedAt = $finalPaperSubmission['committee_reviews_completed_at'] ?? null;
             if (!empty($completedAt)) {
@@ -953,6 +974,53 @@ if (!function_exists('get_student_progress_tracker_data')) {
         $latestFinalPaper = null;
         if (progress_tracker_column_exists($conn, 'final_paper_submissions', 'id') && function_exists('fetchLatestFinalPaperSubmission')) {
             $latestFinalPaper = fetchLatestFinalPaperSubmission($conn, $studentId);
+        }
+        $latestCommitteeSubmissionAt = null;
+        $latestCommitteeSubmissionId = 0;
+        if (progress_tracker_column_exists($conn, 'committee_pdf_submissions', 'id')) {
+            $stmt = $conn->prepare("
+                SELECT id, submitted_at
+                FROM committee_pdf_submissions
+                WHERE student_id = ?
+                ORDER BY submitted_at DESC, id DESC
+                LIMIT 1
+            ");
+            if ($stmt) {
+                $stmt->bind_param('i', $studentId);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                if ($row) {
+                    $latestCommitteeSubmissionId = (int)($row['id'] ?? 0);
+                    $latestCommitteeSubmissionAt = $row['submitted_at'] ?? null;
+                }
+                $stmt->close();
+            }
+        }
+        if ($latestCommitteeSubmissionId > 0) {
+            $outlineSubmittedStatus = $rows['outline_submitted']['status'] ?? 'pending';
+            if ($outlineSubmittedStatus !== 'complete') {
+                progress_tracker_mark_step_complete(
+                    $conn,
+                    $studentId,
+                    'outline_submitted',
+                    'committee_pdf_submissions',
+                    $latestCommitteeSubmissionId,
+                    $latestCommitteeSubmissionAt
+                );
+                $rows = progress_tracker_fetch_rows($conn, $studentId);
+            }
+            $outlineReviewStatus = $rows['outline_review_completed']['status'] ?? 'pending';
+            if ($outlineReviewStatus !== 'complete') {
+                progress_tracker_mark_step_complete(
+                    $conn,
+                    $studentId,
+                    'outline_review_completed',
+                    'committee_pdf_submissions',
+                    $latestCommitteeSubmissionId,
+                    $latestCommitteeSubmissionAt
+                );
+                $rows = progress_tracker_fetch_rows($conn, $studentId);
+            }
         }
         $verdictValue = $latestFinalPaper ? trim((string)($latestFinalPaper['outline_defense_verdict'] ?? '')) : '';
         $verdictValueLower = strtolower($verdictValue);
