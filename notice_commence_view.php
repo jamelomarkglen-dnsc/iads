@@ -97,28 +97,33 @@ function notice_status_badge(string $status): string
             max-width: 860px;
             margin: 0 auto;
         }
+        .letter-head { margin: 0; }
+        .letter-foot { margin: 0; }
+        .letter-body {
+            padding: 20px 40px;
+        }
         .letter-head,
         .letter-foot {
             width: 100%;
             overflow: hidden;
         }
         .letter-head {
-            height: 180px;
+            height: auto;
+            max-height: 220px;
             border-bottom: 1px solid #d9e2d6;
         }
         .letter-foot {
-            height: 120px;
+            height: auto;
+            max-height: 160px;
             border-top: 1px solid #d9e2d6;
         }
         .letter-head img,
         .letter-foot img {
             width: 100%;
-            height: 100%;
-            object-fit: cover;
+            height: auto;
+            object-fit: contain;
             display: block;
         }
-        .letter-head img { object-position: top center; }
-        .letter-foot img { object-position: bottom center; }
         .letter-body {
             padding: 24px 44px;
             font-size: 0.96rem;
@@ -128,7 +133,7 @@ function notice_status_badge(string $status): string
             white-space: pre-line;
         }
         @media print {
-            @page { size: letter; margin: 0.5in; }
+            @page { size: letter; margin: 0.4in; }
             body { background: #fff; }
             nav.navbar,
             #sidebar,
@@ -137,9 +142,9 @@ function notice_status_badge(string $status): string
             }
             .content { margin: 0 !important; }
             .notice-card { border: none; box-shadow: none; max-width: 100%; margin: 0; }
-            .letter-head { height: 170px; }
-            .letter-foot { height: 110px; }
-            .letter-body { padding: 18px 28px; font-size: 10.5pt; line-height: 1.5; }
+            .letter-head { max-height: 180px; }
+            .letter-foot { max-height: 120px; }
+            .letter-body { padding: 16px 24px; font-size: 10.5pt; line-height: 1.45; }
         }
         .notice-card { border-radius: 18px; border: 1px solid rgba(22, 86, 44, 0.12); box-shadow: 0 18px 40px rgba(15, 61, 31, 0.08); }
         .notice-body { line-height: 1.5; text-align: justify; text-justify: inter-word; }
