@@ -713,22 +713,9 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
                                 <td><?= htmlspecialchars($review['reviewer_role'] ?? ''); ?></td>
                                 <td><span class="badge <?= finalPaperReviewStatusClass($statusLabel); ?>"><?= htmlspecialchars($statusLabel); ?></span></td>
                                 <td><?= htmlspecialchars($review['route_slip_reviewed_at'] ?? ''); ?></td>
-                                <td>
+                                <td class="text-center">
                                     <?php if (!empty($review['route_slip_signature_path'])): ?>
-                                        <?php
-                                            $sigPath = $review['route_slip_signature_path'];
-                                            $sigSrc = normalize_signature_src($sigPath);
-                                            $cacheBuster = null;
-                                            if ($sigPath !== '' && is_file($sigPath)) {
-                                                $cacheBuster = filemtime($sigPath);
-                                            } elseif ($sigSrc !== '' && is_file($sigSrc)) {
-                                                $cacheBuster = filemtime($sigSrc);
-                                            }
-                                            if ($sigSrc !== '' && $cacheBuster) {
-                                                $sigSrc .= '?v=' . $cacheBuster;
-                                            }
-                                        ?>
-                                        <img src="<?= htmlspecialchars($sigSrc); ?>" alt="Signature" style="max-height: 40px; max-width: 120px; object-fit: contain;">
+                                        <i class="bi bi-check-circle-fill text-success" title="Signature on file"></i>
                                     <?php else: ?>
                                         <span class="text-muted small">Not uploaded</span>
                                     <?php endif; ?>
@@ -775,7 +762,7 @@ function renderSummaryRows(reviews) {
     reviews.forEach((review) => {
         const row = document.createElement('tr');
         const signatureCell = review.signature_path
-            ? `<img src="${escapeHtml(review.signature_path)}" alt="Signature" style="max-height: 40px; max-width: 120px; object-fit: contain;">`
+            ? '<i class="bi bi-check-circle-fill text-success" title="Signature on file"></i>'
             : '<span class="text-muted small">Not uploaded</span>';
         row.innerHTML = `
             <td>${escapeHtml(review.reviewer_name || '')}</td>
