@@ -58,8 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['payment_id'])) {
                 if ($status === 'payment_accepted' && function_exists('progress_tracker_mark_step_complete')) {
                     $studentId = (int)$ownerResult['user_id'];
                     progress_tracker_mark_step_complete($conn, $studentId, 'payment_verified', 'payment_proofs', $paymentId);
-                    if (function_exists('progress_tracker_student_has_final_routing_passed')
-                        && progress_tracker_student_has_final_routing_passed($conn, $studentId)
+                    if (function_exists('progress_tracker_student_has_final_endorsement_approved')
+                        && progress_tracker_student_has_final_endorsement_approved($conn, $studentId)
                     ) {
                         progress_tracker_mark_step_complete($conn, $studentId, 'final_payment_verified', 'payment_proofs', $paymentId);
                     }

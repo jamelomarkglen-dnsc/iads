@@ -309,6 +309,52 @@ if (!function_exists('progress_tracker_student_has_final_routing_passed')) {
     }
 }
 
+if (!function_exists('progress_tracker_student_has_final_endorsement_approved')) {
+    function progress_tracker_student_has_final_endorsement_approved(mysqli $conn, int $studentId): bool
+    {
+        if ($studentId <= 0) {
+            return false;
+        }
+        $status = null;
+        if (progress_tracker_column_exists($conn, 'final_endorsement_submissions', 'status')) {
+            $stmt = $conn->prepare("
+                SELECT status
+                FROM final_endorsement_submissions
+                WHERE student_id = ?
+                ORDER BY submitted_at DESC, id DESC
+                LIMIT 1
+            ");
+            if ($stmt) {
+                $stmt->bind_param('i', $studentId);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                $status = $row ? trim((string)($row['status'] ?? '')) : null;
+                $stmt->close();
+            }
+        }
+        if (
+            $status === null
+            && progress_tracker_column_exists($conn, 'final_defense_endorsements', 'status')
+        ) {
+            $stmt = $conn->prepare("
+                SELECT status
+                FROM final_defense_endorsements
+                WHERE student_id = ?
+                ORDER BY submitted_at DESC, id DESC
+                LIMIT 1
+            ");
+            if ($stmt) {
+                $stmt->bind_param('i', $studentId);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                $status = $row ? trim((string)($row['status'] ?? '')) : null;
+                $stmt->close();
+            }
+        }
+        return in_array($status, ['Approved', 'Verified'], true);
+    }
+}
+
 if (!function_exists('progress_tracker_column_exists')) {
     function progress_tracker_column_exists(mysqli $conn, string $table, string $column): bool
     {
@@ -676,9 +722,9 @@ if (!function_exists('progress_tracker_compute_legacy_data')) {
         $finalRoutingPassed = $finalRoutingStatus === 'Passed';
         $finalPaymentSubmitted = false;
         $finalPaymentVerified = false;
-        if ($finalRoutingPassed && $finalRoutingTimestamp && $paymentTimestamp) {
-            $finalPaymentSubmitted = strtotime($paymentTimestamp) >= strtotime($finalRoutingTimestamp);
-            $finalPaymentVerified = $finalPaymentSubmitted && $paymentStatus === 'payment_accepted';
+        if ($finalEndorsementApproved && $paymentTimestamp) {
+            $finalPaymentSubmitted = true;
+            $finalPaymentVerified = $paymentStatus === 'payment_accepted';
         }
 
         $finalDefenseScheduled = false;
@@ -998,6 +1044,59 @@ if (!function_exists('get_student_progress_tracker_data')) {
                     $completedAt
                 );
                 $rows = progress_tracker_fetch_rows($conn, $studentId);
+            }
+        }
+        if (function_exists('progress_tracker_student_has_final_endorsement_approved')
+            && progress_tracker_student_has_final_endorsement_approved($conn, $studentId)
+        ) {
+            $paymentStatus = null;
+            $paymentTimestamp = null;
+            if (progress_tracker_column_exists($conn, 'payment_proofs', 'id')) {
+                $stmt = $conn->prepare("
+                    SELECT status, created_at, updated_at
+                    FROM payment_proofs
+                    WHERE user_id = ?
+                    ORDER BY COALESCE(updated_at, created_at) DESC, id DESC
+                    LIMIT 1
+                ");
+                if ($stmt) {
+                    $stmt->bind_param('i', $studentId);
+                    $stmt->execute();
+                    $row = $stmt->get_result()->fetch_assoc();
+                    if ($row) {
+                        $paymentStatus = $row['status'] ?? null;
+                        $paymentTimestamp = $row['updated_at'] ?? $row['created_at'] ?? null;
+                    }
+                    $stmt->close();
+                }
+            }
+            if ($paymentTimestamp) {
+                $finalPaymentSubmittedStatus = $rows['final_payment_submitted']['status'] ?? 'pending';
+                if ($finalPaymentSubmittedStatus !== 'complete') {
+                    progress_tracker_mark_step_complete(
+                        $conn,
+                        $studentId,
+                        'final_payment_submitted',
+                        'payment_proofs',
+                        null,
+                        $paymentTimestamp
+                    );
+                    $rows = progress_tracker_fetch_rows($conn, $studentId);
+                }
+                if ($paymentStatus === 'payment_accepted') {
+                    $finalPaymentVerifiedStatus = $rows['final_payment_verified']['status'] ?? 'pending';
+                    if ($finalPaymentVerifiedStatus !== 'complete') {
+                        progress_tracker_mark_step_complete(
+                            $conn,
+                            $studentId,
+                            'final_payment_verified',
+                            'payment_proofs',
+                            null,
+                            $paymentTimestamp
+                        );
+                        $rows = progress_tracker_fetch_rows($conn, $studentId);
+                    }
+                }
             }
         }
         if (!$rows && function_exists('progress_tracker_compute_legacy_data')) {
