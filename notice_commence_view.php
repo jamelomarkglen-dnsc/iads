@@ -208,12 +208,6 @@ function notice_status_badge(string $status): string
                     <img src="memopic.jpg" alt="">
                 </div>
                 <div class="card-body letter-body">
-                    <div class="d-flex justify-content-end mb-3">
-                        <div class="text-muted small">
-                            <strong>Date:</strong> <?= htmlspecialchars($noticeDateLabel ?: 'Date not set'); ?>
-                        </div>
-                    </div>
-
                     <div class="mb-4">
                         <div class="row align-items-start g-2">
                             <div class="col-sm-8">
