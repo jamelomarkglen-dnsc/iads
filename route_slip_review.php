@@ -740,23 +740,6 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
             </div>
         </div>
 
-        <div class="card review-card p-4 mt-4">
-            <h5 class="fw-bold text-success mb-3">Signature Preview (Current)</h5>
-            <div class="signature-grid" id="routeSlipSignaturePreview">
-                <?php foreach ($signatureSlots as $slot): ?>
-                    <div class="signature-block">
-                        <?php if (!empty($slot['path'])): ?>
-                            <img src="<?= htmlspecialchars($slot['path']); ?>" alt="Signature" class="signature-image">
-                        <?php else: ?>
-                            <div class="signature-placeholder">No signature yet</div>
-                        <?php endif; ?>
-                        <div class="signature-line"></div>
-                        <div class="fw-semibold small"><?= htmlspecialchars($slot['label']); ?></div>
-                        <div class="text-muted small"><?= htmlspecialchars($slot['name']); ?></div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-        </div>
     </div>
 </div>
 
