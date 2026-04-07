@@ -51,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_verification'
             } else {
                 $signatureError = '';
                 $signaturePath = '';
+                $requestResult = null;
                 if (isset($_FILES['adviser_signature'])) {
                     $signaturePath = save_notice_signature_upload($_FILES['adviser_signature'], $adviser_id, $signatureError);
                 }
@@ -60,9 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_verification'
                 if ($signatureError !== '' || $signaturePath === '') {
                     $alert = ['type' => 'danger', 'message' => $signatureError !== '' ? $signatureError : 'Please upload your signature.'];
                 } else {
-                    $result = create_final_hardbound_committee_request($conn, $hardbound_id, $adviser_id, $remarks, $signaturePath, $committee);
+                    $requestResult = create_final_hardbound_committee_request($conn, $hardbound_id, $adviser_id, $remarks, $signaturePath, $committee);
                 }
-                if (!empty($result['success'])) {
+                if (!empty($requestResult['success'])) {
                     $studentName = trim(($submission['firstname'] ?? '') . ' ' . ($submission['lastname'] ?? '')) ?: 'the student';
                     $reviewers = build_final_hardbound_committee_reviewers($committee);
                     $reviewerIds = array_map(static fn ($reviewer) => (int)$reviewer['reviewer_id'], $reviewers);
@@ -71,12 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_verification'
                         $reviewerIds,
                         'Final hardbound endorsement request',
                         "Adviser sent the final hardbound endorsement for {$studentName}. Please review and upload your signature.",
-                        "committee_final_hardbound_review.php?request_id=" . (int)($result['request_id'] ?? 0),
+                        "committee_final_hardbound_review.php?request_id=" . (int)($requestResult['request_id'] ?? 0),
                         true
                     );
                     $alert = ['type' => 'success', 'message' => 'Endorsement request sent to the defense committee.'];
-                } elseif (!$alert) {
-                    $alert = ['type' => 'danger', 'message' => $result['error'] ?? 'Unable to create request.'];
+                } elseif (!$alert && $requestResult) {
+                    $alert = ['type' => 'danger', 'message' => $requestResult['error'] ?? 'Unable to create request.'];
                 }
             }
         }
