@@ -4,6 +4,7 @@ include 'db.php';
 require_once 'notifications_helper.php';
 require_once 'defense_committee_helpers.php';
 require_once 'defense_schedule_helpers.php';
+require_once 'title_update_helpers.php';
 require_once 'role_helpers.php';
 require_once 'progress_tracker_helper.php';
 require_once 'e_signature_helpers.php';
@@ -243,7 +244,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_committee_requ
         if (!$alert) {
             $memoFinalTitle = trim((string)($requestInfo['memo_final_title'] ?? ''));
             if ($memoFinalTitle === '') {
-                $memoFinalTitle = fetch_final_pick_title_for_student($conn, (int)($requestInfo['student_id'] ?? 0));
+                $memoFinalTitle = title_update_get_current_title($conn, (int)($requestInfo['student_id'] ?? 0));
+                if ($memoFinalTitle === '') {
+                    $memoFinalTitle = fetch_final_pick_title_for_student($conn, (int)($requestInfo['student_id'] ?? 0));
+                }
             }
             $update = $conn->prepare("
                 UPDATE defense_committee_requests
@@ -506,8 +510,13 @@ if ($requestResult) {
 $requests = array_map(function ($request) use ($conn) {
     $studentId = (int)($request['student_id'] ?? 0);
     $memoTitle = trim((string)($request['memo_final_title'] ?? ''));
-    $request['final_pick_title'] = $memoTitle !== ''
-        ? $memoTitle
+    if ($memoTitle !== '') {
+        $request['final_pick_title'] = $memoTitle;
+        return $request;
+    }
+    $currentTitle = title_update_get_current_title($conn, $studentId);
+    $request['final_pick_title'] = $currentTitle !== ''
+        ? $currentTitle
         : fetch_final_pick_title_for_student($conn, $studentId);
     return $request;
 }, $requests);

@@ -5,6 +5,7 @@ require_once 'notifications_helper.php';
 require_once 'chair_scope_helper.php';
 require_once 'defense_schedule_helpers.php';
 require_once 'defense_committee_helpers.php';
+require_once 'title_update_helpers.php';
 require_once 'role_helpers.php';
 require_once 'progress_tracker_helper.php';
 
@@ -194,7 +195,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['create_committee_requ
             $chairName = fetch_user_fullname($conn, $chairId);
             $panelOneName = fetch_user_fullname($conn, $panelOneId);
             $panelTwoName = fetch_user_fullname($conn, $panelTwoId);
-            $finalTitle = fetch_final_pick_title_for_student($conn, $studentId);
+            $finalTitle = title_update_get_current_title($conn, $studentId);
+            if ($finalTitle === '') {
+                $finalTitle = fetch_final_pick_title_for_student($conn, $studentId);
+            }
             $memoFinalTitle = $finalTitle;
             $memoSubject = 'OUTLINE DEFENSE';
             $memoSeriesYear = date('Y');

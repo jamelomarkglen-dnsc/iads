@@ -7,6 +7,7 @@ require_once 'final_concept_helpers.php';
 require_once 'final_paper_helpers.php';
 require_once 'route_slip_helpers.php';
 require_once 'progress_tracker_helper.php';
+require_once 'title_update_helpers.php';
 
 enforce_role_access(['student']);
 
@@ -50,6 +51,11 @@ if ($memoRequest) {
     if ($memoReady && $memoFinalTitle !== '') {
         $finalPickTitle = $memoFinalTitle;
     }
+}
+
+$currentTitle = title_update_get_current_title($conn, $studentId);
+if ($currentTitle !== '') {
+    $finalPickTitle = $currentTitle;
 }
 
 $currentSubmission = fetchLatestFinalPaperSubmission($conn, $studentId);
