@@ -12,6 +12,25 @@ $allowedRoles = ['adviser', 'panel', 'committee_chairperson', 'committee_chair']
 enforce_role_access($allowedRoles);
 
 ensureFinalPaperTables($conn);
+function normalize_signature_src(string $path): string
+{
+    $path = trim($path);
+    if ($path === '') {
+        return '';
+    }
+    $path = str_replace('\\', '/', $path);
+    if (preg_match('#^https?://#i', $path)) {
+        return $path;
+    }
+    $root = realpath(__DIR__);
+    if ($root) {
+        $root = str_replace('\\', '/', rtrim($root, '/'));
+        if (stripos($path, $root) === 0) {
+            $path = ltrim(substr($path, strlen($root)), '/');
+        }
+    }
+    return ltrim($path, '/');
+}
 
 $submissionId = (int)($_GET['submission_id'] ?? 0);
 $reviewerId = (int)($_SESSION['user_id'] ?? 0);
@@ -96,22 +115,22 @@ $signatureSlots = [
     [
         'label' => 'Panel Member 1',
         'name' => $panel1['reviewer_name'] ?? '',
-        'path' => $panel1['route_slip_signature_path'] ?? '',
+        'path' => normalize_signature_src($panel1['route_slip_signature_path'] ?? ''),
     ],
     [
         'label' => 'Panel Member 2',
         'name' => $panel2['reviewer_name'] ?? '',
-        'path' => $panel2['route_slip_signature_path'] ?? '',
+        'path' => normalize_signature_src($panel2['route_slip_signature_path'] ?? ''),
     ],
     [
         'label' => 'Committee Chairperson',
         'name' => $chairReview['reviewer_name'] ?? '',
-        'path' => $chairReview['route_slip_signature_path'] ?? '',
+        'path' => normalize_signature_src($chairReview['route_slip_signature_path'] ?? ''),
     ],
     [
         'label' => 'Adviser',
         'name' => $adviserReview['reviewer_name'] ?? '',
-        'path' => $adviserReview['route_slip_signature_path'] ?? '',
+        'path' => normalize_signature_src($adviserReview['route_slip_signature_path'] ?? ''),
     ],
 ];
 
@@ -130,7 +149,7 @@ if ($isSummaryRequest) {
             'status_label' => $statusLabel,
             'status_class' => finalPaperReviewStatusClass($statusLabel),
             'reviewed_at' => $review['route_slip_reviewed_at'] ?? '',
-            'signature_path' => $review['route_slip_signature_path'] ?? '',
+            'signature_path' => normalize_signature_src($review['route_slip_signature_path'] ?? ''),
         ];
     }
     $panelReviews = array_values(array_filter($reviews, function ($review) {
@@ -156,22 +175,22 @@ if ($isSummaryRequest) {
         [
             'label' => 'Panel Member 1',
             'name' => $panel1['reviewer_name'] ?? '',
-            'path' => $panel1['route_slip_signature_path'] ?? '',
+            'path' => normalize_signature_src($panel1['route_slip_signature_path'] ?? ''),
         ],
         [
             'label' => 'Panel Member 2',
             'name' => $panel2['reviewer_name'] ?? '',
-            'path' => $panel2['route_slip_signature_path'] ?? '',
+            'path' => normalize_signature_src($panel2['route_slip_signature_path'] ?? ''),
         ],
         [
             'label' => 'Committee Chairperson',
             'name' => $chairReview['reviewer_name'] ?? '',
-            'path' => $chairReview['route_slip_signature_path'] ?? '',
+            'path' => normalize_signature_src($chairReview['route_slip_signature_path'] ?? ''),
         ],
         [
             'label' => 'Adviser',
             'name' => $adviserReview['reviewer_name'] ?? '',
-            'path' => $adviserReview['route_slip_signature_path'] ?? '',
+            'path' => normalize_signature_src($adviserReview['route_slip_signature_path'] ?? ''),
         ],
     ];
     header('Content-Type: application/json');
@@ -525,6 +544,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_overall_route_sl
 }
 
 $reviewerSignaturePath = get_user_signature_path($conn, $reviewerId);
+$reviewerSignatureSrc = normalize_signature_src($reviewerSignaturePath);
 
 include 'header.php';
 include 'sidebar.php';
@@ -620,9 +640,9 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-success">E-Signature</label>
-                            <?php if ($reviewerSignaturePath !== ''): ?>
+                            <?php if ($reviewerSignatureSrc !== ''): ?>
                                 <div class="form-text">Using your Account Settings signature.</div>
-                                <img src="<?= htmlspecialchars($reviewerSignaturePath); ?>" alt="Route slip signature" style="max-height: 70px; max-width: 200px; object-fit: contain;">
+                                <img src="<?= htmlspecialchars($reviewerSignatureSrc); ?>" alt="Route slip signature" style="max-height: 70px; max-width: 200px; object-fit: contain;">
                             <?php else: ?>
                                 <div class="form-text text-danger">No signature on file. Please upload your e-signature in Account Settings.</div>
                             <?php endif; ?>
@@ -697,8 +717,16 @@ if ($selectedRouteSlipStatus === 'Needs Revision') {
                                     <?php if (!empty($review['route_slip_signature_path'])): ?>
                                         <?php
                                             $sigPath = $review['route_slip_signature_path'];
-                                            $cacheBuster = is_file($sigPath) ? filemtime($sigPath) : time();
-                                            $sigSrc = $sigPath . '?v=' . $cacheBuster;
+                                            $sigSrc = normalize_signature_src($sigPath);
+                                            $cacheBuster = null;
+                                            if ($sigPath !== '' && is_file($sigPath)) {
+                                                $cacheBuster = filemtime($sigPath);
+                                            } elseif ($sigSrc !== '' && is_file($sigSrc)) {
+                                                $cacheBuster = filemtime($sigSrc);
+                                            }
+                                            if ($sigSrc !== '' && $cacheBuster) {
+                                                $sigSrc .= '?v=' . $cacheBuster;
+                                            }
                                         ?>
                                         <img src="<?= htmlspecialchars($sigSrc); ?>" alt="Signature" style="max-height: 40px; max-width: 120px; object-fit: contain;">
                                     <?php else: ?>
