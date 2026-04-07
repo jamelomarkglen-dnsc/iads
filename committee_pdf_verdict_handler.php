@@ -8,6 +8,7 @@ session_start();
 require_once 'db.php';
 require_once 'committee_pdf_submission_helpers.php';
 require_once 'notifications_helper.php';
+require_once 'progress_tracker_helper.php';
 
 // Security: Only committee chairperson can submit verdicts
 $allowedRoles = ['committee_chairperson', 'committee_chair'];
@@ -71,6 +72,24 @@ if (!$result['success']) {
 $student_id = (int)$submission['student_id'];
 $verdict_label = get_verdict_label($verdict);
 $chairperson_name = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? '')) ?: 'Committee Chairperson';
+
+$passed_verdicts = ['passed', 'passed_minor_revisions', 'passed_major_revisions'];
+if (function_exists('progress_tracker_mark_step_complete') && in_array($verdict, $passed_verdicts, true)) {
+    progress_tracker_mark_step_complete(
+        $conn,
+        $student_id,
+        'outline_verdict_released',
+        'committee_pdf_submissions',
+        $submission_id
+    );
+    progress_tracker_mark_step_complete(
+        $conn,
+        $student_id,
+        'revision_completed',
+        'committee_pdf_submissions',
+        $submission_id
+    );
+}
 
 notify_user_for_role(
     $conn,

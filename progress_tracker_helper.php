@@ -580,9 +580,12 @@ if (!function_exists('progress_tracker_compute_legacy_data')) {
         }
         $committeeSubmissionExists = false;
         $committeeSubmissionAt = null;
+        $committeeSubmissionId = 0;
+        $committeeVerdictValue = '';
+        $committeeVerdictAt = null;
         if (progress_tracker_column_exists($conn, 'committee_pdf_submissions', 'id')) {
             $stmt = $conn->prepare("
-                SELECT submitted_at
+                SELECT id, submitted_at, final_verdict, final_verdict_at
                 FROM committee_pdf_submissions
                 WHERE student_id = ?
                 ORDER BY submitted_at DESC, id DESC
@@ -594,7 +597,10 @@ if (!function_exists('progress_tracker_compute_legacy_data')) {
                 $row = $stmt->get_result()->fetch_assoc();
                 if ($row) {
                     $committeeSubmissionExists = true;
+                    $committeeSubmissionId = (int)($row['id'] ?? 0);
                     $committeeSubmissionAt = $row['submitted_at'] ?? null;
+                    $committeeVerdictValue = strtolower(trim((string)($row['final_verdict'] ?? '')));
+                    $committeeVerdictAt = $row['final_verdict_at'] ?? null;
                 }
                 $stmt->close();
             }
@@ -632,11 +638,20 @@ if (!function_exists('progress_tracker_compute_legacy_data')) {
                 }
             }
         }
-        $outlineVerdictReleased = !empty(trim((string)($finalPaperSubmission['outline_defense_verdict'] ?? '')));
+        $verdictValue = $committeeVerdictValue !== ''
+            ? $committeeVerdictValue
+            : strtolower(trim((string)($finalPaperSubmission['outline_defense_verdict'] ?? '')));
+        $passedVerdicts = [
+            'passed',
+            'passed with revision',
+            'passed with minor revision',
+            'passed with major revision',
+            'passed_minor_revisions',
+            'passed_major_revisions',
+        ];
+        $outlineVerdictReleased = $verdictValue !== '' && in_array($verdictValue, $passedVerdicts, true);
         $revisionCompleted = strcasecmp($finalPaperStatusLabel, 'Approved') === 0;
-        $verdictValue = strtolower(trim((string)($finalPaperSubmission['outline_defense_verdict'] ?? '')));
         $reviewGateStatus = strtolower(trim((string)($finalPaperSubmission['review_gate_status'] ?? '')));
-        $passedVerdicts = ['passed', 'passed with revision'];
         $passedGateStatuses = ['passed', 'passed with minor revision', 'passed with major revision'];
         $hasFailVerdict = $verdictValue !== ''
             && (in_array($verdictValue, ['failed'], true) || stripos($verdictValue, 'redefense') !== false);
@@ -977,9 +992,11 @@ if (!function_exists('get_student_progress_tracker_data')) {
         }
         $latestCommitteeSubmissionAt = null;
         $latestCommitteeSubmissionId = 0;
+        $latestCommitteeVerdict = '';
+        $latestCommitteeVerdictAt = null;
         if (progress_tracker_column_exists($conn, 'committee_pdf_submissions', 'id')) {
             $stmt = $conn->prepare("
-                SELECT id, submitted_at
+                SELECT id, submitted_at, final_verdict, final_verdict_at
                 FROM committee_pdf_submissions
                 WHERE student_id = ?
                 ORDER BY submitted_at DESC, id DESC
@@ -992,6 +1009,8 @@ if (!function_exists('get_student_progress_tracker_data')) {
                 if ($row) {
                     $latestCommitteeSubmissionId = (int)($row['id'] ?? 0);
                     $latestCommitteeSubmissionAt = $row['submitted_at'] ?? null;
+                    $latestCommitteeVerdict = strtolower(trim((string)($row['final_verdict'] ?? '')));
+                    $latestCommitteeVerdictAt = $row['final_verdict_at'] ?? null;
                 }
                 $stmt->close();
             }
@@ -1021,13 +1040,41 @@ if (!function_exists('get_student_progress_tracker_data')) {
                 );
                 $rows = progress_tracker_fetch_rows($conn, $studentId);
             }
+            $passedVerdicts = ['passed', 'passed with revision', 'passed with minor revision', 'passed with major revision', 'passed_minor_revisions', 'passed_major_revisions'];
+            if ($latestCommitteeVerdict !== '' && in_array($latestCommitteeVerdict, $passedVerdicts, true)) {
+                $verdictStatus = $rows['outline_verdict_released']['status'] ?? 'pending';
+                if ($verdictStatus !== 'complete') {
+                    progress_tracker_mark_step_complete(
+                        $conn,
+                        $studentId,
+                        'outline_verdict_released',
+                        'committee_pdf_submissions',
+                        $latestCommitteeSubmissionId,
+                        $latestCommitteeVerdictAt ?? $latestCommitteeSubmissionAt
+                    );
+                    $rows = progress_tracker_fetch_rows($conn, $studentId);
+                }
+                $revisionStatus = $rows['revision_completed']['status'] ?? 'pending';
+                if ($revisionStatus !== 'complete') {
+                    progress_tracker_mark_step_complete(
+                        $conn,
+                        $studentId,
+                        'revision_completed',
+                        'committee_pdf_submissions',
+                        $latestCommitteeSubmissionId,
+                        $latestCommitteeVerdictAt ?? $latestCommitteeSubmissionAt
+                    );
+                    $rows = progress_tracker_fetch_rows($conn, $studentId);
+                }
+            }
         }
         $verdictValue = $latestFinalPaper ? trim((string)($latestFinalPaper['outline_defense_verdict'] ?? '')) : '';
         $verdictValueLower = strtolower($verdictValue);
+        $passedVerdicts = ['passed', 'passed with revision', 'passed with minor revision', 'passed with major revision'];
         $reviewGateStatus = $latestFinalPaper ? strtolower(trim((string)($latestFinalPaper['review_gate_status'] ?? ''))) : '';
         $statusValue = $latestFinalPaper ? strtolower(trim((string)($latestFinalPaper['status'] ?? ''))) : '';
         $verdictStepStatus = $rows['outline_verdict_released']['status'] ?? 'pending';
-        if ($verdictValue !== '' && $verdictStepStatus !== 'complete') {
+        if ($verdictValueLower !== '' && in_array($verdictValueLower, $passedVerdicts, true) && $verdictStepStatus !== 'complete') {
             $completedAt = $latestFinalPaper['outline_defense_verdict_at'] ?? null;
             progress_tracker_mark_step_complete(
                 $conn,
@@ -1041,7 +1088,6 @@ if (!function_exists('get_student_progress_tracker_data')) {
         }
         $revisionStepStatus = $rows['revision_completed']['status'] ?? 'pending';
         if ($latestFinalPaper && $revisionStepStatus !== 'complete') {
-            $passedVerdicts = ['passed', 'passed with revision'];
             $passedGateStatuses = ['passed', 'passed with minor revision', 'passed with major revision'];
             $hasFailVerdict = $verdictValueLower !== ''
                 && (in_array($verdictValueLower, ['failed'], true) || stripos($verdictValueLower, 'redefense') !== false);

@@ -233,31 +233,6 @@ setInterval(updateCountdowns, 1000);
 </script>
 </body>
 </html>
-SESSION\['user_id'];
-\$paymentVerified\ =\ student_has_verified_payment\(\$conn,\ \(int\)\$student_id\);
-
-\$schedules\ =\ \[];
-if\ \(\$paymentVerified\)\ \{
-\ \ \ \ //\ Fetch\ defense\ schedule
-\ \ \ \ \$sql\ =\ "
-\ \ \ \ \ \ SELECT\ ds\.id,\ ds\.defense_date,\ ds\.defense_time,\ ds\.venue,\ ds\.status,
-\ \ \ \ \ \ \ \ \ \ \ \ \ GROUP_CONCAT\(dp\.panel_member\ SEPARATOR\ ',\ '\)\ AS\ panel_members
-\ \ \ \ \ \ FROM\ defense_schedules\ ds
-\ \ \ \ \ \ LEFT\ JOIN\ defense_panels\ dp\ ON\ dp\.defense_id\ =\ ds\.id
-\ \ \ \ \ \ WHERE\ ds\.student_id\ =\ \?
-\ \ \ \ \ \ GROUP\ BY\ ds\.id
-\ \ \ \ \ \ ORDER\ BY\ ds\.defense_date\ DESC
-\ \ \ \ ";
-\ \ \ \ \$stmt\ =\ \$conn->prepare\(\$sql\);
-\ \ \ \ \$stmt->bind_param\("i",\ \$student_id\);
-\ \ \ \ \$stmt->execute\(\);
-\ \ \ \ \$result\ =\ \$stmt->get_result\(\);
-\ \ \ \ \$schedules\ =\ \$result->fetch_all\(MYSQLI_ASSOC\);
-\ \ \ \ \$stmt->close\(\);
-}
-
-include 'header.php';
-include 'sidebar.php';
 ?>
 
 <!DOCTYPE html>
