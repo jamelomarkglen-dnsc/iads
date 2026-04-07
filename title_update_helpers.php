@@ -353,12 +353,15 @@ if (!function_exists('title_update_apply_for_student')) {
 
         ensureTitleUpdateTable($conn);
 
+        $window = title_update_get_window($conn, $studentId);
+        if (empty($window['can_update'])) {
+            return ['success' => false, 'error' => $window['reason'] ?? 'Title update is not available.'];
+        }
+
         if ($stage === null || $stage === '') {
-            $window = title_update_get_window($conn, $studentId);
-            if (empty($window['can_update'])) {
-                return ['success' => false, 'error' => $window['reason'] ?? 'Title update is not available.'];
-            }
             $stage = $window['stage'] ?? '';
+        } elseif (!empty($window['stage']) && $stage !== $window['stage']) {
+            return ['success' => false, 'error' => 'Title update window does not match the current stage.'];
         }
 
         if (!in_array($stage, [TITLE_UPDATE_STAGE_PRE_OUTLINE, TITLE_UPDATE_STAGE_POST_OUTLINE], true)) {

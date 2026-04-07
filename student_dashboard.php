@@ -8,6 +8,7 @@ require_once 'final_paper_helpers.php';
 require_once 'defense_committee_helpers.php';
 require_once 'pdf_submission_helpers.php';
 require_once 'progress_tracker_helper.php';
+require_once 'title_update_helpers.php';
 
 enforce_role_access(['student']);
 
@@ -15,6 +16,26 @@ $studentId = (int)$_SESSION['user_id'];
 ensureFinalPaperTables($conn);
 ensureDefenseCommitteeRequestsTable($conn);
 ensureDefensePanelMemberColumns($conn);
+
+$titleUpdateAlert = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_title_update'])) {
+    $newTitleInput = trim((string)($_POST['new_title'] ?? ''));
+    $stageInput = trim((string)($_POST['title_update_stage'] ?? ''));
+    $stageInput = $stageInput !== '' ? $stageInput : null;
+    $result = title_update_apply_for_student($conn, $studentId, $newTitleInput, $stageInput);
+    if (!empty($result['success'])) {
+        $stageLabel = title_update_stage_label((string)($result['stage'] ?? ''));
+        $titleUpdateAlert = [
+            'type' => 'success',
+            'message' => "Title updated successfully ({$stageLabel}).",
+        ];
+    } else {
+        $titleUpdateAlert = [
+            'type' => 'danger',
+            'message' => $result['error'] ?? 'Unable to update title.',
+        ];
+    }
+}
 
 function fetchStatusTimeline(mysqli $conn, int $studentId): array
 {
@@ -514,6 +535,15 @@ if ($finalPaperSubmission) {
     $finalPaperVersion = (int)($finalPaperSubmission['version'] ?? 1);
     $finalPaperSubmittedAt = $finalPaperSubmission['submitted_at'] ?? null;
 }
+
+$titleUpdateWindow = title_update_get_window($conn, $studentId);
+$titleUpdateHistory = title_update_fetch_history($conn, $studentId);
+$titleUpdateCurrentTitle = title_update_get_current_title($conn, $studentId);
+$titleUpdateUsed = count($titleUpdateHistory);
+$titleUpdateRemaining = max(0, 2 - $titleUpdateUsed);
+$titleUpdateStageLabel = $titleUpdateWindow['stage']
+    ? title_update_stage_label((string)$titleUpdateWindow['stage'])
+    : '';
 
 $submissionFeedbackFeed = fetch_submission_feedback_for_student($conn, $studentId, 5);
 
@@ -1250,6 +1280,87 @@ if (function_exists('get_student_progress_tracker_data')) {
                                     <div class="text-muted">No message yet. The Program Chairperson will send the final pick note here.</div>
                                 </div>
                             <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="card mb-4" id="title-update-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Title Update</h5>
+                        <?php
+                            $titleUpdateBadgeClass = $titleUpdateRemaining > 0
+                                ? 'badge bg-success-subtle text-success'
+                                : 'badge bg-secondary-subtle text-secondary';
+                            $titleUpdateBadgeLabel = $titleUpdateRemaining > 0
+                                ? "{$titleUpdateRemaining} left"
+                                : 'No updates left';
+                        ?>
+                        <span class="<?php echo $titleUpdateBadgeClass; ?>"><?php echo htmlspecialchars($titleUpdateBadgeLabel); ?></span>
+                    </div>
+                    <div class="card-body">
+                        <?php if ($titleUpdateAlert): ?>
+                            <div class="alert alert-<?php echo htmlspecialchars($titleUpdateAlert['type']); ?> alert-dismissible fade show" role="alert">
+                                <?php echo htmlspecialchars($titleUpdateAlert['message']); ?>
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        <?php endif; ?>
+
+                        <div class="mb-3">
+                            <div class="text-muted small">Current Title</div>
+                            <?php if ($titleUpdateCurrentTitle !== ''): ?>
+                                <div class="fw-semibold text-success"><?php echo htmlspecialchars($titleUpdateCurrentTitle); ?></div>
+                            <?php else: ?>
+                                <div class="text-muted">No title found yet.</div>
+                            <?php endif; ?>
+                        </div>
+
+                        <?php if (!empty($titleUpdateWindow['can_update'])): ?>
+                            <div class="alert alert-info small mb-3">
+                                You can update your title now. This update applies to: <strong><?php echo htmlspecialchars($titleUpdateStageLabel); ?></strong>.
+                            </div>
+                            <form method="POST" action="student_dashboard.php#title-update-card">
+                                <input type="hidden" name="apply_title_update" value="1">
+                                <input type="hidden" name="title_update_stage" value="<?php echo htmlspecialchars((string)$titleUpdateWindow['stage']); ?>">
+                                <div class="mb-3">
+                                    <label for="titleUpdateInput" class="form-label small fw-semibold">New Title</label>
+                                    <input
+                                        type="text"
+                                        class="form-control"
+                                        id="titleUpdateInput"
+                                        name="new_title"
+                                        maxlength="255"
+                                        placeholder="Enter the updated title"
+                                        required
+                                    >
+                                    <small class="text-muted">You can update your title only twice: before and after outline defense.</small>
+                                </div>
+                                <button type="submit" class="btn btn-success">
+                                    Submit Title Update
+                                </button>
+                            </form>
+                        <?php else: ?>
+                            <div class="text-muted">
+                                <?php echo htmlspecialchars($titleUpdateWindow['reason'] ?? 'Title update is not available right now.'); ?>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if (!empty($titleUpdateHistory)): ?>
+                            <div class="mt-4">
+                                <div class="text-muted small mb-2">Update History</div>
+                                <ul class="list-unstyled mb-0">
+                                    <?php foreach ($titleUpdateHistory as $history): ?>
+                                        <?php
+                                            $stageLabel = title_update_stage_label((string)($history['stage'] ?? ''));
+                                            $submittedAt = formatTimestamp($history['submitted_at'] ?? null, 'N/A');
+                                        ?>
+                                        <li class="mb-3 pb-2 border-bottom">
+                                            <div class="small text-muted"><?php echo htmlspecialchars($stageLabel); ?> • <?php echo htmlspecialchars($submittedAt); ?></div>
+                                            <div class="fw-semibold">From: <?php echo htmlspecialchars($history['old_title'] ?? ''); ?></div>
+                                            <div>To: <?php echo htmlspecialchars($history['new_title'] ?? ''); ?></div>
+                                        </li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </div>
                         <?php endif; ?>
                     </div>
                 </div>
