@@ -284,6 +284,15 @@ include 'sidebar.php';
                                     <a class="btn btn-sm btn-outline-success" href="final_defense_review.php?submission_id=<?= (int)$row['id']; ?>">
                                         <i class="bi bi-eye"></i> Details
                                     </a>
+                                    <?php
+                                        $fileExt = strtolower(pathinfo($row['file_path'] ?? '', PATHINFO_EXTENSION));
+                                        $isPdf = !empty($row['file_path']) && $fileExt === 'pdf';
+                                    ?>
+                                    <?php if ($isPdf): ?>
+                                        <a class="btn btn-sm btn-outline-success" href="final_defense_pdf_view.php?submission_id=<?= (int)$row['id']; ?>">
+                                            <i class="bi bi-chat-left-text"></i> Annotate
+                                        </a>
+                                    <?php endif; ?>
                                 </div>
 
                                 <?php if ($isChair): ?>

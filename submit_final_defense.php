@@ -247,7 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_final_defense'
 $recentSubmissions = [];
 $recentStmt = $conn->prepare("
     SELECT fds.id, fds.status, fds.submitted_at, fds.reviewed_at, fds.review_notes,
-           s.title
+           fds.file_path, fds.file_name, s.title
     FROM final_defense_submissions fds
     LEFT JOIN submissions s ON s.id = fds.submission_id
     WHERE fds.student_id = ?
@@ -375,6 +375,20 @@ include 'sidebar.php';
                                     <span class="badge <?= $badgeClass; ?> mt-2"><?= htmlspecialchars($status); ?></span>
                                     <?php if (!empty($row['review_notes'])): ?>
                                         <div class="text-muted small mt-2">Notes: <?= htmlspecialchars($row['review_notes']); ?></div>
+                                    <?php endif; ?>
+                                    <?php
+                                        $filePath = $row['file_path'] ?? '';
+                                        $fileExt = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+                                        $isPdf = $filePath !== '' && $fileExt === 'pdf';
+                                    ?>
+                                    <?php if ($isPdf): ?>
+                                        <div class="mt-3">
+                                            <a class="btn btn-sm btn-outline-success" href="final_defense_pdf_view.php?submission_id=<?= (int)$row['id']; ?>">
+                                                <i class="bi bi-chat-left-text"></i> View Annotations
+                                            </a>
+                                        </div>
+                                    <?php elseif (!empty($filePath)): ?>
+                                        <div class="small text-muted mt-3">Annotations are available for PDF files only.</div>
                                     <?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
