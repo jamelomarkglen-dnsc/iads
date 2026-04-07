@@ -78,7 +78,7 @@ if ($currentSubmission && !$memoReady) {
 $formEnabled = $memoReady && $finalPickTitle !== '';
 $canResubmit = $currentSubmission && in_array($currentStatus, ['Needs Revision', 'Minor Revision', 'Major Revision', 'Rejected'], true);
 $canSubmit = $formEnabled && (!$currentSubmission || $canResubmit);
-$canSendPacket = $currentSubmission !== null;
+$canSendPacket = $currentSubmission !== null || !empty($latestRouteSlip);
 
 $success = '';
 $error = '';
@@ -144,60 +144,63 @@ function reset_route_slip_reviews(mysqli $conn, int $submissionId): void
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_route_slip_packet'])) {
-    if (!$currentSubmission) {
-        $error = 'Please submit your outline defense manuscript first.';
+    $reviewers = fetchFinalPaperReviewersForStudent($conn, $studentId);
+    if (empty($reviewers)) {
+        $error = 'Defense panel assignments are missing. Please contact the program chairperson.';
     } else {
-        $reviewers = fetchFinalPaperReviewersForStudent($conn, $studentId);
-        if (empty($reviewers)) {
-            $error = 'Defense panel assignments are missing. Please contact the program chairperson.';
+        $revisedInfo = $_FILES['revised_document'] ?? null;
+        $routeSlipInfo = $_FILES['route_slip_document'] ?? null;
+        $hasRevised = $revisedInfo && ($revisedInfo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
+        $hasNewRouteSlip = $routeSlipInfo && ($routeSlipInfo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
+        if (!$routeSlipInfo || ($routeSlipInfo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            $error = 'Please upload the route slip PDF from your adviser.';
+        } elseif (!is_pdf_upload($routeSlipInfo)) {
+            $error = 'Route slip must be a PDF file.';
+        } elseif ($hasRevised && !is_pdf_upload($revisedInfo)) {
+            $error = 'Revised manuscript must be a PDF file.';
         } else {
-            $revisedInfo = $_FILES['revised_document'] ?? null;
-            $routeSlipInfo = $_FILES['route_slip_document'] ?? null;
-            $hasRevised = $revisedInfo && ($revisedInfo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
-            $hasNewRouteSlip = $routeSlipInfo && ($routeSlipInfo['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
-            if (!$routeSlipInfo || ($routeSlipInfo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-                $error = 'Please upload the route slip PDF from your adviser.';
-            } elseif (!is_pdf_upload($routeSlipInfo)) {
-                $error = 'Route slip must be a PDF file.';
-            } elseif ($hasRevised && !is_pdf_upload($revisedInfo)) {
-                $error = 'Revised manuscript must be a PDF file.';
-            } else {
-                $filePath = $currentFile;
-                $safeName = $currentSubmission['file_name'] ?? '';
-                if ($hasRevised) {
-                    $uploadDir = 'uploads/outline_defense/';
-                    if (!is_dir($uploadDir)) {
-                        mkdir($uploadDir, 0777, true);
-                    }
-                    $safeName = preg_replace('/[^A-Za-z0-9._-]/', '_', basename($revisedInfo['name']));
-                    $filename = 'outline_defense_final_' . $studentId . '_' . date('Ymd_His') . '_' . $safeName;
-                    $filePath = $uploadDir . $filename;
-                    if (!move_uploaded_file($revisedInfo['tmp_name'], $filePath)) {
-                        $error = 'Unable to upload the revised manuscript. Please try again.';
-                    }
+            $filePath = $currentFile;
+            $safeName = $currentSubmission['file_name'] ?? '';
+            if ($hasRevised) {
+                $uploadDir = 'uploads/outline_defense/';
+                if (!is_dir($uploadDir)) {
+                    mkdir($uploadDir, 0777, true);
                 }
+                $safeName = preg_replace('/[^A-Za-z0-9._-]/', '_', basename($revisedInfo['name']));
+                $filename = 'outline_defense_final_' . $studentId . '_' . date('Ymd_His') . '_' . $safeName;
+                $filePath = $uploadDir . $filename;
+                if (!move_uploaded_file($revisedInfo['tmp_name'], $filePath)) {
+                    $error = 'Unable to upload the revised manuscript. Please try again.';
+                }
+            }
 
-                if ($error === '') {
-                    $slipDir = 'uploads/route_slips/';
-                    if (!is_dir($slipDir)) {
-                        mkdir($slipDir, 0777, true);
+            if ($error === '') {
+                $slipDir = 'uploads/route_slips/';
+                if (!is_dir($slipDir)) {
+                    mkdir($slipDir, 0777, true);
+                }
+                $safeSlipName = preg_replace('/[^A-Za-z0-9._-]/', '_', basename($routeSlipInfo['name']));
+                $slipFilename = 'route_slip_final_' . $studentId . '_' . date('Ymd_His') . '_' . $safeSlipName;
+                $slipPath = $slipDir . $slipFilename;
+                if (!move_uploaded_file($routeSlipInfo['tmp_name'], $slipPath)) {
+                    $error = 'Unable to upload the route slip PDF. Please try again.';
+                    if ($hasRevised && $filePath !== $currentFile) {
+                        @unlink($filePath);
                     }
-                    $safeSlipName = preg_replace('/[^A-Za-z0-9._-]/', '_', basename($routeSlipInfo['name']));
-                    $slipFilename = 'route_slip_final_' . $studentId . '_' . date('Ymd_His') . '_' . $safeSlipName;
-                    $slipPath = $slipDir . $slipFilename;
-                    if (!move_uploaded_file($routeSlipInfo['tmp_name'], $slipPath)) {
-                        $error = 'Unable to upload the route slip PDF. Please try again.';
-                        if ($hasRevised && $filePath !== $currentFile) {
-                            @unlink($filePath);
-                        }
-                    } else {
-                        if ($hasRevised && !empty($currentFile) && $currentFile !== $filePath && file_exists($currentFile)) {
-                            @unlink($currentFile);
-                        }
-                        if (!empty($currentRouteSlip) && $currentRouteSlip !== $slipPath && file_exists($currentRouteSlip)) {
-                            @unlink($currentRouteSlip);
-                        }
-
+                } else {
+                    if ($hasRevised && !empty($currentFile) && $currentFile !== $filePath && file_exists($currentFile)) {
+                        @unlink($currentFile);
+                    }
+                    if (!empty($currentRouteSlip) && $currentRouteSlip !== $slipPath && file_exists($currentRouteSlip)) {
+                        @unlink($currentRouteSlip);
+                    }
+                    if (!$currentSubmission && $filePath === '') {
+                        $filePath = $slipPath;
+                        $safeName = $safeSlipName;
+                    }
+                    if ($filePath === '') {
+                        $error = 'Please upload a revised manuscript or contact your adviser for the required files.';
+                    } elseif ($currentSubmission) {
                         $updateStmt = $conn->prepare("
                             UPDATE final_paper_submissions
                             SET file_path = ?,
@@ -250,6 +253,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_route_slip_pac
                             $updateStmt->close();
                         } else {
                             $error = 'Unable to prepare the route slip packet update.';
+                        }
+                    } else {
+                        $finalTitle = $finalPickTitle !== '' ? $finalPickTitle : 'Route Slip Packet';
+                        $insertStmt = $conn->prepare("
+                            INSERT INTO final_paper_submissions
+                                (student_id, final_title, file_path, file_name, route_slip_path, route_slip_name, status, version)
+                            VALUES (?, ?, ?, ?, ?, ?, 'Submitted', 1)
+                        ");
+                        if ($insertStmt) {
+                            $insertStmt->bind_param(
+                                'isssss',
+                                $studentId,
+                                $finalTitle,
+                                $filePath,
+                                $safeName,
+                                $slipPath,
+                                $safeSlipName
+                            );
+                            if ($insertStmt->execute()) {
+                                $newSubmissionId = (int)$insertStmt->insert_id;
+                                replaceFinalPaperReviews($conn, $newSubmissionId, $reviewers);
+                                foreach ($reviewers as $reviewer) {
+                                    $reviewerId = (int)($reviewer['reviewer_id'] ?? 0);
+                                    $reviewerRole = trim((string)($reviewer['reviewer_role'] ?? ''));
+                                    if ($reviewerId <= 0 || $reviewerRole === '') {
+                                        continue;
+                                    }
+                                    $link = 'route_slip_review.php?submission_id=' . $newSubmissionId;
+                                    notify_user_for_role(
+                                        $conn,
+                                        $reviewerId,
+                                        $reviewerRole,
+                                        'Route slip issued by adviser',
+                                        "{$studentName} submitted the route slip" . ($hasRevised ? ' and revised manuscript' : '') . " for review.",
+                                        $link
+                                    );
+                                }
+                                $success = $hasRevised
+                                    ? 'Route slip and revised manuscript sent to the defense committee.'
+                                    : 'Route slip sent to the defense committee.';
+                                $currentSubmission = fetchLatestFinalPaperSubmission($conn, $studentId);
+                                $currentStatus = trim((string)($currentSubmission['status'] ?? ''));
+                                $currentVersion = (int)($currentSubmission['version'] ?? 0);
+                                $currentFile = $currentSubmission['file_path'] ?? '';
+                                $currentRouteSlip = $currentSubmission['route_slip_path'] ?? '';
+                            } else {
+                                $error = 'Unable to save the route slip packet submission.';
+                            }
+                            $insertStmt->close();
+                        } else {
+                            $error = 'Unable to prepare the route slip packet submission.';
                         }
                     }
                 }
@@ -534,11 +588,6 @@ include 'sidebar.php';
                         </a>
                     <?php endif; ?>
                 </div>
-                <?php if (!$currentSubmission): ?>
-                    <div class="alert alert-info small mt-3 mb-0">
-                        Submit your outline defense manuscript to enable route slip packet submission.
-                    </div>
-                <?php endif; ?>
             </div>
         <?php endif; ?>
 
