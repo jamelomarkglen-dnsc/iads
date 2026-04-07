@@ -514,6 +514,34 @@ include 'sidebar.php';
             </div>
         </div>
 
+        <?php if ($latestRouteSlip): ?>
+            <div class="card info-card p-4 mt-4">
+                <h5 class="fw-bold text-success mb-2">Adviser-Issued Route Slip</h5>
+                <p class="text-muted mb-3">Your adviser has issued a route slip. Download it for your route slip packet submission.</p>
+                <div class="d-flex flex-wrap align-items-center gap-3">
+                    <div class="fw-semibold">From: <?= htmlspecialchars($latestRouteSlip['adviser_name'] ?? 'Adviser'); ?></div>
+                    <div class="text-muted small">
+                        Date: <?= htmlspecialchars($latestRouteSlipDate ?: ($latestRouteSlip['created_at'] ?? '')); ?>
+                    </div>
+                    <?php if (!empty($latestRouteSlip['action_taken'])): ?>
+                        <div class="text-muted small">
+                            Action: <?= htmlspecialchars(ucwords(str_replace('_', ' ', (string)$latestRouteSlip['action_taken']))); ?>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($latestRouteSlip['file_path'])): ?>
+                        <a href="<?= htmlspecialchars($latestRouteSlip['file_path']); ?>" target="_blank" class="btn btn-outline-success btn-sm">
+                            Download Route Slip
+                        </a>
+                    <?php endif; ?>
+                </div>
+                <?php if (!$currentSubmission): ?>
+                    <div class="alert alert-info small mt-3 mb-0">
+                        Submit your outline defense manuscript to enable route slip packet submission.
+                    </div>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+
         <?php if ($canSendPacket): ?>
             <div class="card form-card p-4 mt-4">
                 <h5 class="fw-bold text-success mb-3">Send Route Slip Packet</h5>
