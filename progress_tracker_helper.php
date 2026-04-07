@@ -728,7 +728,25 @@ if (!function_exists('progress_tracker_compute_legacy_data')) {
         }
 
         $finalDefenseScheduled = false;
-        if (progress_tracker_column_exists($conn, 'defense_schedules', 'id')) {
+        if (progress_tracker_column_exists($conn, 'final_defense_submissions', 'id')) {
+            $stmt = $conn->prepare("
+                SELECT submitted_at
+                FROM final_defense_submissions
+                WHERE student_id = ?
+                ORDER BY submitted_at DESC, id DESC
+                LIMIT 1
+            ");
+            if ($stmt) {
+                $stmt->bind_param('i', $studentId);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                if ($row) {
+                    $finalDefenseScheduled = !empty($row['submitted_at']);
+                }
+                $stmt->close();
+            }
+        }
+        if (!$finalDefenseScheduled && progress_tracker_column_exists($conn, 'defense_schedules', 'id')) {
             if (progress_tracker_column_exists($conn, 'defense_schedules', 'schedule_type')) {
                 $stmt = $conn->prepare("
                     SELECT defense_date
@@ -974,6 +992,22 @@ if (!function_exists('get_student_progress_tracker_data')) {
             if (function_exists('ensureDefenseScheduleTypeColumn')) {
                 ensureDefenseScheduleTypeColumn($conn);
             }
+            $hasFinalDefenseSubmission = false;
+            if (progress_tracker_column_exists($conn, 'final_defense_submissions', 'id')) {
+                $stmt = $conn->prepare("
+                    SELECT 1
+                    FROM final_defense_submissions
+                    WHERE student_id = ?
+                    LIMIT 1
+                ");
+                if ($stmt) {
+                    $stmt->bind_param('i', $studentId);
+                    $stmt->execute();
+                    $stmt->store_result();
+                    $hasFinalDefenseSubmission = $stmt->num_rows > 0;
+                    $stmt->close();
+                }
+            }
             if (progress_tracker_column_exists($conn, 'defense_schedules', 'schedule_type')) {
                 $stmt = $conn->prepare("
                     SELECT 1
@@ -989,7 +1023,7 @@ if (!function_exists('get_student_progress_tracker_data')) {
                     $hasFinalSchedule = $stmt->num_rows > 0;
                     $stmt->close();
                 }
-                if (!$hasFinalSchedule && isset($rows['final_defense_scheduled'])) {
+                if (!$hasFinalSchedule && !$hasFinalDefenseSubmission && isset($rows['final_defense_scheduled'])) {
                     $rows['final_defense_scheduled']['status'] = 'pending';
                     $rows['final_defense_scheduled']['completed_at'] = null;
                 }
@@ -1093,6 +1127,35 @@ if (!function_exists('get_student_progress_tracker_data')) {
                             'payment_proofs',
                             null,
                             $paymentTimestamp
+                        );
+                        $rows = progress_tracker_fetch_rows($conn, $studentId);
+                    }
+                }
+            }
+        }
+        if (progress_tracker_column_exists($conn, 'final_defense_submissions', 'id')) {
+            $stmt = $conn->prepare("
+                SELECT id, submitted_at
+                FROM final_defense_submissions
+                WHERE student_id = ?
+                ORDER BY submitted_at DESC, id DESC
+                LIMIT 1
+            ");
+            if ($stmt) {
+                $stmt->bind_param('i', $studentId);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                $stmt->close();
+                if ($row) {
+                    $finalDefenseStepStatus = $rows['final_defense_scheduled']['status'] ?? 'pending';
+                    if ($finalDefenseStepStatus !== 'complete') {
+                        progress_tracker_mark_step_complete(
+                            $conn,
+                            $studentId,
+                            'final_defense_scheduled',
+                            'final_defense_submissions',
+                            (int)($row['id'] ?? 0),
+                            $row['submitted_at'] ?? null
                         );
                         $rows = progress_tracker_fetch_rows($conn, $studentId);
                     }

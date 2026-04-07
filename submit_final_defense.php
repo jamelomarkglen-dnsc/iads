@@ -6,6 +6,7 @@ require_once 'notifications_helper.php';
 require_once 'defense_committee_helpers.php';
 require_once 'final_defense_submission_helpers.php';
 require_once 'final_defense_endorsement_helpers.php';
+require_once 'progress_tracker_helper.php';
 
 enforce_role_access(['student']);
 
@@ -222,6 +223,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_final_defense'
                 ]));
                 foreach ($notifyIds as $userId) {
                     notify_user($conn, $userId, 'Final defense submission received', $message, $link, false);
+                }
+                if (function_exists('progress_tracker_mark_step_complete')) {
+                    progress_tracker_mark_step_complete(
+                        $conn,
+                        $studentId,
+                        'final_defense_scheduled',
+                        'final_defense_submissions',
+                        (int)$insertStmt->insert_id
+                    );
                 }
                 $alert = ['type' => 'success', 'message' => 'Final defense submission sent to your committee.'];
             } else {
