@@ -113,15 +113,21 @@ function notice_status_badge(string $status): string
             border-bottom: 1px solid #d9e2d6;
         }
         .letter-foot {
-            height: auto;
-            max-height: 160px;
+            height: 120px;
+            max-height: 120px;
             border-top: 1px solid #d9e2d6;
         }
-        .letter-head img,
-        .letter-foot img {
+        .letter-head img {
             width: 100%;
             height: auto;
             object-fit: contain;
+            display: block;
+        }
+        .letter-foot img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: bottom center;
             display: block;
         }
         .letter-body {
@@ -143,7 +149,7 @@ function notice_status_badge(string $status): string
             .content { margin: 0 !important; }
             .notice-card { border: none; box-shadow: none; max-width: 100%; margin: 0; }
             .letter-head { max-height: 180px; }
-            .letter-foot { max-height: 120px; }
+            .letter-foot { height: 100px; max-height: 100px; }
             .letter-body { padding: 16px 24px; font-size: 10.5pt; line-height: 1.45; }
         }
         .notice-card { border-radius: 18px; border: 1px solid rgba(22, 86, 44, 0.12); box-shadow: 0 18px 40px rgba(15, 61, 31, 0.08); }
