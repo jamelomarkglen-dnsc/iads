@@ -777,7 +777,26 @@ if (!function_exists('progress_tracker_compute_legacy_data')) {
         }
 
         $finalDefenseOutcome = false;
-        if (progress_tracker_column_exists($conn, 'defense_outcomes', 'id')) {
+        if (progress_tracker_column_exists($conn, 'final_defense_submissions', 'id')) {
+            $stmt = $conn->prepare("
+                SELECT status, reviewed_at
+                FROM final_defense_submissions
+                WHERE student_id = ?
+                ORDER BY COALESCE(reviewed_at, submitted_at) DESC, id DESC
+                LIMIT 1
+            ");
+            if ($stmt) {
+                $stmt->bind_param('i', $studentId);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                if ($row) {
+                    $status = trim((string)($row['status'] ?? ''));
+                    $finalDefenseOutcome = $status !== '' && $status !== 'Submitted';
+                }
+                $stmt->close();
+            }
+        }
+        if (!$finalDefenseOutcome && progress_tracker_column_exists($conn, 'defense_outcomes', 'id')) {
             $stmt = $conn->prepare("SELECT 1 FROM defense_outcomes WHERE student_id = ? LIMIT 1");
             if ($stmt) {
                 $stmt->bind_param('i', $studentId);
@@ -1156,6 +1175,37 @@ if (!function_exists('get_student_progress_tracker_data')) {
                             'final_defense_submissions',
                             (int)($row['id'] ?? 0),
                             $row['submitted_at'] ?? null
+                        );
+                        $rows = progress_tracker_fetch_rows($conn, $studentId);
+                    }
+                }
+            }
+        }
+        if (progress_tracker_column_exists($conn, 'final_defense_submissions', 'id')) {
+            $stmt = $conn->prepare("
+                SELECT id, status, reviewed_at, submitted_at
+                FROM final_defense_submissions
+                WHERE student_id = ?
+                ORDER BY COALESCE(reviewed_at, submitted_at) DESC, id DESC
+                LIMIT 1
+            ");
+            if ($stmt) {
+                $stmt->bind_param('i', $studentId);
+                $stmt->execute();
+                $row = $stmt->get_result()->fetch_assoc();
+                $stmt->close();
+                if ($row) {
+                    $status = trim((string)($row['status'] ?? ''));
+                    $isVerdictReady = $status !== '' && $status !== 'Submitted';
+                    $finalDefenseOutcomeStatus = $rows['final_defense_outcome']['status'] ?? 'pending';
+                    if ($isVerdictReady && $finalDefenseOutcomeStatus !== 'complete') {
+                        progress_tracker_mark_step_complete(
+                            $conn,
+                            $studentId,
+                            'final_defense_outcome',
+                            'final_defense_submissions',
+                            (int)($row['id'] ?? 0),
+                            $row['reviewed_at'] ?? $row['submitted_at'] ?? null
                         );
                         $rows = progress_tracker_fetch_rows($conn, $studentId);
                     }
