@@ -170,20 +170,27 @@ include 'sidebar.php';
                         <div class="pdf-page-info text-muted small"></div>
                     </div>
 
-                    <?php if ($canAnnotate): ?>
-                        <div class="annotation-toolbar mb-2">
+                    <div class="annotation-toolbar mb-2">
+                        <?php if ($canAnnotate): ?>
                             <button class="annotation-tool-btn" data-tool="comment" title="Add Comment">
                                 <i class="bi bi-chat-dots"></i>
                             </button>
-                            <div class="ms-auto d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-secondary" id="prevPageBtn">Prev</button>
-                                <button class="btn btn-sm btn-outline-secondary" id="nextPageBtn">Next</button>
-                                <button class="btn btn-sm btn-outline-secondary" id="zoomInBtn">+</button>
-                                <button class="btn btn-sm btn-outline-secondary" id="zoomOutBtn">-</button>
-                                <button class="btn btn-sm btn-outline-secondary" id="resetZoomBtn">Reset</button>
+                        <?php endif; ?>
+                        <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
+                            <div class="input-group input-group-sm" style="width: 150px;">
+                                <span class="input-group-text">Page</span>
+                                <input type="number" min="1" class="form-control" id="pageJumpInput" aria-label="Page number">
+                                <span class="input-group-text" id="pageJumpTotal">of 0</span>
                             </div>
+                            <button class="btn btn-sm btn-outline-secondary" id="pageJumpBtn">Go</button>
+                            <button class="btn btn-sm btn-outline-secondary" id="prevPageBtn">Prev</button>
+                            <button class="btn btn-sm btn-outline-secondary" id="nextPageBtn">Next</button>
+                            <button class="btn btn-sm btn-outline-secondary" id="zoomInBtn">+</button>
+                            <button class="btn btn-sm btn-outline-secondary" id="zoomOutBtn">-</button>
+                            <button class="btn btn-sm btn-outline-secondary" id="resetZoomBtn">Reset</button>
                         </div>
-                    <?php elseif ($normalizedRole === 'student'): ?>
+                    </div>
+                    <?php if ($normalizedRole === 'student' && !$canAnnotate): ?>
                         <div class="alert alert-info small mb-2">
                             Committee members can annotate. You can reply to any feedback in the panel on the right.
                         </div>
@@ -293,12 +300,64 @@ include 'sidebar.php';
     const zoomInBtn = document.getElementById('zoomInBtn');
     const zoomOutBtn = document.getElementById('zoomOutBtn');
     const resetZoomBtn = document.getElementById('resetZoomBtn');
+    const pageJumpInput = document.getElementById('pageJumpInput');
+    const pageJumpBtn = document.getElementById('pageJumpBtn');
+    const pageJumpTotal = document.getElementById('pageJumpTotal');
 
     if (prevBtn) prevBtn.addEventListener('click', () => pdfViewer.previousPage());
     if (nextBtn) nextBtn.addEventListener('click', () => pdfViewer.nextPage());
     if (zoomInBtn) zoomInBtn.addEventListener('click', () => pdfViewer.zoomIn());
     if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => pdfViewer.zoomOut());
     if (resetZoomBtn) resetZoomBtn.addEventListener('click', () => pdfViewer.resetZoom());
+
+    const syncPageJumpMeta = () => {
+        if (!pageJumpInput || !pageJumpTotal) {
+            return;
+        }
+        const totalPages = pdfViewer.getTotalPages();
+        if (totalPages > 0) {
+            pageJumpTotal.textContent = `of ${totalPages}`;
+            pageJumpInput.max = totalPages;
+            if (!pageJumpInput.value) {
+                pageJumpInput.value = pdfViewer.getCurrentPage();
+            }
+        }
+    };
+
+    const syncPageJumpValue = () => {
+        if (pageJumpInput) {
+            pageJumpInput.value = pdfViewer.getCurrentPage();
+        }
+    };
+
+    const waitForTotalPages = () => {
+        const totalPages = pdfViewer.getTotalPages();
+        if (totalPages > 0) {
+            syncPageJumpMeta();
+            return;
+        }
+        setTimeout(waitForTotalPages, 200);
+    };
+
+    waitForTotalPages();
+
+    if (pageJumpBtn && pageJumpInput) {
+        pageJumpBtn.addEventListener('click', async () => {
+            const value = parseInt(pageJumpInput.value, 10);
+            if (Number.isNaN(value)) {
+                return;
+            }
+            await pdfViewer.goToPage(value);
+            syncPageJumpValue();
+        });
+
+        pageJumpInput.addEventListener('keydown', async (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                pageJumpBtn.click();
+            }
+        });
+    }
 </script>
 <?php endif; ?>
 </body>
