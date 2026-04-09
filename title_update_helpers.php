@@ -3,6 +3,7 @@
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/final_paper_helpers.php';
 require_once __DIR__ . '/defense_committee_helpers.php';
+require_once __DIR__ . '/notice_commence_helpers.php';
 
 if (!defined('TITLE_UPDATE_STAGE_PRE_OUTLINE')) {
     define('TITLE_UPDATE_STAGE_PRE_OUTLINE', 'pre_outline');
@@ -447,6 +448,9 @@ if (!function_exists('title_update_apply_for_student')) {
         if ($stage === TITLE_UPDATE_STAGE_PRE_OUTLINE && function_exists('title_update_refresh_outline_memo')) {
             title_update_refresh_outline_memo($conn, $studentId, $newTitle);
         }
+        if (function_exists('title_update_refresh_notice_commence')) {
+            title_update_refresh_notice_commence($conn, $studentId, $currentTitle, $newTitle);
+        }
 
         return [
             'success' => true,
@@ -490,6 +494,7 @@ if (!function_exists('title_update_refresh_outline_memo')) {
                 r.memo_date,
                 r.memo_subject,
                 r.status,
+                r.memo_received_at,
                 ds.defense_date,
                 ds.defense_time,
                 ds.venue,
@@ -517,6 +522,11 @@ if (!function_exists('title_update_refresh_outline_memo')) {
         $row = $stmt->get_result()->fetch_assoc();
         $stmt->close();
         if (!$row || empty($row['id']) || !function_exists('build_outline_defense_memo_body')) {
+            return;
+        }
+        $memoStatus = trim((string)($row['status'] ?? ''));
+        $memoReceivedAt = $row['memo_received_at'] ?? null;
+        if ($memoStatus === 'Approved' && !empty($memoReceivedAt)) {
             return;
         }
 
@@ -548,5 +558,86 @@ if (!function_exists('title_update_refresh_outline_memo')) {
             $updateStmt->execute();
             $updateStmt->close();
         }
+    }
+}
+
+if (!function_exists('title_update_refresh_notice_commence')) {
+    function title_update_refresh_notice_commence(
+        mysqli $conn,
+        int $studentId,
+        string $oldTitle,
+        string $newTitle
+    ): void {
+        if ($studentId <= 0 || $newTitle === '') {
+            return;
+        }
+        if (!title_update_table_exists($conn, 'notice_to_commence_requests')) {
+            return;
+        }
+        if (function_exists('ensureNoticeCommenceTable')) {
+            ensureNoticeCommenceTable($conn);
+        }
+
+        $stmt = $conn->prepare("
+            SELECT
+                n.id,
+                n.body,
+                n.start_date,
+                u.firstname,
+                u.lastname,
+                u.program
+            FROM notice_to_commence_requests n
+            JOIN users u ON u.id = n.student_id
+            WHERE n.student_id = ? AND n.status = 'Pending'
+            ORDER BY n.created_at DESC, n.id DESC
+        ");
+        if (!$stmt) {
+            return;
+        }
+        $stmt->bind_param('i', $studentId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $rows = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+        if ($result) {
+            $result->free();
+        }
+        $stmt->close();
+
+        if (empty($rows)) {
+            return;
+        }
+
+        $updateStmt = $conn->prepare("
+            UPDATE notice_to_commence_requests
+            SET body = ?
+            WHERE id = ?
+        ");
+        if (!$updateStmt) {
+            return;
+        }
+
+        foreach ($rows as $row) {
+            $noticeId = (int)($row['id'] ?? 0);
+            if ($noticeId <= 0) {
+                continue;
+            }
+            $studentName = trim(($row['firstname'] ?? '') . ' ' . ($row['lastname'] ?? '')) ?: 'Student';
+            $programName = trim((string)($row['program'] ?? ''));
+            $startDate = $row['start_date'] ?? null;
+            $body = trim((string)($row['body'] ?? ''));
+
+            if ($body === '') {
+                $body = build_notice_commence_body($studentName, $newTitle, $programName, $startDate);
+            } elseif ($oldTitle !== '' && stripos($body, $oldTitle) !== false) {
+                $body = str_replace($oldTitle, $newTitle, $body);
+            } else {
+                continue;
+            }
+
+            $updateStmt->bind_param('si', $body, $noticeId);
+            $updateStmt->execute();
+        }
+
+        $updateStmt->close();
     }
 }
