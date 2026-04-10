@@ -1053,6 +1053,137 @@ if (!function_exists('get_student_progress_tracker_data')) {
         if (progress_tracker_column_exists($conn, 'final_paper_submissions', 'id') && function_exists('fetchLatestFinalPaperSubmission')) {
             $latestFinalPaper = fetchLatestFinalPaperSubmission($conn, $studentId);
         }
+        $outlineReviewStatus = $rows['outline_review_completed']['status'] ?? 'pending';
+        if ($outlineReviewStatus !== 'complete') {
+            $shouldCompleteOutlineReview = false;
+            $outlineReviewCompletedAt = null;
+            $outlineReviewSourceTable = null;
+            $outlineReviewSourceId = null;
+
+            if ($latestFinalPaper) {
+                $outlineReviewSourceTable = 'final_paper_submissions';
+                $outlineReviewSourceId = (int)($latestFinalPaper['id'] ?? 0);
+                $completedAt = $latestFinalPaper['committee_reviews_completed_at'] ?? null;
+                if (!empty($completedAt)) {
+                    $shouldCompleteOutlineReview = true;
+                    $outlineReviewCompletedAt = $completedAt;
+                } elseif (progress_tracker_column_exists($conn, 'final_paper_reviews', 'id')) {
+                    $stmt = $conn->prepare("
+                        SELECT
+                            COUNT(*) AS total_reviews,
+                            SUM(CASE WHEN status = 'Pending' OR status IS NULL THEN 1 ELSE 0 END) AS pending_reviews,
+                            MAX(reviewed_at) AS last_reviewed_at
+                        FROM final_paper_reviews
+                        WHERE submission_id = ?
+                    ");
+                    if ($stmt) {
+                        $submissionId = (int)($latestFinalPaper['id'] ?? 0);
+                        $stmt->bind_param('i', $submissionId);
+                        $stmt->execute();
+                        $row = $stmt->get_result()->fetch_assoc();
+                        $totalReviews = (int)($row['total_reviews'] ?? 0);
+                        $pendingReviews = (int)($row['pending_reviews'] ?? 0);
+                        if ($totalReviews > 0 && $pendingReviews === 0) {
+                            $shouldCompleteOutlineReview = true;
+                            $outlineReviewCompletedAt = $row['last_reviewed_at'] ?? null;
+                        }
+                        $stmt->close();
+                    }
+                }
+            }
+
+            if (!$shouldCompleteOutlineReview && progress_tracker_column_exists($conn, 'committee_pdf_submissions', 'id')) {
+                $committeeSubmissionId = 0;
+                $committeeSubmittedAt = null;
+                $committeeUpdatedAt = null;
+                $stmt = $conn->prepare("
+                    SELECT id, submitted_at, updated_at
+                    FROM committee_pdf_submissions
+                    WHERE student_id = ?
+                      AND NOT EXISTS (
+                          SELECT 1 FROM committee_pdf_submissions child
+                          WHERE child.parent_submission_id = committee_pdf_submissions.id
+                      )
+                    ORDER BY submitted_at DESC, id DESC
+                    LIMIT 1
+                ");
+                if ($stmt) {
+                    $stmt->bind_param('i', $studentId);
+                    $stmt->execute();
+                    $row = $stmt->get_result()->fetch_assoc();
+                    if ($row) {
+                        $committeeSubmissionId = (int)($row['id'] ?? 0);
+                        $committeeSubmittedAt = $row['submitted_at'] ?? null;
+                        $committeeUpdatedAt = $row['updated_at'] ?? null;
+                    }
+                    $stmt->close();
+                }
+
+                if ($committeeSubmissionId > 0) {
+                    $outlineReviewSourceTable = 'committee_pdf_submissions';
+                    $outlineReviewSourceId = $committeeSubmissionId;
+
+                    if (progress_tracker_column_exists($conn, 'committee_pdf_submissions', 'final_verdict')) {
+                        $stmt = $conn->prepare("
+                            SELECT final_verdict, final_verdict_at
+                            FROM committee_pdf_submissions
+                            WHERE id = ?
+                            LIMIT 1
+                        ");
+                        if ($stmt) {
+                            $stmt->bind_param('i', $committeeSubmissionId);
+                            $stmt->execute();
+                            $verdictRow = $stmt->get_result()->fetch_assoc();
+                            $finalVerdict = strtolower(trim((string)($verdictRow['final_verdict'] ?? '')));
+                            if ($finalVerdict !== '' && $finalVerdict !== 'pending') {
+                                $shouldCompleteOutlineReview = true;
+                                $outlineReviewCompletedAt = $verdictRow['final_verdict_at'] ?? null;
+                            }
+                            $stmt->close();
+                        }
+                    }
+
+                    if (!$shouldCompleteOutlineReview && progress_tracker_column_exists($conn, 'committee_pdf_reviews', 'id')) {
+                        $stmt = $conn->prepare("
+                            SELECT
+                                COUNT(*) AS total_reviews,
+                                SUM(CASE WHEN status = 'Pending' OR status IS NULL THEN 1 ELSE 0 END) AS pending_reviews,
+                                MAX(reviewed_at) AS last_reviewed_at
+                            FROM committee_pdf_reviews
+                            WHERE submission_id = ?
+                        ");
+                        if ($stmt) {
+                            $stmt->bind_param('i', $committeeSubmissionId);
+                            $stmt->execute();
+                            $reviewRow = $stmt->get_result()->fetch_assoc();
+                            $totalReviews = (int)($reviewRow['total_reviews'] ?? 0);
+                            $pendingReviews = (int)($reviewRow['pending_reviews'] ?? 0);
+                            if ($totalReviews > 0 && $pendingReviews === 0) {
+                                $shouldCompleteOutlineReview = true;
+                                $outlineReviewCompletedAt = $reviewRow['last_reviewed_at'] ?? null;
+                            }
+                            $stmt->close();
+                        }
+                    }
+
+                    if ($outlineReviewCompletedAt === null) {
+                        $outlineReviewCompletedAt = $committeeUpdatedAt ?? $committeeSubmittedAt ?? null;
+                    }
+                }
+            }
+
+            if ($shouldCompleteOutlineReview && $outlineReviewSourceTable) {
+                progress_tracker_mark_step_complete(
+                    $conn,
+                    $studentId,
+                    'outline_review_completed',
+                    $outlineReviewSourceTable,
+                    $outlineReviewSourceId,
+                    $outlineReviewCompletedAt
+                );
+                $rows = progress_tracker_fetch_rows($conn, $studentId);
+            }
+        }
         $verdictValue = $latestFinalPaper ? trim((string)($latestFinalPaper['outline_defense_verdict'] ?? '')) : '';
         $verdictValueLower = strtolower($verdictValue);
         $reviewGateStatus = $latestFinalPaper ? strtolower(trim((string)($latestFinalPaper['review_gate_status'] ?? ''))) : '';
