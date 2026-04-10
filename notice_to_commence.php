@@ -47,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_notice_commenc
     if (!$errors) {
         $lookupSql = "
             SELECT fps.id, fps.student_id, fps.final_title, fps.status, fps.route_slip_signed_at,
+                   fps.route_slip_overall_decision,
                    u.firstname, u.lastname, u.program
             FROM final_paper_submissions fps
             JOIN users u ON u.id = fps.student_id
@@ -70,6 +71,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_notice_commenc
         $routeSlipDecision = strtolower(trim((string)($submission['route_slip_overall_decision'] ?? '')));
         $allowedRouteSlipDecisions = [
             'approved',
+            'minor revision',
+            'major revision',
             'passed with minor revision',
             'passed with major revision',
         ];
@@ -197,6 +200,8 @@ $submissionSql = "
         OR fps.route_slip_signed_at IS NOT NULL
         OR LOWER(TRIM(fps.route_slip_overall_decision)) IN (
             'approved',
+            'minor revision',
+            'major revision',
             'passed with minor revision',
             'passed with major revision'
         )
@@ -331,15 +336,14 @@ include 'sidebar.php';
                                         <?php
                                         $submissionId = (int)($submission['submission_id'] ?? 0);
                                         $status = $noticeStatusBySubmission[$submissionId] ?? '';
-                                        $disabled = $status !== '' ? 'disabled' : '';
                                         $suffix = $status !== '' ? " ({$status})" : '';
                                         $studentName = trim(($submission['firstname'] ?? '') . ' ' . ($submission['lastname'] ?? ''));
                                         $selected = $prefillSubmissionId > 0 && $submissionId === $prefillSubmissionId ? 'selected' : '';
                                         ?>
                                         <option
                                             value="<?= $submissionId; ?>"
-                                            <?= $disabled; ?>
                                             <?= $selected; ?>
+                                            data-notice-status="<?= htmlspecialchars($status, ENT_QUOTES); ?>"
                                             data-student-id="<?= (int)($submission['student_id'] ?? 0); ?>"
                                             data-student-name="<?= htmlspecialchars($studentName, ENT_QUOTES); ?>"
                                             data-program="<?= htmlspecialchars($submission['program'] ?? '', ENT_QUOTES); ?>"
@@ -350,7 +354,7 @@ include 'sidebar.php';
                                     <?php endforeach; ?>
                                 <?php endif; ?>
                             </select>
-                            <div class="small-muted mt-1">Only approved outline defense submissions can be issued a notice.</div>
+                            <div class="small-muted mt-1" id="noticeEligibilityHint">Only approved outline defense submissions can be issued a notice.</div>
                         </div>
 
                         <div class="row g-3">
@@ -483,6 +487,7 @@ const startDateInput = document.getElementById('startDate');
 const subjectInput = document.getElementById('subjectInput');
 const bodyInput = document.getElementById('noticeBody');
 const sendToDeanBtn = document.getElementById('sendToDeanBtn');
+const noticeEligibilityHint = document.getElementById('noticeEligibilityHint');
 const previewNoticeDate = document.getElementById('previewNoticeDate');
 const previewSubject = document.getElementById('previewSubject');
 const previewStudentName = document.getElementById('previewStudentName');
@@ -522,9 +527,13 @@ function fillNoticeFields() {
         if (sendToDeanBtn) {
             sendToDeanBtn.disabled = true;
         }
+        if (noticeEligibilityHint) {
+            noticeEligibilityHint.textContent = 'Only approved outline defense submissions can be issued a notice.';
+        }
         updateNoticePreview();
         return;
     }
+    const noticeStatus = option.dataset.noticeStatus || '';
     studentIdInput.value = option.dataset.studentId || '';
     studentNameInput.value = option.dataset.studentName || '';
     programInput.value = option.dataset.program || '';
@@ -535,7 +544,12 @@ function fillNoticeFields() {
     bodyDirty = false;
     bodyInput.value = buildNoticeBody();
     if (sendToDeanBtn) {
-        sendToDeanBtn.disabled = false;
+        sendToDeanBtn.disabled = noticeStatus !== '';
+    }
+    if (noticeEligibilityHint) {
+        noticeEligibilityHint.textContent = noticeStatus
+            ? `Notice already submitted (${noticeStatus}).`
+            : 'Only approved outline defense submissions can be issued a notice.';
     }
     updateNoticePreview();
 }
