@@ -12,6 +12,30 @@ $result = $conn->query($sql);
 $total_chairs = $conn->query("SELECT COUNT(*) AS count FROM users WHERE role='program_chairperson'")->fetch_assoc()['count'];
 $total_students = $conn->query("SELECT COUNT(*) AS count FROM users WHERE role='student'")->fetch_assoc()['count'];
 $total_advisers = $conn->query("SELECT COUNT(*) AS count FROM users WHERE role='faculty'")->fetch_assoc()['count'];
+
+// Recent activity logs (system-wide)
+$recent_logs = [];
+$recent_limit = 8;
+$recentStmt = $conn->prepare(
+    "SELECT l.id, l.old_status, l.new_status, l.changed_at,
+            s.title, s.type,
+            u.firstname, u.lastname
+     FROM status_logs l
+     JOIN submissions s ON l.submission_id = s.id
+     LEFT JOIN users u ON l.updated_by = u.id
+     ORDER BY l.changed_at DESC
+     LIMIT ?"
+);
+if ($recentStmt) {
+    $recentStmt->bind_param('i', $recent_limit);
+    if ($recentStmt->execute()) {
+        $recentResult = $recentStmt->get_result();
+        if ($recentResult) {
+            $recent_logs = $recentResult->fetch_all(MYSQLI_ASSOC);
+        }
+    }
+    $recentStmt->close();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -236,6 +260,34 @@ $total_advisers = $conn->query("SELECT COUNT(*) AS count FROM users WHERE role='
       background: var(--dnsc-green);
       color: #fff;
     }
+    .activity-item {
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+      border-bottom: 1px solid rgba(22, 86, 44, 0.08);
+      flex-wrap: wrap;
+    }
+    .activity-item:last-child { border-bottom: none; }
+    .activity-title { font-weight: 600; color: #163423; }
+    .activity-meta {
+      color: #5b6d60;
+      font-size: 0.9rem;
+      margin-top: 0.15rem;
+    }
+    .activity-status {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .status-pill {
+      border-radius: 999px;
+      font-size: 0.75rem;
+      padding: 0.35rem 0.7rem;
+      letter-spacing: 0.02em;
+      font-weight: 600;
+    }
     @media (max-width: 991.98px) {
       .content {
         margin-left: 0;
@@ -304,6 +356,64 @@ $total_advisers = $conn->query("SELECT COUNT(*) AS count FROM users WHERE role='
           <div class="stat-value"><?= $total_advisers ?></div>
           <p class="text-muted small mb-0">Faculty assigned</p>
         </div>
+      </div>
+    </div>
+
+    <div class="card list-card border-0 mb-4">
+      <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+          <p class="text-uppercase small text-muted mb-1">Monitoring</p>
+          <h5 class="mb-0 fw-semibold"><i class="fas fa-clipboard-list me-2 text-success"></i>Recent System Activity</h5>
+        </div>
+        <a href="dean_activity_log.php" class="btn btn-outline-success btn-sm">
+          <i class="fas fa-clock me-1"></i> View All Logs
+        </a>
+      </div>
+      <div class="list-group list-group-flush">
+        <?php
+          $statusClasses = [
+              'Approved' => 'bg-success-subtle text-success',
+              'Pending' => 'bg-secondary-subtle text-secondary',
+              'Reviewing' => 'bg-warning-subtle text-warning-emphasis',
+              'In Review' => 'bg-warning-subtle text-warning-emphasis',
+              'Under Review' => 'bg-warning-subtle text-warning-emphasis',
+              'Reviewer Assigning' => 'bg-info-subtle text-info',
+              'Assigning Reviewer' => 'bg-info-subtle text-info',
+              'Revision Required' => 'bg-info-subtle text-info',
+              'Rejected' => 'bg-danger-subtle text-danger',
+          ];
+        ?>
+        <?php if (empty($recent_logs)): ?>
+          <div class="p-4 text-center text-muted">
+            <i class="fas fa-inbox d-block mb-2"></i>No activity logs yet.
+          </div>
+        <?php else: ?>
+          <?php foreach ($recent_logs as $log): ?>
+            <?php
+              $title = $log['title'] ?? 'Untitled Submission';
+              $type = $log['type'] ?? 'Submission';
+              $newStatus = $log['new_status'] ?? 'Pending';
+              $oldStatus = $log['old_status'] ?? 'Pending';
+              $changedAt = $log['changed_at'] ?? '';
+              $dateLabel = $changedAt ? date('M d, Y g:i A', strtotime($changedAt)) : 'Unknown time';
+              $updatedBy = trim(($log['firstname'] ?? '') . ' ' . ($log['lastname'] ?? '')) ?: 'System';
+              $newStatusClass = $statusClasses[$newStatus] ?? 'bg-secondary-subtle text-secondary';
+              $oldStatusClass = $statusClasses[$oldStatus] ?? 'bg-secondary-subtle text-secondary';
+            ?>
+            <div class="activity-item list-group-item">
+              <div>
+                <div class="activity-title"><?= htmlspecialchars($title); ?></div>
+                <div class="activity-meta">
+                  <?= htmlspecialchars($type); ?> &middot; Updated by <?= htmlspecialchars($updatedBy); ?> &middot; <?= htmlspecialchars($dateLabel); ?>
+                </div>
+              </div>
+              <div class="activity-status">
+                <span class="status-pill <?= $oldStatusClass; ?>">From <?= htmlspecialchars($oldStatus ?: 'N/A'); ?></span>
+                <span class="status-pill <?= $newStatusClass; ?>">To <?= htmlspecialchars($newStatus ?: 'N/A'); ?></span>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
       </div>
     </div>
 
