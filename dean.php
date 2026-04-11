@@ -260,6 +260,16 @@ if ($recentStmt) {
       background: var(--dnsc-green);
       color: #fff;
     }
+    .summary-callout {
+      border-radius: 22px;
+      border: 1px solid rgba(22, 86, 44, 0.12);
+      box-shadow: 0 18px 36px rgba(22, 86, 44, 0.08);
+      background: linear-gradient(120deg, #ffffff, #f6faf7);
+    }
+    .summary-callout .btn {
+      border-radius: 999px;
+      padding: 0.5rem 1.2rem;
+    }
     .activity-item {
       padding: 1rem 1.5rem;
       display: flex;
@@ -356,6 +366,19 @@ if ($recentStmt) {
           <div class="stat-value"><?= $total_advisers ?></div>
           <p class="text-muted small mb-0">Faculty assigned</p>
         </div>
+      </div>
+    </div>
+
+    <div class="card summary-callout mb-4">
+      <div class="card-body d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3">
+        <div>
+          <p class="text-uppercase small text-muted mb-1">Summary Reports</p>
+          <h5 class="mb-2 fw-semibold">Dashboard Summary Reports</h5>
+          <p class="text-muted mb-0">Quick charts for pipeline status, activity trends, and upcoming defenses.</p>
+        </div>
+        <a href="dean_summary_reports.php" class="btn btn-success">
+          <i class="fas fa-chart-line me-2"></i> Open Reports
+        </a>
       </div>
     </div>
 

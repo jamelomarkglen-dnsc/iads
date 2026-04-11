@@ -644,6 +644,9 @@ if ($userLastLogin !== '') {
                     <a href="dean_notice_commence.php" class="nav-link <?php echo ($currentPage == 'dean_notice_commence.php') ? 'active' : ''; ?>">
                         <i class="bi bi-megaphone"></i> <span class="link-text">Notice to Commence</span>
                     </a>
+                    <a href="dean_summary_reports.php" class="nav-link <?php echo ($currentPage == 'dean_summary_reports.php') ? 'active' : ''; ?>">
+                        <i class="bi bi-graph-up"></i> <span class="link-text">Summary Reports</span>
+                    </a>
                     <a href="dean_activity_log.php" class="nav-link <?php echo ($currentPage == 'dean_activity_log.php') ? 'active' : ''; ?>">
                         <i class="bi bi-clock-history"></i> <span class="link-text">Activity Log</span>
                     </a>
