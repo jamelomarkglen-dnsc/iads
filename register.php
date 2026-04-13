@@ -346,6 +346,9 @@ if (isset($_POST['register'])) {
         if ($role === 'dean') {
             if ($oldInput['firstname'] === '' || $oldInput['lastname'] === '') {
                 $errors[] = "First and last name are required.";
+            }
+            if ($oldInput['program'] === '' || $oldInput['department'] === '') {
+                $errors[] = "Program and department are required.";
             } else {
                 $firstname = $oldInput['firstname'];
                 $lastname = $oldInput['lastname'];
@@ -688,6 +691,14 @@ if (isset($_POST['register'])) {
                     </div>
                     <div class="col-md-6">
                         <input type="text" name="lastname" class="form-control" placeholder="Last Name" value="<?php echo htmlspecialchars($oldInput['lastname']); ?>" data-required="true">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" name="program" class="form-control" placeholder="Program" value="<?php echo htmlspecialchars($oldInput['program']); ?>" data-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <input type="text" name="department" class="form-control" placeholder="Department" value="<?php echo htmlspecialchars($oldInput['department']); ?>" data-required="true">
                     </div>
                 </div>
             </div>
