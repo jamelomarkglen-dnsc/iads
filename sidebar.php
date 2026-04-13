@@ -378,6 +378,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['account_settings_acti
         }
     } elseif (!empty($errors)) {
         $accountSettingsMessage = ['type' => 'danger', 'text' => implode(' ', $errors)];
+    } elseif (empty($errors)) {
+        $accountSettingsMessage = ['type' => 'success', 'text' => 'No changes to save.'];
+        $accountSettingsOpen = false;
     }
 }
 
