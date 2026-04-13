@@ -695,7 +695,14 @@ if (isset($_POST['register'])) {
                 </div>
                 <div class="row mb-3">
                     <div class="col-md-6">
-                        <input type="text" name="program" class="form-control" placeholder="Program" value="<?php echo htmlspecialchars($oldInput['program']); ?>" data-required="true">
+                        <select name="program" class="form-select" data-required="true">
+                            <option value="" disabled <?php echo $oldInput['program'] === '' ? 'selected' : ''; ?>>Select Program</option>
+                            <?php foreach ($programOptions as $code => $label): ?>
+                                <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['program'] === $code ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($label); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                     <div class="col-md-6">
                         <input type="text" name="department" class="form-control" placeholder="Department" value="<?php echo htmlspecialchars($oldInput['department']); ?>" data-required="true">
