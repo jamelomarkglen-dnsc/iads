@@ -111,11 +111,19 @@ if ($hasAccountStatus) {
             min-height: 100vh;
             background: #f5f8f5;
         }
+        .navbar {
+            z-index: 2000;
+        }
+        .navbar .dropdown-menu {
+            z-index: 2001;
+        }
         .content {
             margin-left: 220px;
             padding: 28px 24px;
             min-height: 100vh;
             transition: margin-left .3s;
+            position: relative;
+            z-index: 1;
         }
         #sidebar.collapsed ~ .content {
             margin-left: 60px;
@@ -210,5 +218,27 @@ if ($hasAccountStatus) {
     <?php endif; ?>
 </main>
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const dropdown = document.getElementById('notifDropdown');
+        const menu = document.getElementById('notifMenu');
+        if (!dropdown || !menu) {
+            return;
+        }
+
+        dropdown.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            const Dropdown = window.bootstrap && window.bootstrap.Dropdown;
+            if (Dropdown) {
+                Dropdown.getOrCreateInstance(dropdown).toggle();
+                return;
+            }
+            dropdown.classList.toggle('show');
+            menu.classList.toggle('show');
+        });
+    });
+</script>
 </body>
 </html>
