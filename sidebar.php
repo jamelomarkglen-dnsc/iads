@@ -352,6 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['account_settings_acti
             $stmt->bind_param($types, ...$params);
             if ($stmt->execute()) {
                 $accountSettingsMessage = ['type' => 'success', 'text' => 'Account settings updated.'];
+                $accountSettingsOpen = false;
                 $userProfile['firstname'] = $firstName;
                 $userProfile['lastname'] = $lastName;
                 $userProfile['contact'] = $contact;
@@ -1232,10 +1233,63 @@ if ($userLastLogin !== '') {
 
     const accountSettingsModalEl = document.getElementById('accountSettingsModal');
     const accountSettingsShouldOpen = <?php echo $accountSettingsOpen ? 'true' : 'false'; ?>;
+    const accountSettingsStatus = <?php echo json_encode($accountSettingsMessage['type'] ?? ''); ?>;
+    const closeAccountSettingsFallback = () => {
+        if (!accountSettingsModalEl) {
+            return;
+        }
+        accountSettingsModalEl.classList.remove('show');
+        accountSettingsModalEl.style.display = 'none';
+        accountSettingsModalEl.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
+        document.querySelectorAll('.modal-backdrop').forEach((backdrop) => {
+            backdrop.remove();
+        });
+    };
     if (accountSettingsModalEl && accountSettingsShouldOpen && window.bootstrap) {
         const accountModal = bootstrap.Modal.getOrCreateInstance(accountSettingsModalEl);
         accountModal.show();
+        if (accountSettingsStatus === 'success') {
+            setTimeout(() => {
+                accountModal.hide();
+            }, 200);
+        }
+    } else if (accountSettingsModalEl && accountSettingsShouldOpen && accountSettingsStatus === 'success') {
+        setTimeout(() => {
+            closeAccountSettingsFallback();
+        }, 200);
     }
+</script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const modalEl = document.getElementById('accountSettingsModal');
+        if (!modalEl) {
+            return;
+        }
+        const successAlert = modalEl.querySelector('.alert-success');
+        if (!successAlert) {
+            return;
+        }
+
+        const closeModal = () => {
+            modalEl.classList.remove('show');
+            modalEl.style.display = 'none';
+            modalEl.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('modal-open');
+            document.querySelectorAll('.modal-backdrop').forEach((backdrop) => {
+                backdrop.remove();
+            });
+        };
+
+        setTimeout(() => {
+            if (window.bootstrap && window.bootstrap.Modal) {
+                window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+            } else {
+                closeModal();
+            }
+        }, 200);
+    });
 </script>
 
 <style>
