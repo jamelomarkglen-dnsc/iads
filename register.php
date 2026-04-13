@@ -231,8 +231,11 @@ function notify_verification_for_registration(
             $targets = array_values(array_unique(array_filter($targets)));
             if (!empty($targets)) {
                 notify_users($conn, $targets, $title, $message, 'verify_program_chair.php');
+                return;
             }
         }
+        // Fallback: notify all deans if no scope match or no scope data available.
+        notify_role($conn, 'dean', $title, $message, 'verify_program_chair.php');
         return;
     }
 
