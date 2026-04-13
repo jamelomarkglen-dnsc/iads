@@ -494,6 +494,19 @@ if (isset($_POST['register'])) {
             $values[] = $oldInput['gender'];
         }
 
+        if ($role === 'dean') {
+            if ($hasProgramColumn) {
+                $columns[] = 'program';
+                $types .= 's';
+                $values[] = $oldInput['program'];
+            }
+            if ($hasDepartmentColumn) {
+                $columns[] = 'department';
+                $types .= 's';
+                $values[] = $oldInput['department'];
+            }
+        }
+
         if ($role === 'program_chairperson') {
             if ($hasProgramColumn) {
                 $columns[] = 'program';
