@@ -254,10 +254,12 @@ function notify_verification_for_registration(
             }
             $targets = array_values(array_unique(array_filter($targets)));
             if (!empty($targets)) {
-                notify_users($conn, $targets, $title, $message, 'verify_faculty.php');
+                notify_users($conn, $targets, $title, $message, 'verify_faculty.php', false);
                 return;
             }
         }
+        // Fallback: notify all program chairpersons if no scope match or no scope data available.
+        notify_role($conn, 'program_chairperson', $title, $message, 'verify_faculty.php', false);
         return;
     }
 
