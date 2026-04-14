@@ -49,17 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_verification'
             if (!$committee) {
                 $alert = ['type' => 'danger', 'message' => 'Defense committee is not yet approved for this student.'];
             } else {
-                $signatureError = '';
-                $signaturePath = '';
+                $signaturePath = find_existing_signature_path($conn, $adviser_id);
                 $requestResult = null;
-                if (isset($_FILES['adviser_signature'])) {
-                    $signaturePath = save_notice_signature_upload($_FILES['adviser_signature'], $adviser_id, $signatureError);
-                }
                 if ($signaturePath === '') {
-                    $signaturePath = find_existing_signature_path($adviser_id);
-                }
-                if ($signatureError !== '' || $signaturePath === '') {
-                    $alert = ['type' => 'danger', 'message' => $signatureError !== '' ? $signatureError : 'Please upload your signature.'];
+                    $alert = ['type' => 'danger', 'message' => 'Please add your signature in Account Settings before sending the request.'];
                 } else {
                     $requestResult = create_final_hardbound_committee_request($conn, $hardbound_id, $adviser_id, $remarks, $signaturePath, $committee);
                 }
@@ -85,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['request_verification'
 }
 
 $submissions = fetch_final_hardbound_submissions_for_adviser($conn, $adviser_id);
-$adviserSignaturePath = find_existing_signature_path($adviser_id);
+$adviserSignaturePath = find_existing_signature_path($conn, $adviser_id);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -306,7 +299,7 @@ $adviserSignaturePath = find_existing_signature_path($adviser_id);
                                                 <?php ob_start(); ?>
                                                 <div class="modal fade" id="requestModal<?php echo (int)$submission['id']; ?>" tabindex="-1" aria-hidden="true">
                                                     <div class="modal-dialog modal-xl modal-dialog-scrollable">
-                                                        <form method="post" enctype="multipart/form-data" class="modal-content">
+                                                        <form method="post" class="modal-content">
                                                             <div class="modal-header">
                                                                 <h5 class="modal-title">Send Endorsement</h5>
                                                                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -380,8 +373,9 @@ $adviserSignaturePath = find_existing_signature_path($adviser_id);
                                                                     </div>
                                                                     <div class="letter-foot" aria-hidden="true"></div>
                                                                 </div>
-                                                                <label class="form-label">Adviser Signature Upload</label>
-                                                                <input type="file" name="adviser_signature" class="form-control mb-3" accept="image/png,image/jpeg">
+                                                                <div class="alert alert-light border small mb-3">
+                                                                    The signature will be pulled from your Account Settings.
+                                                                </div>
                                                                 <label class="form-label">Remarks (optional)</label>
                                                                 <textarea name="remarks" class="form-control" rows="3" placeholder="Any notes for the defense committee..."></textarea>
                                                             </div>

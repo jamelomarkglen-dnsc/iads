@@ -817,11 +817,34 @@ function resolve_final_hardbound_submission_title(mysqli $conn, int $submission_
     return 'Untitled Submission';
 }
 
-function find_existing_signature_path(int $userId): string
+function find_existing_signature_path(mysqli $conn, int $userId): string
 {
     if ($userId <= 0) {
         return '';
     }
+
+    $stmt = $conn->prepare("
+        SELECT signature_path
+        FROM users
+        WHERE id = ?
+        LIMIT 1
+    ");
+    if ($stmt) {
+        $stmt->bind_param('i', $userId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result ? $result->fetch_assoc() : null;
+        if ($result) {
+            $result->free();
+        }
+        $stmt->close();
+
+        $signaturePath = trim((string)($row['signature_path'] ?? ''));
+        if ($signaturePath !== '' && is_file($signaturePath)) {
+            return $signaturePath;
+        }
+    }
+
     $base = 'uploads/signatures/user_' . $userId . '.';
     foreach (['png', 'jpg', 'jpeg'] as $ext) {
         $path = $base . $ext;
