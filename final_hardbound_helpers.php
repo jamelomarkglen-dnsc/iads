@@ -370,6 +370,32 @@ function hardbound_column_exists(mysqli $conn, string $table, string $column): b
     return $exists;
 }
 
+function final_hardbound_submission_title_expression(string $hardboundAlias = 'fhs', string $submissionAlias = 'sub'): string
+{
+    $hardboundAlias = preg_replace('/[^A-Za-z0-9_]/', '', $hardboundAlias) ?: 'fhs';
+    $submissionAlias = preg_replace('/[^A-Za-z0-9_]/', '', $submissionAlias) ?: 'sub';
+
+    return "COALESCE(
+        NULLIF({$hardboundAlias}.submission_title, ''),
+        NULLIF({$submissionAlias}.title, ''),
+        (
+            SELECT fps.final_title
+            FROM final_paper_submissions fps
+            WHERE fps.student_id = {$hardboundAlias}.student_id
+            ORDER BY fps.submitted_at DESC, fps.id DESC
+            LIMIT 1
+        ),
+        (
+            SELECT cp.title
+            FROM concept_papers cp
+            WHERE cp.student_id = {$hardboundAlias}.student_id
+            ORDER BY cp.created_at DESC, cp.id DESC
+            LIMIT 1
+        ),
+        'Untitled Submission'
+    )";
+}
+
 function ensureFinalHardboundTables(mysqli $conn): void
 {
     ensureFinalRoutingHardboundTables($conn);
@@ -378,6 +404,39 @@ function ensureFinalHardboundTables(mysqli $conn): void
     ensureInstitutionalFinalCopyTable($conn);
     if (!hardbound_column_exists($conn, 'final_routing_submissions', 'parent_submission_id')) {
         $conn->query("ALTER TABLE final_routing_submissions ADD COLUMN parent_submission_id INT NULL AFTER version_number");
+    }
+    if (!hardbound_column_exists($conn, 'final_hardbound_submissions', 'submission_title')) {
+        $conn->query("ALTER TABLE final_hardbound_submissions ADD COLUMN submission_title VARCHAR(255) NULL AFTER routing_submission_id");
+    }
+    if (hardbound_column_exists($conn, 'final_hardbound_submissions', 'submission_title')) {
+        $conn->query("
+            UPDATE final_hardbound_submissions fhs
+            SET fhs.submission_title = COALESCE(
+                NULLIF(fhs.submission_title, ''),
+                (
+                    SELECT fps.final_title
+                    FROM final_paper_submissions fps
+                    WHERE fps.student_id = fhs.student_id
+                    ORDER BY fps.submitted_at DESC, fps.id DESC
+                    LIMIT 1
+                ),
+                (
+                    SELECT s.title
+                    FROM submissions s
+                    WHERE s.id = fhs.submission_id
+                    LIMIT 1
+                ),
+                (
+                    SELECT cp.title
+                    FROM concept_papers cp
+                    WHERE cp.student_id = fhs.student_id
+                    ORDER BY cp.created_at DESC, cp.id DESC
+                    LIMIT 1
+                ),
+                'Untitled Submission'
+            )
+            WHERE fhs.submission_title IS NULL OR TRIM(fhs.submission_title) = ''
+        ");
     }
 }
 
@@ -606,7 +665,7 @@ function fetch_final_hardbound_submissions_for_adviser(mysqli $conn, int $advise
                u.program AS student_program,
                u.department AS student_department,
                u.college AS student_college,
-               s.title AS submission_title
+               " . final_hardbound_submission_title_expression('fhs', 's') . " AS submission_title
         FROM final_hardbound_submissions fhs
         JOIN users u ON u.id = fhs.student_id
         LEFT JOIN submissions s ON s.id = fhs.submission_id
@@ -643,20 +702,22 @@ function create_final_hardbound_submission(
     int $file_size,
     string $mime_type
 ): array {
+    $submissionTitle = resolve_final_hardbound_submission_title($conn, $submission_id, $student_id);
     $stmt = $conn->prepare("
         INSERT INTO final_hardbound_submissions
-            (submission_id, routing_submission_id, student_id, file_path, original_filename, file_size, mime_type, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'Submitted')
+            (submission_id, routing_submission_id, student_id, submission_title, file_path, original_filename, file_size, mime_type, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Submitted')
     ");
     if (!$stmt) {
         return ['success' => false, 'error' => 'Database error: ' . $conn->error];
     }
     $routingValue = $routing_submission_id ?: null;
     $stmt->bind_param(
-        'iiissis',
+        'iiisssis',
         $submission_id,
         $routingValue,
         $student_id,
+        $submissionTitle,
         $file_path,
         $original_filename,
         $file_size,
@@ -678,6 +739,82 @@ function create_final_hardbound_submission(
         );
     }
     return ['success' => true, 'submission_id' => $new_id];
+}
+
+function resolve_final_hardbound_submission_title(mysqli $conn, int $submission_id, int $student_id): string
+{
+    if ($student_id > 0) {
+        $stmt = $conn->prepare("
+            SELECT final_title
+            FROM final_paper_submissions
+            WHERE student_id = ?
+            ORDER BY submitted_at DESC, id DESC
+            LIMIT 1
+        ");
+        if ($stmt) {
+            $stmt->bind_param('i', $student_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result ? $result->fetch_assoc() : null;
+            if ($result) {
+                $result->free();
+            }
+            $stmt->close();
+            $title = trim((string)($row['final_title'] ?? ''));
+            if ($title !== '') {
+                return $title;
+            }
+        }
+    }
+
+    if ($submission_id > 0) {
+        $stmt = $conn->prepare("
+            SELECT title
+            FROM submissions
+            WHERE id = ?
+            LIMIT 1
+        ");
+        if ($stmt) {
+            $stmt->bind_param('i', $submission_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result ? $result->fetch_assoc() : null;
+            if ($result) {
+                $result->free();
+            }
+            $stmt->close();
+            $title = trim((string)($row['title'] ?? ''));
+            if ($title !== '') {
+                return $title;
+            }
+        }
+    }
+
+    if ($student_id > 0) {
+        $stmt = $conn->prepare("
+            SELECT title
+            FROM concept_papers
+            WHERE student_id = ?
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+        ");
+        if ($stmt) {
+            $stmt->bind_param('i', $student_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result ? $result->fetch_assoc() : null;
+            if ($result) {
+                $result->free();
+            }
+            $stmt->close();
+            $title = trim((string)($row['title'] ?? ''));
+            if ($title !== '') {
+                return $title;
+            }
+        }
+    }
+
+    return 'Untitled Submission';
 }
 
 function find_existing_signature_path(int $userId): string
@@ -773,7 +910,7 @@ function fetch_final_hardbound_committee_request_by_id(mysqli $conn, int $reques
         SELECT r.*, s.student_id, s.file_path, s.original_filename, s.status AS submission_status,
                s.submitted_at, s.review_notes,
                u.firstname, u.lastname, u.program, u.department, u.college,
-               sub.title AS submission_title,
+               " . final_hardbound_submission_title_expression('s', 'sub') . " AS submission_title,
                adv.firstname AS adviser_firstname,
                adv.lastname AS adviser_lastname
         FROM final_hardbound_committee_requests r
@@ -849,7 +986,7 @@ function fetch_final_hardbound_committee_requests_for_reviewer(mysqli $conn, int
         SELECT r.*, s.file_path, s.original_filename, s.status AS submission_status,
                s.submitted_at,
                u.firstname, u.lastname,
-               sub.title AS submission_title,
+               " . final_hardbound_submission_title_expression('s', 'sub') . " AS submission_title,
                adv.firstname AS adviser_firstname,
                adv.lastname AS adviser_lastname,
                rv.status AS review_status,
@@ -1173,7 +1310,7 @@ function fetch_pending_hardbound_requests_for_chair(mysqli $conn, int $program_c
         SELECT r.*, s.file_path, s.original_filename, s.status AS submission_status,
                s.submitted_at, s.review_notes,
                u.firstname, u.lastname,
-               sub.title AS submission_title,
+               " . final_hardbound_submission_title_expression('s', 'sub') . " AS submission_title,
                adv.firstname AS adviser_firstname,
                adv.lastname AS adviser_lastname
         FROM final_hardbound_requests r

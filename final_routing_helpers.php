@@ -118,6 +118,7 @@ if (!function_exists('ensureFinalRoutingHardboundTables')) {
                 submission_id INT NOT NULL,
                 routing_submission_id INT NULL,
                 student_id INT NOT NULL,
+                submission_title VARCHAR(255) NULL,
                 file_path VARCHAR(255) NOT NULL,
                 original_filename VARCHAR(255) NOT NULL,
                 file_size INT NULL,

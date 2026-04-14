@@ -221,6 +221,9 @@ $adviserSignaturePath = find_existing_signature_path($adviser_id);
                                             <?php if ($request): ?>
                                                 <?php
                                                     $requestTitle = trim((string)($submission['submission_title'] ?? ''));
+                                                    if ($requestTitle === '') {
+                                                        $requestTitle = 'Untitled Submission';
+                                                    }
                                                     $requestStudent = $submission['student_name'] ?? '________________________';
                                                     $requestDegree = trim((string)($submission['student_program'] ?? ''));
                                                     if ($requestDegree === '') {
@@ -315,6 +318,9 @@ $adviserSignaturePath = find_existing_signature_path($adviser_id);
                                                                 <?php
                                                                     $studentName = $submission['student_name'] ?? '________________________';
                                                                     $titleValue = trim((string)($submission['submission_title'] ?? ''));
+                                                                    if ($titleValue === '') {
+                                                                        $titleValue = 'Untitled Submission';
+                                                                    }
                                                                     $degreeValue = trim((string)($submission['student_program'] ?? ''));
                                                                     if ($degreeValue === '') {
                                                                         $degreeValue = trim((string)($submission['student_department'] ?? ''));
