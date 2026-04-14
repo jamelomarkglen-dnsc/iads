@@ -84,6 +84,23 @@ $stats = get_final_routing_annotation_statistics($conn, $submission_id);
         }
         .user-tab.active .user-tab-count { background: rgba(255,255,255,0.3); }
         .comment-selected-text { display: none !important; }
+        .page-jump {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            border: 1px solid #d8e5d8;
+            border-radius: 8px;
+            background: #f0f7f0;
+            font-size: 0.85rem;
+        }
+        .page-jump-input {
+            width: 70px;
+            padding: 2px 6px;
+            border: 1px solid #cfd8cf;
+            border-radius: 6px;
+            font-size: 0.85rem;
+        }
     </style>
 </head>
 <body>
@@ -115,12 +132,13 @@ $stats = get_final_routing_annotation_statistics($conn, $submission_id);
                         <button class="annotation-tool-btn" data-tool="comment" title="Add Comment">
                             <i class="bi bi-chat-dots"></i>
                         </button>
-                        <button class="annotation-tool-btn" data-tool="highlight" title="Highlight Text">
-                            <i class="bi bi-highlighter"></i>
-                        </button>
-                        <button class="annotation-tool-btn" data-tool="suggestion" title="Add Suggestion">
-                            <i class="bi bi-lightbulb"></i>
-                        </button>
+                        <div class="page-jump ms-2">
+                            <span>Page</span>
+                            <input id="pageJumpInput" class="page-jump-input" type="number" min="1" value="1">
+                            <button id="pageJumpBtn" type="button" class="btn btn-sm btn-outline-success">Go</button>
+                            <span>of</span>
+                            <span id="pageJumpTotal">?</span>
+                        </div>
                         <div class="ms-auto d-flex gap-2">
                             <button class="btn btn-sm btn-outline-secondary" id="prevPageBtn">Prev</button>
                             <button class="btn btn-sm btn-outline-secondary" id="nextPageBtn">Next</button>
@@ -264,8 +282,6 @@ $stats = get_final_routing_annotation_statistics($conn, $submission_id);
             <label>Annotation Type</label>
             <select name="annotation_type">
                 <option value="comment">Comment</option>
-                <option value="highlight">Highlight</option>
-                <option value="suggestion">Suggestion</option>
             </select>
         </div>
         <div class="annotation-form-group">
@@ -311,8 +327,68 @@ $stats = get_final_routing_annotation_statistics($conn, $submission_id);
         pollingInterval: 2000
     });
 
-    document.getElementById('prevPageBtn').addEventListener('click', () => pdfViewer.previousPage());
-    document.getElementById('nextPageBtn').addEventListener('click', () => pdfViewer.nextPage());
+    const pageJumpInput = document.getElementById('pageJumpInput');
+    const pageJumpBtn = document.getElementById('pageJumpBtn');
+    const pageJumpTotal = document.getElementById('pageJumpTotal');
+
+    const updatePageJump = () => {
+        if (!pageJumpInput) {
+            return;
+        }
+        pageJumpInput.value = pdfViewer.getCurrentPage();
+        const total = pdfViewer.getTotalPages();
+        if (total) {
+            pageJumpInput.max = total;
+            if (pageJumpTotal) {
+                pageJumpTotal.textContent = total;
+            }
+        }
+    };
+
+    const waitForTotalPages = () => {
+        const total = pdfViewer.getTotalPages();
+        if (total) {
+            updatePageJump();
+            return;
+        }
+        setTimeout(waitForTotalPages, 150);
+    };
+    waitForTotalPages();
+
+    const goToPageFromInput = async () => {
+        if (!pageJumpInput) {
+            return;
+        }
+        const total = pdfViewer.getTotalPages();
+        const target = parseInt(pageJumpInput.value, 10);
+        if (!Number.isFinite(target) || target < 1 || (total && target > total)) {
+            updatePageJump();
+            return;
+        }
+        await pdfViewer.goToPage(target);
+        updatePageJump();
+    };
+
+    if (pageJumpBtn) {
+        pageJumpBtn.addEventListener('click', goToPageFromInput);
+    }
+    if (pageJumpInput) {
+        pageJumpInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                goToPageFromInput();
+            }
+        });
+    }
+
+    document.getElementById('prevPageBtn').addEventListener('click', async () => {
+        await pdfViewer.previousPage();
+        updatePageJump();
+    });
+    document.getElementById('nextPageBtn').addEventListener('click', async () => {
+        await pdfViewer.nextPage();
+        updatePageJump();
+    });
     document.getElementById('zoomInBtn').addEventListener('click', () => pdfViewer.zoomIn());
     document.getElementById('zoomOutBtn').addEventListener('click', () => pdfViewer.zoomOut());
     document.getElementById('resetZoomBtn').addEventListener('click', () => pdfViewer.resetZoom());
