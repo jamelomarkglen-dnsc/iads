@@ -397,6 +397,9 @@ if (isset($_POST['register'])) {
             if ($hasStudentIdColumn && !preg_match('/^[0-9]{2,}$/', $oldInput['student_id'])) {
                 $errors[] = "Student ID should contain digits only.";
             }
+            if ($oldInput['contact'] === '' || $oldInput['gender'] === '') {
+                $errors[] = "Contact number and gender are required.";
+            }
             if ($oldInput['program'] === '' || $oldInput['year_level'] === '') {
                 $errors[] = "Program and year level are required.";
             }
@@ -541,6 +544,12 @@ if (isset($_POST['register'])) {
                 $types .= 's';
                 $values[] = $oldInput['student_id'];
             }
+            $columns[] = 'contact';
+            $types .= 's';
+            $values[] = $oldInput['contact'];
+            $columns[] = 'gender';
+            $types .= 's';
+            $values[] = $oldInput['gender'];
             if ($hasProgramColumn) {
                 $columns[] = 'program';
                 $types .= 's';
@@ -834,6 +843,19 @@ if (isset($_POST['register'])) {
                     </div>
                     <div class="col-md-6">
                         <input type="text" name="lastname" class="form-control" placeholder="Last Name" value="<?php echo htmlspecialchars($oldInput['lastname']); ?>" data-required="true">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" name="contact" class="form-control" placeholder="Contact Number" value="<?php echo htmlspecialchars($oldInput['contact']); ?>" data-required="true">
+                    </div>
+                    <div class="col-md-6">
+                        <select name="gender" class="form-select" data-required="true">
+                            <option value="" disabled <?php echo $oldInput['gender'] === '' ? 'selected' : ''; ?>>Select Gender</option>
+                            <option value="Male" <?php echo $oldInput['gender'] === 'Male' ? 'selected' : ''; ?>>Male</option>
+                            <option value="Female" <?php echo $oldInput['gender'] === 'Female' ? 'selected' : ''; ?>>Female</option>
+                            <option value="Prefer not to say" <?php echo $oldInput['gender'] === 'Prefer not to say' ? 'selected' : ''; ?>>Prefer not to say</option>
+                        </select>
                     </div>
                 </div>
                 <div class="row mb-3">
