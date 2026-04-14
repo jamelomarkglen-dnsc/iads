@@ -2,6 +2,7 @@
 session_start();
 include 'db.php';
 require_once 'chair_scope_helper.php';
+require_once 'notifications_helper.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'program_chairperson') {
     header("Location: login.php");
@@ -148,6 +149,57 @@ if ($hasAccountStatus) {
         $result = $stmt->get_result();
         while ($row = $result->fetch_assoc()) {
             $pendingAccounts[] = $row;
+        }
+        $stmt->close();
+    }
+}
+
+// Escalation: notify all program chairpersons if a faculty account stays pending for too long.
+$escalationDays = 3;
+if ($hasAccountStatus && $escalationDays > 0) {
+    notifications_bootstrap($conn);
+    $cutoff = date('Y-m-d H:i:s', strtotime("-{$escalationDays} days"));
+    $stmt = $conn->prepare("
+        SELECT u.id, u.firstname, u.lastname, u.department, u.created_at
+        FROM users u
+        WHERE u.role = 'faculty'
+          AND u.account_status = 'pending'
+          AND u.created_at IS NOT NULL
+          AND u.created_at <= ?
+    ");
+    if ($stmt) {
+        $stmt->bind_param('s', $cutoff);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $facultyId = (int)($row['id'] ?? 0);
+                if ($facultyId <= 0) {
+                    continue;
+                }
+                $fullName = trim(($row['firstname'] ?? '') . ' ' . ($row['lastname'] ?? ''));
+                $deptLabel = trim((string)($row['department'] ?? ''));
+                $title = 'Faculty Verification Reminder';
+                $details = $deptLabel !== '' ? " Program: {$deptLabel}." : '';
+                $message = $fullName !== ''
+                    ? "Faculty verification pending for {$fullName} (over {$escalationDays} days).{$details}"
+                    : "Faculty verification pending over {$escalationDays} days.{$details}";
+                $link = 'verify_faculty.php?focus=' . $facultyId;
+
+                $existsStmt = $conn->prepare("SELECT 1 FROM notifications WHERE title = ? AND link = ? LIMIT 1");
+                if ($existsStmt) {
+                    $existsStmt->bind_param('ss', $title, $link);
+                    $existsStmt->execute();
+                    $existsStmt->store_result();
+                    $alreadyNotified = $existsStmt->num_rows > 0;
+                    $existsStmt->close();
+                    if ($alreadyNotified) {
+                        continue;
+                    }
+                }
+
+                notify_role($conn, 'program_chairperson', $title, $message, $link, false);
+            }
         }
         $stmt->close();
     }
