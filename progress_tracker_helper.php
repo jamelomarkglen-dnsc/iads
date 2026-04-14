@@ -1053,6 +1053,21 @@ if (!function_exists('get_student_progress_tracker_data')) {
         if (progress_tracker_column_exists($conn, 'final_paper_submissions', 'id') && function_exists('fetchLatestFinalPaperSubmission')) {
             $latestFinalPaper = fetchLatestFinalPaperSubmission($conn, $studentId);
         }
+        
+        // Auto-detect Step 10: outline_submitted
+        $outlineSubmittedStatus = $rows['outline_submitted']['status'] ?? 'pending';
+        if ($outlineSubmittedStatus !== 'complete' && $latestFinalPaper) {
+            progress_tracker_mark_step_complete(
+                $conn,
+                $studentId,
+                'outline_submitted',
+                'final_paper_submissions',
+                (int)($latestFinalPaper['id'] ?? 0),
+                $latestFinalPaper['submitted_at'] ?? null
+            );
+            $rows = progress_tracker_fetch_rows($conn, $studentId);
+        }
+        
         $outlineReviewStatus = $rows['outline_review_completed']['status'] ?? 'pending';
         if ($outlineReviewStatus !== 'complete') {
             $shouldCompleteOutlineReview = false;
