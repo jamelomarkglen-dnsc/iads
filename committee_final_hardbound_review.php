@@ -33,25 +33,18 @@ if (!$reviewRow) {
     exit;
 }
 
+$reviewerSignaturePath = find_existing_signature_path($conn, $reviewer_id);
 $alert = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_committee_review'])) {
     $status = trim((string)($_POST['review_status'] ?? ''));
     $remarks = trim((string)($_POST['review_remarks'] ?? ''));
-    $signatureError = '';
-    $signaturePath = '';
-    if (isset($_FILES['review_signature'])) {
-        $signaturePath = save_notice_signature_upload($_FILES['review_signature'], $reviewer_id, $signatureError);
-    }
-
-    if ($signatureError !== '') {
-        $alert = ['type' => 'danger', 'message' => $signatureError];
-    } elseif ($signaturePath === '' && empty($reviewRow['signature_path'])) {
-        $alert = ['type' => 'danger', 'message' => 'Please upload your signature.'];
+    if ($reviewerSignaturePath === '') {
+        $alert = ['type' => 'danger', 'message' => 'Please add your signature in Account Settings before saving the review.'];
     } elseif (!in_array($status, ['Passed', 'Needs Revision'], true)) {
         $alert = ['type' => 'danger', 'message' => 'Please choose a valid status.'];
     } else {
-        $result = update_final_hardbound_committee_review($conn, $request_id, $reviewer_id, $status, $remarks, $signaturePath);
+        $result = update_final_hardbound_committee_review($conn, $request_id, $reviewer_id, $status, $remarks, $reviewerSignaturePath);
         if (!empty($result['success'])) {
             $reviewRow = fetch_final_hardbound_committee_review_row($conn, $request_id, $reviewer_id) ?: $reviewRow;
             $request = fetch_final_hardbound_committee_request_by_id($conn, $request_id) ?: $request;
@@ -382,7 +375,7 @@ $letterDate = $request['requested_at'] ? date('F d, Y', strtotime($request['requ
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <form method="post" enctype="multipart/form-data">
+                <form method="post">
                     <input type="hidden" name="request_id" value="<?php echo (int)$request_id; ?>">
                     <input type="hidden" name="save_committee_review" value="1">
 
@@ -398,10 +391,14 @@ $letterDate = $request['requested_at'] ? date('F d, Y', strtotime($request['requ
                     <textarea name="review_remarks" class="form-control mb-3" rows="3" placeholder="Notes for the adviser/student"><?php echo htmlspecialchars($reviewRow['remarks'] ?? ''); ?></textarea>
 
                     <label class="form-label">Signature</label>
-                    <input type="file" name="review_signature" class="form-control mb-2" accept="image/png,image/jpeg">
-                    <?php if (!empty($reviewRow['signature_path'])): ?>
-                        <img src="<?php echo htmlspecialchars($reviewRow['signature_path']); ?>" alt="Signature preview" class="signature-preview mt-2">
+                    <?php if (!empty($reviewerSignaturePath)): ?>
+                        <div class="mb-2">
+                            <img src="<?php echo htmlspecialchars($reviewerSignaturePath); ?>" alt="Signature preview" class="signature-preview mt-2">
+                        </div>
                     <?php endif; ?>
+                    <div class="alert alert-light border small mb-2">
+                        The signature is pulled from your Account Settings.
+                    </div>
 
                     <button type="submit" class="btn btn-success w-100 mt-2">Save Review</button>
                 </form>
