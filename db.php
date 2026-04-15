@@ -1,5 +1,5 @@
 <?php
-$servername = getenv("DB_HOST") ?: "db";
+$servername = getenv("DB_HOST") ?: "localhost";
 
 // Live
 $username = "u645049065_iads2";
