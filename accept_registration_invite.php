@@ -24,23 +24,60 @@ if ($inviteToken === '') {
 $role = $invite['role'] ?? '';
 $email = $invite['email'] ?? '';
 $oldInput = [
-    'fullname' => '',
+    'first_name' => '',
+    'last_name' => '',
     'email' => $email,
     'contact' => '',
     'gender' => '',
     'college' => '',
     'department' => '',
-    'username' => '',
     'specialization' => '',
-    'program_focus' => '',
 ];
 
-function invite_split_name(string $name): array
+$programOptions = [
+    'PHDEM' => 'Doctor of Philosophy in Educational Management (PHDEM)',
+    'MAEM' => 'Master of Arts in Educational Management (MAEM)',
+    'MAED-ELST' => 'Master of Education Major in English Language Studies and Teaching (MAED-ELST)',
+    'MST-GENSCI' => 'Master in Science Teaching Major in General Science (MST-GENSCI)',
+    'MST-MATH' => 'Master in Science Teaching Major in Mathematics (MST-MATH)',
+    'MFM-AT' => 'Master in Fisheries Management Major in Aquaculture Technology (MFM-AT)',
+    'MFM-FP' => 'Master in Fisheries Management Major in Fish Processing (MFM-FP)',
+    'MSMB' => 'Master of Science in Marine Biodiversity (MSMB)',
+    'MIT' => 'Master in Information Technology (MIT)',
+];
+
+function generateUniqueUsername(mysqli $conn, string $email, string $firstName, string $lastName): string
 {
-    $parts = preg_split('/\s+/', trim($name));
-    $first = array_shift($parts) ?? '';
-    $last = implode(' ', $parts);
-    return [$first, $last];
+    $base = strtolower((string)strtok($email, '@'));
+    $base = preg_replace('/[^a-z0-9._-]/i', '', $base ?? '');
+    if ($base === '') {
+        $base = strtolower(trim($firstName . '.' . $lastName));
+        $base = preg_replace('/[^a-z0-9._-]/i', '', $base ?? '');
+    }
+    if ($base === '') {
+        $base = 'user';
+    }
+
+    $candidate = $base;
+    $suffix = 1;
+    $checkStmt = $conn->prepare('SELECT id FROM users WHERE username = ? LIMIT 1');
+    if (!$checkStmt) {
+        return $candidate;
+    }
+
+    while (true) {
+        $checkStmt->bind_param('s', $candidate);
+        $checkStmt->execute();
+        $checkStmt->store_result();
+        if ($checkStmt->num_rows === 0) {
+            break;
+        }
+        $candidate = $base . $suffix;
+        $suffix++;
+    }
+
+    $checkStmt->close();
+    return $candidate;
 }
 
 if (!$error && $invite) {
@@ -67,20 +104,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
         $error = 'Passwords do not match.';
     } elseif (strlen($passwordPlain) < 8) {
         $error = 'Password must be at least 8 characters.';
-    } elseif ($oldInput['fullname'] === '' || $oldInput['username'] === '') {
-        $error = 'Full name and username are required.';
+    } elseif ($oldInput['first_name'] === '' || $oldInput['last_name'] === '') {
+        $error = 'First name and last name are required.';
     } elseif ($oldInput['contact'] === '' || $oldInput['gender'] === '' || $oldInput['college'] === '' || $oldInput['department'] === '') {
         $error = 'Please complete all required profile fields.';
-    } elseif ($role === 'program_chairperson' && $oldInput['program_focus'] === '') {
-        $error = 'Program handled is required for program chairperson accounts.';
     } else {
-        $checkStmt = $conn->prepare("SELECT id FROM users WHERE email = ? OR username = ? LIMIT 1");
+        $generatedUsername = generateUniqueUsername($conn, $postedEmail, $oldInput['first_name'], $oldInput['last_name']);
+        $checkStmt = $conn->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
         if ($checkStmt) {
-            $checkStmt->bind_param('ss', $postedEmail, $oldInput['username']);
+            $checkStmt->bind_param('s', $postedEmail);
             $checkStmt->execute();
             $checkStmt->store_result();
             if ($checkStmt->num_rows > 0) {
-                $error = 'Email or username already exists.';
+                $error = 'Email already exists.';
             }
             $checkStmt->close();
         } else {
@@ -89,7 +125,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
     }
 
     if ($error === '') {
-        [$firstname, $lastname] = invite_split_name($oldInput['fullname']);
+        $firstname = $oldInput['first_name'];
+        $lastname = $oldInput['last_name'];
+        $generatedUsername = $generatedUsername ?? generateUniqueUsername($conn, $postedEmail, $firstname, $lastname);
         $passwordHashed = password_hash($passwordPlain, PASSWORD_DEFAULT);
         $accountStatus = 'approved';
         if ($role === 'faculty') {
@@ -97,7 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
             $values = [
                 $firstname,
                 $lastname,
-                $oldInput['username'],
+                $generatedUsername,
                 $passwordHashed,
                 $postedEmail,
                 'faculty',
@@ -147,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
             $values = [
                 $firstname,
                 $lastname,
-                $oldInput['username'],
+                $generatedUsername,
                 $passwordHashed,
                 $postedEmail,
                 'program_chairperson',
@@ -155,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
                 $oldInput['gender'],
                 $oldInput['department'],
                 $oldInput['college'],
-                $oldInput['program_focus'],
+                $oldInput['department'],
                 $accountStatus,
             ];
             $types = 'ssssssssssss';
@@ -208,51 +246,133 @@ if ($error !== '' && !$invite) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         body {
-            background: linear-gradient(135deg, #eef4ef, #fdfefe);
+            background:
+                radial-gradient(circle at top left, rgba(22, 86, 44, 0.08), transparent 35%),
+                linear-gradient(180deg, #f4f8f5 0%, #eef5f0 100%);
             min-height: 100vh;
             font-family: 'Segoe UI', sans-serif;
         }
         .invite-shell {
-            max-width: 900px;
-            margin: 4rem auto;
-            padding: 0 1rem;
+            max-width: 820px;
+            margin: 0.25rem auto 0.35rem;
+            padding: 0 0.75rem;
         }
-        .invite-card {
-            border: 0;
-            border-radius: 1.25rem;
-            box-shadow: 0 18px 40px rgba(22, 86, 44, 0.10);
+        .account-card {
+            border: 1px solid rgba(22, 86, 44, 0.14);
+            border-radius: 14px;
+            background: #fff;
+            box-shadow: 0 14px 30px rgba(17, 73, 37, 0.08);
+            overflow: hidden;
         }
-        .invite-card .card-header {
-            background: linear-gradient(135deg, #16562c, #0f3e1f);
-            color: #fff;
-            border-radius: 1.25rem 1.25rem 0 0;
+        .account-card .card-header {
+            background: transparent;
+            border-bottom: 0;
+            padding: 0.25rem 0.9rem 0;
         }
-        .role-pill {
-            background: rgba(255,255,255,0.18);
-            border: 1px solid rgba(255,255,255,0.22);
+        .account-card .card-body {
+            padding: 0.15rem 0.9rem 0.3rem;
         }
-        .invite-form-label {
-            font-size: 0.78rem;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            font-weight: 600;
-            color: #6b7a6f;
+        .page-title {
+            font-weight: 800;
+            color: #198754;
+            text-align: center;
+            margin-bottom: 0;
+            font-size: 1.55rem;
+        }
+        .section-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #1f5132;
+            margin: 0 0 0.25rem;
+        }
+        .floating-label {
+            font-size: 0.84rem;
+            font-weight: 400;
+            color: #212529;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #9ec5fe;
+            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.2);
+        }
+        .form-control,
+        .form-select {
+            border-radius: 10px;
+            min-height: 33px;
+            font-size: 0.9rem;
+        }
+        .form-control-lg,
+        .form-select-lg {
+            padding-top: 0.28rem;
+            padding-bottom: 0.28rem;
+        }
+        .role-lock {
+            pointer-events: none;
+            background: #fff !important;
+            opacity: 1;
+        }
+        .section-panel {
+            border: 1px solid rgba(22, 86, 44, 0.14);
+            border-radius: 12px;
+            padding: 0.45rem 0.65rem 0.55rem;
+            margin-top: 0.35rem;
+            background: #fff;
+        }
+        .section-panel + .section-panel {
+            margin-top: 0.4rem;
+        }
+        .row-tight {
+            --bs-gutter-x: 0.4rem;
+            --bs-gutter-y: 0.3rem;
+        }
+        .toggle-password-btn {
+            border-left: 1px solid #d8e0d8;
+        }
+        .register-btn {
+            background: #198754;
+            border: none;
+            border-radius: 8px;
+            min-height: 34px;
+            font-size: 0.88rem;
+        }
+        .register-btn:hover {
+            background: #146c43;
+        }
+        @media (max-width: 991.98px) {
+            .invite-shell {
+                max-width: 100%;
+                padding: 0 0.75rem;
+            }
+            .account-card .card-header {
+                padding-left: 0.75rem;
+                padding-right: 0.75rem;
+            }
+            .account-card .card-body {
+                padding: 0.15rem 0.75rem 0.35rem;
+            }
+        }
+        @media (max-width: 575.98px) {
+            .invite-shell {
+                padding: 0 0.5rem;
+            }
+            .account-card .card-header {
+                padding-top: 0.2rem;
+            }
+            .page-title {
+                font-size: 1.05rem;
+            }
+            .account-card .card-body {
+                padding: 0.1rem 0.6rem 0.25rem;
+            }
         }
     </style>
 </head>
 <body>
     <div class="invite-shell">
-        <div class="card invite-card">
-            <div class="card-header p-4">
-                <div class="d-flex flex-column flex-md-row justify-content-between gap-2 align-items-md-center">
-                    <div>
-                        <h1 class="h4 mb-1">Complete Your Registration</h1>
-                        <div class="text-white-50 small">Invite-based onboarding for <?php echo htmlspecialchars(registration_invite_role_label((string)$role)); ?></div>
-                    </div>
-                    <span class="badge role-pill px-3 py-2"><?php echo htmlspecialchars(registration_invite_role_label((string)$role)); ?></span>
-                </div>
+        <div class="card account-card">
+            <div class="card-header">
+                <h1 class="page-title">Create Your Account</h1>
             </div>
-            <div class="card-body p-4">
+            <div class="card-body">
                 <?php if ($error !== ''): ?>
                     <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
                 <?php endif; ?>
@@ -262,77 +382,137 @@ if ($error !== '' && !$invite) {
                         <div class="mt-2"><a href="login.php" class="alert-link">Go to login</a></div>
                     </div>
                 <?php elseif ($error === ''): ?>
-                    <div class="alert alert-info">
-                        This invite is reserved for <?php echo htmlspecialchars($email); ?>.
-                    </div>
-                    <form method="post" class="row g-3">
+                    <form method="post">
                         <input type="hidden" name="token" value="<?php echo htmlspecialchars($inviteToken); ?>">
-                        <div class="col-md-6">
-                            <label class="form-label invite-form-label">Full Name</label>
-                            <input type="text" name="fullname" class="form-control" value="<?php echo htmlspecialchars($oldInput['fullname']); ?>" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label invite-form-label">Username</label>
-                            <input type="text" name="username" class="form-control" value="<?php echo htmlspecialchars($oldInput['username']); ?>" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label invite-form-label">Email Address</label>
-                            <input type="email" name="email" class="form-control" value="<?php echo htmlspecialchars($email); ?>" readonly>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label invite-form-label">Contact Number</label>
-                            <input type="text" name="contact" class="form-control" value="<?php echo htmlspecialchars($oldInput['contact']); ?>" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label invite-form-label">Gender</label>
-                            <select name="gender" class="form-select" required>
-                                <option value="">Select gender</option>
-                                <option value="Male" <?php echo $oldInput['gender'] === 'Male' ? 'selected' : ''; ?>>Male</option>
-                                <option value="Female" <?php echo $oldInput['gender'] === 'Female' ? 'selected' : ''; ?>>Female</option>
-                                <option value="Prefer not to say" <?php echo $oldInput['gender'] === 'Prefer not to say' ? 'selected' : ''; ?>>Prefer not to say</option>
+
+                        <div class="mb-2">
+                            <label class="form-label">Role</label>
+                            <select class="form-select role-lock" aria-disabled="true" tabindex="-1">
+                                <option selected><?php echo htmlspecialchars(registration_invite_role_label((string)$role)); ?></option>
                             </select>
+                            <input type="hidden" name="role" value="<?php echo htmlspecialchars((string)$role); ?>">
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label invite-form-label">Institute / College</label>
-                            <input type="text" name="college" class="form-control" value="<?php echo htmlspecialchars($oldInput['college']); ?>" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label invite-form-label">Department / Program Unit</label>
-                            <input type="text" name="department" class="form-control" value="<?php echo htmlspecialchars($oldInput['department']); ?>" required>
-                        </div>
-                        <?php if ($role === 'program_chairperson'): ?>
-                            <div class="col-md-6">
-                                <label class="form-label invite-form-label">Program Handled</label>
-                                <input type="text" name="program_focus" class="form-control" value="<?php echo htmlspecialchars($oldInput['program_focus']); ?>" placeholder="e.g. MIT" required>
+
+                        <div class="section-panel">
+                            <div class="section-title">Account Credentials</div>
+                            <div class="row row-tight">
+                                <div class="col-12">
+                                    <label class="form-label floating-label">Email</label>
+                                <input type="email" name="email" class="form-control" placeholder="Email" value="<?php echo htmlspecialchars($email); ?>" readonly required>
                             </div>
-                        <?php else: ?>
                             <div class="col-md-6">
-                                <label class="form-label invite-form-label">Specialization</label>
-                                <input type="text" name="specialization" class="form-control" value="<?php echo htmlspecialchars($oldInput['specialization']); ?>" placeholder="Optional">
+                                <label class="form-label floating-label">Password</label>
+                                <div class="input-group">
+                                    <input type="password" id="password" name="password" class="form-control" placeholder="Password" required minlength="8">
+                                    <button type="button" class="btn btn-outline-secondary toggle-password-btn" id="togglePassword">
+                                        <i class="bi bi-eye-slash" id="toggleIcon"></i>
+                                    </button>
+                                </div>
                             </div>
-                        <?php endif; ?>
-                        <div class="col-md-6">
-                            <label class="form-label invite-form-label">Password</label>
-                            <input type="password" name="password" class="form-control" required minlength="8">
+                            <div class="col-md-6">
+                                <label class="form-label floating-label">Confirm Password</label>
+                                <div class="input-group">
+                                    <input type="password" id="confirm_password" name="confirm_password" class="form-control" placeholder="Confirm Password" required minlength="8">
+                                    <button type="button" class="btn btn-outline-secondary toggle-password-btn" id="toggleConfirmPassword">
+                                        <i class="bi bi-eye-slash" id="toggleConfirmIcon"></i>
+                                    </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label invite-form-label">Confirm Password</label>
-                            <input type="password" name="confirm_password" class="form-control" required minlength="8">
+
+                        <div class="section-panel">
+                            <div class="section-title"><?php echo $role === 'program_chairperson' ? 'Program Chairperson Profile' : 'Faculty Profile'; ?></div>
+                            <div class="row row-tight">
+                                <div class="col-md-6">
+                                    <label class="form-label floating-label">First Name</label>
+                                    <input type="text" name="first_name" class="form-control" placeholder="First Name" value="<?php echo htmlspecialchars($oldInput['first_name']); ?>" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label floating-label">Last Name</label>
+                                    <input type="text" name="last_name" class="form-control" placeholder="Last Name" value="<?php echo htmlspecialchars($oldInput['last_name']); ?>" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label floating-label">Contact Number</label>
+                                    <input type="text" name="contact" class="form-control" placeholder="Contact Number" value="<?php echo htmlspecialchars($oldInput['contact']); ?>" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label floating-label">Select Gender</label>
+                                    <select name="gender" class="form-select" required>
+                                        <option value="">Select Gender</option>
+                                        <option value="Male" <?php echo $oldInput['gender'] === 'Male' ? 'selected' : ''; ?>>Male</option>
+                                        <option value="Female" <?php echo $oldInput['gender'] === 'Female' ? 'selected' : ''; ?>>Female</option>
+                                        <option value="Prefer not to say" <?php echo $oldInput['gender'] === 'Prefer not to say' ? 'selected' : ''; ?>>Prefer not to say</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label floating-label">Institute / College</label>
+                                    <input type="text" name="college" class="form-control" placeholder="Institute / College" value="<?php echo htmlspecialchars($oldInput['college']); ?>" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label floating-label">Select Program</label>
+                                    <select name="department" class="form-select" required>
+                                        <option value="">Select Program</option>
+                                        <?php foreach ($programOptions as $code => $label): ?>
+                                            <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['department'] === $code ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($label); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label invite-form-label">Role</label>
-                            <input type="text" class="form-control" value="<?php echo htmlspecialchars(registration_invite_role_label((string)$role)); ?>" disabled>
-                            <div class="form-text">This role is fixed by the invite.</div>
+
+                        <div class="section-panel">
+                            <label class="form-label floating-label">Specialization (optional)</label>
+                            <input type="text" name="specialization" class="form-control" placeholder="Specialization (optional)" value="<?php echo htmlspecialchars($oldInput['specialization']); ?>">
                         </div>
-                        <div class="col-12">
-                            <button type="submit" class="btn btn-success">
-                                <i class="bi bi-check2-circle me-1"></i>Complete Registration
-                            </button>
+
+                        <div class="mt-1">
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="terms" required>
+                                <label class="form-check-label" for="terms">I agree to the Terms &amp; Conditions</label>
+                            </div>
                         </div>
+
+                        <button type="submit" class="btn register-btn w-100 text-white mt-1">Register</button>
                     </form>
+
+                    <p class="text-center mt-1 mb-0">
+                        Already have an account? <a href="login.php" class="text-decoration-none text-success">Login</a>
+                    </p>
                 <?php endif; ?>
             </div>
         </div>
     </div>
-</body>
+    <script>
+        (function () {
+            const passwordInput = document.querySelector("#password");
+            const confirmPasswordInput = document.querySelector("#confirm_password");
+            const togglePasswordBtn = document.querySelector("#togglePassword");
+            const togglePasswordIcon = document.querySelector("#toggleIcon");
+            const toggleConfirmBtn = document.querySelector("#toggleConfirmPassword");
+            const toggleConfirmIcon = document.querySelector("#toggleConfirmIcon");
+
+            function toggleVisibility(field, icon) {
+                if (!field) {
+                    return;
+                }
+                const hidden = field.getAttribute("type") === "password";
+                field.setAttribute("type", hidden ? "text" : "password");
+                if (icon) {
+                    icon.classList.toggle("bi-eye");
+                    icon.classList.toggle("bi-eye-slash");
+                }
+            }
+
+            if (togglePasswordBtn) {
+                togglePasswordBtn.addEventListener("click", () => toggleVisibility(passwordInput, togglePasswordIcon));
+            }
+            if (toggleConfirmBtn) {
+                toggleConfirmBtn.addEventListener("click", () => toggleVisibility(confirmPasswordInput, toggleConfirmIcon));
+            }
+        })();
+    </script>
+    </body>
 </html>
