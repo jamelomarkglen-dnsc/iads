@@ -329,7 +329,7 @@ if (isset($_POST['login'])) {
             </div>
             <button type="submit" name="login" class="btn btn-login w-100 text-white">Log in</button>
         </form>
-        <p class="text-center mt-3">Don't have an account? <a href="register.php" class="text-decoration-none text-primary">Register</a></p>
+        <p class="text-center mt-3">Don't have a student account? <a href="register.php" class="text-decoration-none text-primary">Student Registration</a></p>
         
         <hr>
         <p class="text-center small text-muted mb-2">Sign in with your DNSC Account:</p>

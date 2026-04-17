@@ -4,6 +4,7 @@ include 'db.php';
 require_once 'notifications_helper.php';
 
 $message = "";
+$allowedRegistrationRoles = ['student'];
 $oldInput = [
     'role' => '',
     'firstname' => '',
@@ -325,8 +326,11 @@ if (isset($_POST['register'])) {
     $confirmPassword = (string)($_POST['confirm_password'] ?? '');
     $errors = [];
 
-    if ($role === '') {
-        $errors[] = "Please select a role.";
+    if (!in_array($role, $allowedRegistrationRoles, true)) {
+        $errors[] = "This page is for student registration only.";
+    } else {
+        $role = 'student';
+        $oldInput['role'] = 'student';
     }
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors[] = "Please enter a valid email address.";
@@ -345,52 +349,7 @@ if (isset($_POST['register'])) {
     $photoPath = null;
 
     if (empty($errors)) {
-        if ($role === 'dean') {
-            if ($oldInput['firstname'] === '' || $oldInput['lastname'] === '') {
-                $errors[] = "First and last name are required.";
-            }
-            if ($oldInput['program'] === '' || $oldInput['department'] === '') {
-                $errors[] = "Program and department are required.";
-            } else {
-                $firstname = $oldInput['firstname'];
-                $lastname = $oldInput['lastname'];
-                $username = trim($firstname . ' ' . $lastname);
-                $accountStatus = 'approved';
-            }
-        } elseif ($role === 'program_chairperson') {
-            if ($oldInput['firstname'] === '' || $oldInput['lastname'] === '' || $oldInput['username'] === '') {
-                $errors[] = "First name, last name, and username are required.";
-            }
-            if ($oldInput['department'] === '' || $oldInput['program_focus'] === '') {
-                $errors[] = "Department and program handled are required.";
-            }
-            if ($oldInput['contact'] === '' || $oldInput['gender'] === '' || $oldInput['college'] === '') {
-                $errors[] = "Contact number, gender, and institute are required.";
-            }
-            if (empty($errors)) {
-                $firstname = $oldInput['firstname'];
-                $lastname = $oldInput['lastname'];
-                $username = $oldInput['username'];
-                $program = $oldInput['program_focus'];
-                $accountStatus = 'pending';
-            }
-        } elseif ($role === 'faculty') {
-            if ($oldInput['firstname'] === '' || $oldInput['lastname'] === '' || $oldInput['username'] === '') {
-                $errors[] = "First name, last name, and username are required.";
-            }
-            if (!preg_match('/^\d{10,15}$/', $oldInput['contact'])) {
-                $errors[] = "Contact number should contain 10-15 digits.";
-            }
-            if ($oldInput['gender'] === '' || $oldInput['college'] === '' || $oldInput['department'] === '') {
-                $errors[] = "Gender, institute, and program are required.";
-            }
-            if (empty($errors)) {
-                $firstname = $oldInput['firstname'];
-                $lastname = $oldInput['lastname'];
-                $username = $oldInput['username'];
-                $accountStatus = 'pending';
-            }
-        } elseif ($role === 'student') {
+        if ($role === 'student') {
             if ($oldInput['firstname'] === '' || $oldInput['lastname'] === '') {
                 $errors[] = "First and last name are required.";
             }
@@ -418,19 +377,8 @@ if (isset($_POST['register'])) {
         }
     }
 
-    if (empty($errors) && $role !== 'dean' && !$hasAccountStatusColumn) {
+    if (empty($errors) && !$hasAccountStatusColumn) {
         $errors[] = "Account verification is not available right now. Please contact the administrator.";
-    }
-
-    if (empty($errors) && $role === 'program_chairperson' && isset($_FILES['photo']) && ($_FILES['photo']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
-        $fileInfo = $_FILES['photo'];
-        if (($fileInfo['error'] ?? UPLOAD_ERR_OK) === UPLOAD_ERR_OK) {
-            if (!is_dir("uploads")) {
-                mkdir("uploads", 0777, true);
-            }
-            $photoPath = "uploads/" . basename($fileInfo['name']);
-            move_uploaded_file($fileInfo['tmp_name'], $photoPath);
-        }
     }
 
     if (empty($errors)) {
@@ -438,11 +386,6 @@ if (isset($_POST['register'])) {
         $checkTypes = "s";
         $checkValues = [$email];
 
-        if (in_array($role, ['program_chairperson', 'faculty'], true) && $username !== '') {
-            $checkSql .= " OR username = ?";
-            $checkTypes .= "s";
-            $checkValues[] = $username;
-        }
         if ($role === 'student' && $hasStudentIdColumn && $oldInput['student_id'] !== '') {
             $checkSql .= " OR student_id = ?";
             $checkTypes .= "s";
@@ -457,13 +400,9 @@ if (isset($_POST['register'])) {
             $checkStmt->execute();
             $checkResult = $checkStmt->get_result();
             if ($checkResult && $checkResult->num_rows > 0) {
-                if ($role === 'student' && $hasStudentIdColumn) {
-                    $errors[] = "Email or Student ID already exists.";
-                } elseif (in_array($role, ['program_chairperson', 'faculty'], true)) {
-                    $errors[] = "Email or username already exists.";
-                } else {
-                    $errors[] = "Email already exists.";
-                }
+                $errors[] = $hasStudentIdColumn && $oldInput['student_id'] !== ''
+                    ? "Email or Student ID already exists."
+                    : "Email already exists.";
             }
             if ($checkResult) {
                 $checkResult->free();
@@ -479,64 +418,6 @@ if (isset($_POST['register'])) {
         $columns = ['firstname', 'lastname', 'username', 'password', 'email', 'role'];
         $types = "ssssss";
         $values = [$firstname, $lastname, $username, $passwordHashed, $email, $role];
-
-        if (in_array($role, ['program_chairperson', 'faculty'], true)) {
-            if ($hasDepartmentColumn) {
-                $columns[] = 'department';
-                $types .= 's';
-                $values[] = $oldInput['department'];
-            }
-            if ($hasCollegeColumn) {
-                $columns[] = 'college';
-                $types .= 's';
-                $values[] = $oldInput['college'];
-            }
-            $columns[] = 'contact';
-            $types .= 's';
-            $values[] = $oldInput['contact'];
-            $columns[] = 'gender';
-            $types .= 's';
-            $values[] = $oldInput['gender'];
-        }
-
-        if ($role === 'dean') {
-            if ($hasProgramColumn) {
-                $columns[] = 'program';
-                $types .= 's';
-                $values[] = $oldInput['program'];
-            }
-            if ($hasDepartmentColumn) {
-                $columns[] = 'department';
-                $types .= 's';
-                $values[] = $oldInput['department'];
-            }
-        }
-
-        if ($role === 'program_chairperson') {
-            if ($hasProgramColumn) {
-                $columns[] = 'program';
-                $types .= 's';
-                $values[] = $program;
-            }
-            if ($hasPhotoColumn && $photoPath !== null) {
-                $columns[] = 'photo';
-                $types .= 's';
-                $values[] = $photoPath;
-            }
-        }
-
-        if ($role === 'faculty') {
-            if ($hasProgramColumn) {
-                $columns[] = 'program';
-                $types .= 's';
-                $values[] = $oldInput['department'];
-            }
-            if ($hasSpecializationColumn) {
-                $columns[] = 'specialization';
-                $types .= 's';
-                $values[] = $oldInput['specialization'];
-            }
-        }
 
         if ($role === 'student') {
             if ($hasStudentIdColumn) {
@@ -572,11 +453,9 @@ if (isset($_POST['register'])) {
             }
         }
 
-        if ($hasAccountStatusColumn) {
-            $columns[] = 'account_status';
-            $types .= 's';
-            $values[] = $accountStatus;
-        }
+        $columns[] = 'account_status';
+        $types .= 's';
+        $values[] = $accountStatus;
 
         $insertSql = sprintf(
             "INSERT INTO users (%s) VALUES (%s)",
@@ -589,7 +468,7 @@ if (isset($_POST['register'])) {
         } else {
             bindParams($insertStmt, $types, $values);
             if ($insertStmt->execute()) {
-                if ($role !== 'dean' && $accountStatus === 'pending') {
+                if ($accountStatus === 'pending') {
                     $fullName = trim($firstname . ' ' . $lastname);
                     notify_verification_for_registration(
                         $conn,
@@ -606,13 +485,7 @@ if (isset($_POST['register'])) {
                         $hasCollegeColumn
                     );
                 }
-                if ($role === 'dean') {
-                    $message = "<div class='alert alert-success'>Registration successful! Redirecting...</div>";
-                    header("refresh:2; url=login.php");
-                } else {
-                    $verifier = $role === 'program_chairperson' ? 'Dean' : ($role === 'faculty' ? 'Program Chairperson' : 'Faculty');
-                    $message = "<div class='alert alert-success'>Registration successful! Your account is pending verification by the {$verifier}.</div>";
-                }
+                $message = "<div class='alert alert-success'>Registration successful! Your account is pending verification by the Faculty.</div>";
                 foreach ($oldInput as $key => $value) {
                     $oldInput[$key] = '';
                 }
@@ -628,7 +501,7 @@ if (isset($_POST['register'])) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Register - Institute of Advanced Studies</title>
+    <title>Student Registration - Institute of Advanced Studies</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
@@ -657,9 +530,6 @@ if (isset($_POST['register'])) {
         .btn-register:hover {
             background: #146c43;
         }
-        .role-section {
-            display: none;
-        }
         .section-title {
             font-size: 0.9rem;
             font-weight: 600;
@@ -670,18 +540,15 @@ if (isset($_POST['register'])) {
 </head>
 <body class="d-flex justify-content-center align-items-start py-4">
     <div class="register-container">
-        <h3 class="register-title">Create Your Account</h3>
+        <h3 class="register-title">Student Registration</h3>
+        <p class="text-center text-muted small mb-4">Faculty, Program Chairperson, and Dean accounts are created through authorized staff channels.</p>
         <?php echo $message; ?>
         <form method="POST" enctype="multipart/form-data">
             <div class="mb-3">
-                <label class="form-label">Role</label>
-                <select name="role" id="role" class="form-select" required>
-                    <option value="" disabled <?php echo $oldInput['role'] === '' ? 'selected' : ''; ?>>Select Role</option>
-                    <option value="dean" <?php echo $oldInput['role'] === 'dean' ? 'selected' : ''; ?>>Dean</option>
-                    <option value="program_chairperson" <?php echo $oldInput['role'] === 'program_chairperson' ? 'selected' : ''; ?>>Program Chairperson</option>
-                    <option value="faculty" <?php echo $oldInput['role'] === 'faculty' ? 'selected' : ''; ?>>Faculty</option>
-                    <option value="student" <?php echo $oldInput['role'] === 'student' ? 'selected' : ''; ?>>Student</option>
-                </select>
+                <label class="form-label">Account Type</label>
+                <input type="hidden" name="role" id="role" value="student">
+                <input type="text" class="form-control" value="Student" disabled>
+                <div class="form-text">This form is reserved for student accounts only.</div>
             </div>
 
             <div class="section-title">Account Credentials</div>
@@ -707,190 +574,60 @@ if (isset($_POST['register'])) {
                 </div>
             </div>
 
-            <div class="role-section" data-roles="dean">
-                <div class="section-title">Dean Profile</div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <input type="text" name="firstname" class="form-control" placeholder="First Name" value="<?php echo htmlspecialchars($oldInput['firstname']); ?>" data-required="true">
-                    </div>
-                    <div class="col-md-6">
-                        <input type="text" name="lastname" class="form-control" placeholder="Last Name" value="<?php echo htmlspecialchars($oldInput['lastname']); ?>" data-required="true">
-                    </div>
+            <div class="section-title">Student Profile</div>
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <input type="text" name="firstname" class="form-control" placeholder="First Name" value="<?php echo htmlspecialchars($oldInput['firstname']); ?>" data-required="true">
                 </div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <select name="program" class="form-select" data-required="true">
-                            <option value="" disabled <?php echo $oldInput['program'] === '' ? 'selected' : ''; ?>>Select Program</option>
-                            <?php foreach ($programOptions as $code => $label): ?>
-                                <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['program'] === $code ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($label); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <input type="text" name="department" class="form-control" placeholder="Department" value="<?php echo htmlspecialchars($oldInput['department']); ?>" data-required="true">
-                    </div>
+                <div class="col-md-6">
+                    <input type="text" name="lastname" class="form-control" placeholder="Last Name" value="<?php echo htmlspecialchars($oldInput['lastname']); ?>" data-required="true">
                 </div>
             </div>
-
-            <div class="role-section" data-roles="program_chairperson">
-                <div class="section-title">Program Chairperson Profile</div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <input type="text" name="firstname" class="form-control" placeholder="First Name" value="<?php echo htmlspecialchars($oldInput['firstname']); ?>" data-required="true">
-                    </div>
-                    <div class="col-md-6">
-                        <input type="text" name="lastname" class="form-control" placeholder="Last Name" value="<?php echo htmlspecialchars($oldInput['lastname']); ?>" data-required="true">
-                    </div>
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <input type="text" name="contact" class="form-control" placeholder="Contact Number" value="<?php echo htmlspecialchars($oldInput['contact']); ?>" data-required="true">
                 </div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <input type="text" name="username" class="form-control" placeholder="Username" value="<?php echo htmlspecialchars($oldInput['username']); ?>" data-required="true">
-                    </div>
-                </div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <input type="text" name="contact" class="form-control" placeholder="Contact Number" value="<?php echo htmlspecialchars($oldInput['contact']); ?>" data-required="true">
-                    </div>
-                    <div class="col-md-6">
-                        <select name="gender" class="form-select" data-required="true">
-                            <option value="" disabled <?php echo $oldInput['gender'] === '' ? 'selected' : ''; ?>>Select Gender</option>
-                            <option value="Male" <?php echo $oldInput['gender'] === 'Male' ? 'selected' : ''; ?>>Male</option>
-                            <option value="Female" <?php echo $oldInput['gender'] === 'Female' ? 'selected' : ''; ?>>Female</option>
-                            <option value="Prefer not to say" <?php echo $oldInput['gender'] === 'Prefer not to say' ? 'selected' : ''; ?>>Prefer not to say</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <input type="text" name="college" class="form-control" placeholder="Institute / College" value="<?php echo htmlspecialchars($oldInput['college']); ?>" data-required="true">
-                    </div>
-                    <div class="col-md-6">
-                        <input type="text" name="department" class="form-control" placeholder="Department / Program Unit" value="<?php echo htmlspecialchars($oldInput['department']); ?>" data-required="true">
-                    </div>
-                </div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <select name="program_focus" class="form-select" data-required="true">
-                            <option value="" disabled <?php echo $oldInput['program_focus'] === '' ? 'selected' : ''; ?>>Select Program</option>
-                            <?php foreach ($programOptions as $code => $label): ?>
-                                <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['program_focus'] === $code ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($label); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <input type="file" name="photo" class="form-control" accept="image/*">
-                    </div>
+                <div class="col-md-6">
+                    <select name="gender" class="form-select" data-required="true">
+                        <option value="" disabled <?php echo $oldInput['gender'] === '' ? 'selected' : ''; ?>>Select Gender</option>
+                        <option value="Male" <?php echo $oldInput['gender'] === 'Male' ? 'selected' : ''; ?>>Male</option>
+                        <option value="Female" <?php echo $oldInput['gender'] === 'Female' ? 'selected' : ''; ?>>Female</option>
+                        <option value="Prefer not to say" <?php echo $oldInput['gender'] === 'Prefer not to say' ? 'selected' : ''; ?>>Prefer not to say</option>
+                    </select>
                 </div>
             </div>
-
-            <div class="role-section" data-roles="faculty">
-                <div class="section-title">Faculty Profile</div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <input type="text" name="firstname" class="form-control" placeholder="First Name" value="<?php echo htmlspecialchars($oldInput['firstname']); ?>" data-required="true">
-                    </div>
-                    <div class="col-md-6">
-                        <input type="text" name="lastname" class="form-control" placeholder="Last Name" value="<?php echo htmlspecialchars($oldInput['lastname']); ?>" data-required="true">
-                    </div>
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <input type="text" name="student_id" class="form-control" placeholder="Student ID" value="<?php echo htmlspecialchars($oldInput['student_id']); ?>" data-required="true">
                 </div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <input type="text" name="username" class="form-control" placeholder="Username" value="<?php echo htmlspecialchars($oldInput['username']); ?>" data-required="true">
-                    </div>
-                </div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <input type="text" name="contact" class="form-control" placeholder="Contact Number" value="<?php echo htmlspecialchars($oldInput['contact']); ?>" data-required="true">
-                    </div>
-                    <div class="col-md-6">
-                        <select name="gender" class="form-select" data-required="true">
-                            <option value="" disabled <?php echo $oldInput['gender'] === '' ? 'selected' : ''; ?>>Select Gender</option>
-                            <option value="Male" <?php echo $oldInput['gender'] === 'Male' ? 'selected' : ''; ?>>Male</option>
-                            <option value="Female" <?php echo $oldInput['gender'] === 'Female' ? 'selected' : ''; ?>>Female</option>
-                            <option value="Prefer not to say" <?php echo $oldInput['gender'] === 'Prefer not to say' ? 'selected' : ''; ?>>Prefer not to say</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <input type="text" name="college" class="form-control" placeholder="Institute / College" value="<?php echo htmlspecialchars($oldInput['college']); ?>" data-required="true">
-                    </div>
-                    <div class="col-md-6">
-                        <select name="department" class="form-select" data-required="true">
-                            <option value="" disabled <?php echo $oldInput['department'] === '' ? 'selected' : ''; ?>>Select Program</option>
-                            <?php foreach ($programOptions as $code => $label): ?>
-                                <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['department'] === $code ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($label); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <input type="text" name="specialization" class="form-control" placeholder="Specialization (optional)" value="<?php echo htmlspecialchars($oldInput['specialization']); ?>">
-                </div>
-            </div>
-
-            <div class="role-section" data-roles="student">
-                <div class="section-title">Student Profile</div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <input type="text" name="firstname" class="form-control" placeholder="First Name" value="<?php echo htmlspecialchars($oldInput['firstname']); ?>" data-required="true">
-                    </div>
-                    <div class="col-md-6">
-                        <input type="text" name="lastname" class="form-control" placeholder="Last Name" value="<?php echo htmlspecialchars($oldInput['lastname']); ?>" data-required="true">
-                    </div>
-                </div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <input type="text" name="contact" class="form-control" placeholder="Contact Number" value="<?php echo htmlspecialchars($oldInput['contact']); ?>" data-required="true">
-                    </div>
-                    <div class="col-md-6">
-                        <select name="gender" class="form-select" data-required="true">
-                            <option value="" disabled <?php echo $oldInput['gender'] === '' ? 'selected' : ''; ?>>Select Gender</option>
-                            <option value="Male" <?php echo $oldInput['gender'] === 'Male' ? 'selected' : ''; ?>>Male</option>
-                            <option value="Female" <?php echo $oldInput['gender'] === 'Female' ? 'selected' : ''; ?>>Female</option>
-                            <option value="Prefer not to say" <?php echo $oldInput['gender'] === 'Prefer not to say' ? 'selected' : ''; ?>>Prefer not to say</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <input type="text" name="student_id" class="form-control" placeholder="Student ID" value="<?php echo htmlspecialchars($oldInput['student_id']); ?>" data-required="true">
-                    </div>
-                    <div class="col-md-6">
-                        <select name="program" class="form-select" data-required="true">
-                            <option value="" disabled <?php echo $oldInput['program'] === '' ? 'selected' : ''; ?>>Select Program</option>
-                            <?php foreach ($programOptions as $code => $label): ?>
-                                <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['program'] === $code ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($label); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </div>
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <input type="text" name="department" class="form-control" placeholder="Department / Program Unit" value="<?php echo htmlspecialchars($oldInput['department']); ?>" data-required="true">
-                    </div>
-                    <div class="col-md-6">
-                        <input type="text" name="college" class="form-control" placeholder="Institute / College" value="<?php echo htmlspecialchars($oldInput['college']); ?>" data-required="true">
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <select name="year_level" class="form-select" data-required="true">
-                        <option value="" disabled <?php echo $oldInput['year_level'] === '' ? 'selected' : ''; ?>>Select Year Level</option>
-                        <?php foreach ($yearOptions as $year): ?>
-                            <option value="<?php echo htmlspecialchars($year, ENT_QUOTES); ?>" <?php echo $oldInput['year_level'] === $year ? 'selected' : ''; ?>>
-                                <?php echo htmlspecialchars($year); ?>
+                <div class="col-md-6">
+                    <select name="program" class="form-select" data-required="true">
+                        <option value="" disabled <?php echo $oldInput['program'] === '' ? 'selected' : ''; ?>>Select Program</option>
+                        <?php foreach ($programOptions as $code => $label): ?>
+                            <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['program'] === $code ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($label); ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
+            </div>
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <input type="text" name="department" class="form-control" placeholder="Department / Program Unit" value="<?php echo htmlspecialchars($oldInput['department']); ?>" data-required="true">
+                </div>
+                <div class="col-md-6">
+                    <input type="text" name="college" class="form-control" placeholder="Institute / College" value="<?php echo htmlspecialchars($oldInput['college']); ?>" data-required="true">
+                </div>
+            </div>
+            <div class="mb-3">
+                <select name="year_level" class="form-select" data-required="true">
+                    <option value="" disabled <?php echo $oldInput['year_level'] === '' ? 'selected' : ''; ?>>Select Year Level</option>
+                    <?php foreach ($yearOptions as $year): ?>
+                        <option value="<?php echo htmlspecialchars($year, ENT_QUOTES); ?>" <?php echo $oldInput['year_level'] === $year ? 'selected' : ''; ?>>
+                            <?php echo htmlspecialchars($year); ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
             </div>
 
             <div class="mb-3 form-check">
@@ -903,8 +640,6 @@ if (isset($_POST['register'])) {
     </div>
 
     <script>
-        const roleSelect = document.getElementById('role');
-        const sections = document.querySelectorAll('.role-section');
         const passwordField = document.getElementById('password');
         const confirmPasswordField = document.getElementById('confirm_password');
         const togglePassword = document.getElementById('togglePassword');
@@ -923,29 +658,6 @@ if (isset($_POST['register'])) {
                 icon.classList.toggle('bi-eye-slash', !isHidden);
             }
         }
-
-        function updateSections() {
-            const role = roleSelect.value;
-            sections.forEach(section => {
-                const roles = (section.dataset.roles || '').split(' ');
-                const isActive = roles.includes(role);
-                section.style.display = isActive ? 'block' : 'none';
-                section.querySelectorAll('input, select, textarea').forEach(input => {
-                    if (isActive) {
-                        input.disabled = false;
-                        if (input.dataset.required === 'true') {
-                            input.required = true;
-                        }
-                    } else {
-                        input.disabled = true;
-                        input.required = false;
-                    }
-                });
-            });
-        }
-
-        roleSelect.addEventListener('change', updateSections);
-        updateSections();
 
         if (togglePassword) {
             togglePassword.addEventListener('click', () => toggleFieldVisibility(passwordField, togglePasswordIcon));
