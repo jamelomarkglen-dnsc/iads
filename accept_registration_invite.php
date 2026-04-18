@@ -254,7 +254,7 @@ if ($error !== '' && !$invite) {
         }
         .invite-shell {
             max-width: 820px;
-            margin: 3.5rem auto 4rem;
+            margin: 2.25rem auto 2.75rem;
             padding: 0 0.75rem;
         }
         .account-card {
@@ -267,17 +267,17 @@ if ($error !== '' && !$invite) {
         .account-card .card-header {
             background: transparent;
             border-bottom: 0;
-            padding: 2.4rem 0.9rem 1rem;
+            padding: 1.4rem 0.9rem 0.55rem;
         }
         .account-card .card-body {
-            padding: 1.3rem 0.9rem 2.1rem;
+            padding: 0.85rem 0.9rem 1.2rem;
         }
         .page-title {
             font-weight: 800;
             color: #198754;
             text-align: center;
             margin-bottom: 0;
-            margin-top: 0.2rem;
+            margin-top: 0.1rem;
             font-size: 1.55rem;
         }
         .section-title {
@@ -314,12 +314,12 @@ if ($error !== '' && !$invite) {
         .section-panel {
             border: 1px solid rgba(22, 86, 44, 0.14);
             border-radius: 12px;
-            padding: 1.2rem 0.75rem 1.4rem;
-            margin-top: 0.9rem;
+            padding: 0.85rem 0.7rem 0.95rem;
+            margin-top: 0.6rem;
             background: #fff;
         }
         .section-panel + .section-panel {
-            margin-top: 1rem;
+            margin-top: 0.65rem;
         }
         .row-tight {
             --bs-gutter-x: 0.4rem;
@@ -334,7 +334,7 @@ if ($error !== '' && !$invite) {
             border-radius: 8px;
             min-height: 34px;
             font-size: 0.88rem;
-            margin-top: 0.7rem;
+            margin-top: 0.45rem;
         }
         .register-btn:hover {
             background: #146c43;
@@ -342,29 +342,29 @@ if ($error !== '' && !$invite) {
         @media (max-width: 991.98px) {
             .invite-shell {
                 max-width: 100%;
-                margin: 2.7rem auto 3rem;
+                margin: 1.6rem auto 2rem;
                 padding: 0 0.75rem;
             }
             .account-card .card-header {
-                padding: 2rem 0.75rem 0.8rem;
+                padding: 1.15rem 0.75rem 0.45rem;
             }
             .account-card .card-body {
-                padding: 1.1rem 0.75rem 1.7rem;
+                padding: 0.7rem 0.75rem 1rem;
             }
         }
         @media (max-width: 575.98px) {
             .invite-shell {
-                margin: 2rem auto 2.2rem;
+                margin: 1.1rem auto 1.35rem;
                 padding: 0 0.5rem;
             }
             .account-card .card-header {
-                padding: 1.6rem 0.6rem 0.7rem;
+                padding: 0.85rem 0.6rem 0.3rem;
             }
             .page-title {
                 font-size: 1.05rem;
             }
             .account-card .card-body {
-                padding: 0.9rem 0.6rem 1.4rem;
+                padding: 0.55rem 0.6rem 0.8rem;
             }
         }
     </style>
