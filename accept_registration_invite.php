@@ -107,7 +107,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
     } elseif ($passwordPlain !== $confirmPassword) {
         $error = 'Passwords do not match.';
     } elseif (strlen($passwordPlain) < 8) {
-        $error = 'Password must be at least 8 characters.';
+        $error = 'Password must be at least 8 characters and contain letters and numbers.';
+    } elseif (!preg_match('/^(?=.*[A-Za-z])(?=.*\d).+$/', $passwordPlain)) {
+        $error = 'Password must contain at least one letter and one number.';
     } elseif ($oldInput['first_name'] === '' || $oldInput['last_name'] === '') {
         $error = 'First name and last name are required.';
     } elseif ($oldInput['contact'] === '' || $oldInput['gender'] === '' || $oldInput['college'] === '' || $oldInput['department'] === '') {
@@ -447,6 +449,9 @@ if ($error !== '' && !$invite) {
                                     <i id="passwordMatchIcon" class="bi bi-dash-circle"></i>
                                     <span>Passwords will be checked as you type.</span>
                                 </small>
+                            </div>
+                            <div class="col-12">
+                                <small class="text-muted">Password must be at least 8 characters and contain letters and numbers. Symbols are optional.</small>
                             </div>
                         </div>
 
