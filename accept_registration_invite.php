@@ -475,7 +475,7 @@ if ($error !== '' && !$invite) {
                             <div class="form-check">
                                 <input type="checkbox" class="form-check-input" id="terms" required>
                                 <label class="form-check-label" for="terms">
-                                    I agree to the <a href="terms.php" target="_blank" rel="noopener">Terms &amp; Conditions</a>
+                                    I have read and agree to the <a href="terms.php" target="_blank" rel="noopener">Terms &amp; Conditions</a>
                                 </label>
                             </div>
                         </div>

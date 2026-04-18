@@ -81,26 +81,26 @@
         <div class="terms-card">
             <div class="terms-header">
                 <h1 class="terms-title">Terms &amp; Conditions</h1>
-                <p class="mb-0 text-muted">Please read these terms before creating your account.</p>
+                <p class="mb-0 text-muted">Davao del Norte State College account registration terms</p>
             </div>
             <div class="terms-body">
                 <h2>1. Accuracy of Information</h2>
-                <p>You certify that all information you provide is true, complete, and accurate to the best of your knowledge.</p>
+                <p>You certify that all information you provide to Davao del Norte State College is true, complete, and accurate to the best of your knowledge.</p>
 
                 <h2>2. Account Responsibility</h2>
-                <p>You are responsible for maintaining the confidentiality of your account credentials and for all activity under your account.</p>
+                <p>You are responsible for maintaining the confidentiality of your account credentials and for all activity performed under your account.</p>
 
                 <h2>3. Proper Use</h2>
-                <p>You agree to use the account only for authorized academic and institutional purposes and to follow all applicable rules and policies.</p>
+                <p>You agree to use the account only for authorized academic and institutional purposes and to follow all applicable school rules, policies, and procedures.</p>
 
                 <h2>4. Verification and Approval</h2>
-                <p>You understand that the institution may verify your details before or after account creation and may reject or disable accounts with incomplete or false information.</p>
+                <p>You understand that the College may verify your details before or after account creation and may reject, suspend, or disable accounts with incomplete, inaccurate, or false information.</p>
 
                 <h2>5. Data Privacy</h2>
-                <p>You consent to the collection, storage, and processing of your information for account creation, verification, and system administration in accordance with institutional policy.</p>
+                <p>You consent to the collection, storage, and processing of your information for account creation, verification, and system administration in accordance with the College's data privacy and records policies.</p>
 
                 <h2>6. Violation of Terms</h2>
-                <p>Any violation of these terms may result in account suspension, denial, or removal without prior notice, subject to institutional review.</p>
+                <p>Any violation of these terms may result in account suspension, denial, or removal without prior notice, subject to College review and applicable policy.</p>
 
                 <div class="mt-4">
                     <a href="javascript:history.back()" class="back-link">Go back to registration</a>
