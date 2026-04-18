@@ -254,7 +254,7 @@ if ($error !== '' && !$invite) {
         }
         .invite-shell {
             max-width: 820px;
-            margin: 0.25rem auto 0.35rem;
+            margin: 3.5rem auto 4rem;
             padding: 0 0.75rem;
         }
         .account-card {
@@ -340,6 +340,7 @@ if ($error !== '' && !$invite) {
         @media (max-width: 991.98px) {
             .invite-shell {
                 max-width: 100%;
+                margin: 2.7rem auto 3rem;
                 padding: 0 0.75rem;
             }
             .account-card .card-header {
@@ -352,6 +353,7 @@ if ($error !== '' && !$invite) {
         }
         @media (max-width: 575.98px) {
             .invite-shell {
+                margin: 2rem auto 2.2rem;
                 padding: 0 0.5rem;
             }
             .account-card .card-header {
