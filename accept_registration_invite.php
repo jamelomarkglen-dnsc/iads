@@ -343,6 +343,12 @@ if ($error !== '' && !$invite) {
         .register-btn:hover {
             background: #146c43;
         }
+        .password-match-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            min-height: 1.25rem;
+        }
         .invite-notice {
             border: 1px solid rgba(25, 135, 84, 0.18);
             background: rgba(25, 135, 84, 0.06);
@@ -434,8 +440,13 @@ if ($error !== '' && !$invite) {
                                     <button type="button" class="btn btn-outline-secondary toggle-password-btn" id="toggleConfirmPassword">
                                         <i class="bi bi-eye-slash" id="toggleConfirmIcon"></i>
                                     </button>
-                                    </div>
                                 </div>
+                            </div>
+                            <div class="col-12">
+                                <small id="passwordMatchStatus" class="password-match-status text-muted">
+                                    <i id="passwordMatchIcon" class="bi bi-dash-circle"></i>
+                                    <span>Passwords will be checked as you type.</span>
+                                </small>
                             </div>
                         </div>
 
@@ -513,6 +524,8 @@ if ($error !== '' && !$invite) {
             const togglePasswordIcon = document.querySelector("#toggleIcon");
             const toggleConfirmBtn = document.querySelector("#toggleConfirmPassword");
             const toggleConfirmIcon = document.querySelector("#toggleConfirmIcon");
+            const passwordMatchStatus = document.querySelector("#passwordMatchStatus");
+            const passwordMatchIcon = document.querySelector("#passwordMatchIcon");
 
             function toggleVisibility(field, icon) {
                 if (!field) {
@@ -532,6 +545,56 @@ if ($error !== '' && !$invite) {
             if (toggleConfirmBtn) {
                 toggleConfirmBtn.addEventListener("click", () => toggleVisibility(confirmPasswordInput, toggleConfirmIcon));
             }
+
+            function updatePasswordMatchStatus() {
+                if (!passwordInput || !confirmPasswordInput || !passwordMatchStatus) {
+                    return;
+                }
+
+                const passwordValue = passwordInput.value;
+                const confirmValue = confirmPasswordInput.value;
+
+                if (!passwordValue && !confirmValue) {
+                    passwordMatchStatus.querySelector("span").textContent = "Passwords will be checked as you type.";
+                    passwordMatchStatus.className = "text-muted";
+                    if (passwordMatchIcon) {
+                        passwordMatchIcon.className = "bi bi-dash-circle";
+                    }
+                    return;
+                }
+
+                if (!confirmValue) {
+                    passwordMatchStatus.querySelector("span").textContent = "Please retype the password to confirm it.";
+                    passwordMatchStatus.className = "text-muted";
+                    if (passwordMatchIcon) {
+                        passwordMatchIcon.className = "bi bi-dash-circle";
+                    }
+                    return;
+                }
+
+                if (passwordValue === confirmValue) {
+                    passwordMatchStatus.querySelector("span").textContent = "Passwords match.";
+                    passwordMatchStatus.className = "text-success fw-semibold";
+                    if (passwordMatchIcon) {
+                        passwordMatchIcon.className = "bi bi-check-circle-fill";
+                    }
+                } else {
+                    passwordMatchStatus.querySelector("span").textContent = "Passwords do not match.";
+                    passwordMatchStatus.className = "text-danger fw-semibold";
+                    if (passwordMatchIcon) {
+                        passwordMatchIcon.className = "bi bi-x-circle-fill";
+                    }
+                }
+            }
+
+            if (passwordInput) {
+                passwordInput.addEventListener("input", updatePasswordMatchStatus);
+            }
+            if (confirmPasswordInput) {
+                confirmPasswordInput.addEventListener("input", updatePasswordMatchStatus);
+            }
+
+            updatePasswordMatchStatus();
         })();
     </script>
     </body>
