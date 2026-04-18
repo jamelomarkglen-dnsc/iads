@@ -12,13 +12,17 @@ $inviteToken = trim((string)($_GET['token'] ?? $_POST['token'] ?? ''));
 $invite = $inviteToken !== '' ? get_registration_invite_by_token($conn, $inviteToken) : null;
 $error = '';
 $success = '';
+$inviteHelp = '';
 
 if ($inviteToken === '') {
     $error = 'Invite token is required.';
+    $inviteHelp = 'Please open the full invitation link sent to your email. The registration page cannot be completed without a valid token.';
 } elseif (!$invite) {
     $error = 'Invite is invalid, expired, or already used.';
+    $inviteHelp = 'The invite link may be incomplete, expired, or already used. Please open the latest invitation sent by the Dean.';
 } elseif (!in_array((string)$invite['role'], registration_invite_allowed_roles(), true)) {
     $error = 'This invite is not valid for registration.';
+    $inviteHelp = 'This registration link is not valid for the current account setup. Please use the exact invite sent to you.';
 }
 
 $role = $invite['role'] ?? '';
@@ -339,6 +343,12 @@ if ($error !== '' && !$invite) {
         .register-btn:hover {
             background: #146c43;
         }
+        .invite-notice {
+            border: 1px solid rgba(25, 135, 84, 0.18);
+            background: rgba(25, 135, 84, 0.06);
+            border-radius: 12px;
+            padding: 1rem 1rem 0.85rem;
+        }
         @media (max-width: 991.98px) {
             .invite-shell {
                 max-width: 100%;
@@ -377,7 +387,12 @@ if ($error !== '' && !$invite) {
             </div>
             <div class="card-body">
                 <?php if ($error !== ''): ?>
-                    <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
+                    <div class="invite-notice">
+                        <h2 class="h6 fw-bold text-success mb-2">Registration Link Needed</h2>
+                        <p class="mb-2 text-muted"><?php echo htmlspecialchars($inviteHelp !== '' ? $inviteHelp : $error); ?></p>
+                        <a href="login.php" class="btn btn-success btn-sm">Go to Login</a>
+                        <div class="mt-2 small text-muted">If needed, ask the Dean to generate a new invitation link.</div>
+                    </div>
                 <?php endif; ?>
                 <?php if ($success !== ''): ?>
                     <div class="alert alert-success">
@@ -475,7 +490,7 @@ if ($error !== '' && !$invite) {
                             <div class="form-check">
                                 <input type="checkbox" class="form-check-input" id="terms" required>
                                 <label class="form-check-label" for="terms">
-                                    I have read and agree to the <a href="terms.php" target="_blank" rel="noopener">Terms &amp; Conditions</a>
+                                    I have read and agree to the <a href="terms.php?token=<?php echo htmlspecialchars($inviteToken); ?>" target="_blank" rel="noopener">Terms &amp; Conditions</a>
                                 </label>
                             </div>
                         </div>

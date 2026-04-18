@@ -1,4 +1,9 @@
 <?php
+$inviteToken = trim((string)($_GET['token'] ?? ''));
+$backUrl = 'accept_registration_invite.php';
+if ($inviteToken !== '') {
+    $backUrl .= '?token=' . rawurlencode($inviteToken);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -103,7 +108,7 @@
                 <p>Any violation of these terms may result in account suspension, denial, or removal without prior notice, subject to College review and applicable policy.</p>
 
                 <div class="mt-4">
-                    <a href="javascript:history.back()" class="back-link">Go back to registration</a>
+                    <a href="<?php echo htmlspecialchars($backUrl, ENT_QUOTES); ?>" class="back-link">Go back to registration</a>
                 </div>
             </div>
         </div>
