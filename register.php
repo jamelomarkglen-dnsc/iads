@@ -557,10 +557,13 @@ if (isset($_POST['register'])) {
 
             <div class="section-title">Account Credentials</div>
             <div class="row mb-3">
-                <div class="col-md-6">
+                <div class="col-12">
                     <input type="email" name="email" class="form-control" placeholder="Email" value="<?php echo htmlspecialchars($oldInput['email']); ?>" required>
                 </div>
-                <div class="col-md-3">
+            </div>
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label mb-1">Password</label>
                     <div class="input-group">
                         <input type="password" id="password" name="password" class="form-control" placeholder="Password" required>
                         <button class="btn btn-outline-secondary" type="button" id="togglePassword" aria-label="Toggle password visibility">
@@ -568,7 +571,8 @@ if (isset($_POST['register'])) {
                         </button>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-6">
+                    <label class="form-label mb-1">Confirm Password</label>
                     <div class="input-group">
                         <input type="password" id="confirm_password" name="confirm_password" class="form-control" placeholder="Confirm Password" required>
                         <button class="btn btn-outline-secondary" type="button" id="toggleConfirmPassword" aria-label="Toggle confirm password visibility">
