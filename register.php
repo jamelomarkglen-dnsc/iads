@@ -547,7 +547,7 @@ if (isset($_POST['register'])) {
         <h3 class="register-title">Student Registration</h3>
         <p class="text-center text-muted small mb-4">Faculty, Program Chairperson, and Dean accounts are created through authorized staff channels.</p>
         <?php echo $message; ?>
-        <form method="POST" enctype="multipart/form-data">
+        <form method="POST" enctype="multipart/form-data" id="registration">
             <div class="mb-3">
                 <label class="form-label">Account Type</label>
                 <input type="hidden" name="role" id="role" value="student">
@@ -639,7 +639,10 @@ if (isset($_POST['register'])) {
 
             <div class="mb-3 form-check">
                 <input type="checkbox" class="form-check-input" id="terms" required>
-                <label for="terms" class="form-check-label">I agree to the Terms & Conditions</label>
+                <label for="terms" class="form-check-label">
+                    I have read and agree to the
+                    <a href="terms.php?back=register.php#registration" target="_blank" rel="noopener noreferrer" class="text-success text-decoration-none fw-semibold">Terms &amp; Conditions</a>
+                </label>
             </div>
             <button type="submit" name="register" class="btn btn-register w-100 text-white">Register</button>
         </form>

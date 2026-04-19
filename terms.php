@@ -1,8 +1,21 @@
 <?php
 $inviteToken = trim((string)($_GET['token'] ?? ''));
-$backUrl = 'accept_registration_invite.php';
-if ($inviteToken !== '') {
+$backTarget = trim((string)($_GET['back'] ?? ''));
+
+$allowedBackTargets = [
+    'accept_registration_invite.php',
+    'register.php',
+];
+
+if (!in_array($backTarget, $allowedBackTargets, true)) {
+    $backTarget = 'accept_registration_invite.php';
+}
+
+$backUrl = $backTarget;
+if ($backTarget === 'accept_registration_invite.php' && $inviteToken !== '') {
     $backUrl .= '?token=' . rawurlencode($inviteToken);
+} elseif ($backTarget === 'register.php') {
+    $backUrl .= '#registration';
 }
 ?>
 <!DOCTYPE html>
