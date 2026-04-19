@@ -339,6 +339,10 @@ if (isset($_POST['register'])) {
         $errors[] = "Password and confirmation are required.";
     } elseif ($passwordPlain !== $confirmPassword) {
         $errors[] = "Passwords do not match.";
+    } elseif (strlen($passwordPlain) < 8) {
+        $errors[] = "Password must be at least 8 characters and contain letters and numbers.";
+    } elseif (!preg_match('/^(?=.*[A-Za-z])(?=.*\d).+$/', $passwordPlain)) {
+        $errors[] = "Password must contain at least one letter and one number.";
     }
 
     $firstname = '';
@@ -572,6 +576,9 @@ if (isset($_POST['register'])) {
                         </button>
                     </div>
                 </div>
+            </div>
+            <div class="mb-3">
+                <small class="text-muted">Password must be at least 8 characters and contain letters and numbers. Symbols are optional.</small>
             </div>
 
             <div class="section-title">Student Profile</div>
