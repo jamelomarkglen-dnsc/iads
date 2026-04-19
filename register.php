@@ -578,6 +578,12 @@ if (isset($_POST['register'])) {
                 </div>
             </div>
             <div class="mb-3">
+                <small id="passwordMatchStatus" class="text-muted d-flex align-items-center gap-2">
+                    <i id="passwordMatchIcon" class="bi bi-dash-circle"></i>
+                    <span>Passwords will be checked as you type.</span>
+                </small>
+            </div>
+            <div class="mb-3">
                 <small class="text-muted">Password must be at least 8 characters and contain letters and numbers. Symbols are optional.</small>
             </div>
 
@@ -656,6 +662,8 @@ if (isset($_POST['register'])) {
         const toggleConfirmPassword = document.getElementById('toggleConfirmPassword');
         const togglePasswordIcon = document.getElementById('togglePasswordIcon');
         const toggleConfirmPasswordIcon = document.getElementById('toggleConfirmPasswordIcon');
+        const passwordMatchStatus = document.getElementById('passwordMatchStatus');
+        const passwordMatchIcon = document.getElementById('passwordMatchIcon');
 
         function toggleFieldVisibility(field, icon) {
             if (!field) {
@@ -675,6 +683,48 @@ if (isset($_POST['register'])) {
         if (toggleConfirmPassword) {
             toggleConfirmPassword.addEventListener('click', () => toggleFieldVisibility(confirmPasswordField, toggleConfirmPasswordIcon));
         }
+
+        function updatePasswordMatchStatus() {
+            if (!passwordMatchStatus || !passwordMatchIcon) {
+                return;
+            }
+
+            const passwordValue = passwordField ? passwordField.value : '';
+            const confirmValue = confirmPasswordField ? confirmPasswordField.value : '';
+            const messageNode = passwordMatchStatus.querySelector('span');
+
+            if (!passwordValue && !confirmValue) {
+                messageNode.textContent = 'Passwords will be checked as you type.';
+                passwordMatchStatus.className = 'text-muted d-flex align-items-center gap-2';
+                passwordMatchIcon.className = 'bi bi-dash-circle';
+                return;
+            }
+
+            if (!passwordValue || !confirmValue) {
+                messageNode.textContent = 'Please retype the password to confirm it.';
+                passwordMatchStatus.className = 'text-muted d-flex align-items-center gap-2';
+                passwordMatchIcon.className = 'bi bi-dash-circle';
+                return;
+            }
+
+            if (passwordValue === confirmValue) {
+                messageNode.textContent = 'Passwords match.';
+                passwordMatchStatus.className = 'text-success fw-semibold d-flex align-items-center gap-2';
+                passwordMatchIcon.className = 'bi bi-check-circle-fill';
+            } else {
+                messageNode.textContent = 'Passwords do not match.';
+                passwordMatchStatus.className = 'text-danger fw-semibold d-flex align-items-center gap-2';
+                passwordMatchIcon.className = 'bi bi-x-circle-fill';
+            }
+        }
+
+        if (passwordField) {
+            passwordField.addEventListener('input', updatePasswordMatchStatus);
+        }
+        if (confirmPasswordField) {
+            confirmPasswordField.addEventListener('input', updatePasswordMatchStatus);
+        }
+        updatePasswordMatchStatus();
     </script>
 </body>
 </html>
