@@ -641,7 +641,7 @@ if (isset($_POST['register'])) {
                 <input type="checkbox" class="form-check-input" id="terms" required>
                 <label for="terms" class="form-check-label">
                     I have read and agree to the
-                    <a href="terms.php?back=register.php#registration" target="_blank" rel="noopener noreferrer" class="text-success text-decoration-none fw-semibold">Terms &amp; Conditions</a>
+                    <a href="terms.php?back=register.php#registration" target="_blank" rel="noopener noreferrer" class="text-primary text-decoration-underline fw-semibold">Terms &amp; Conditions</a>
                 </label>
             </div>
             <button type="submit" name="register" class="btn btn-register w-100 text-white">Register</button>
