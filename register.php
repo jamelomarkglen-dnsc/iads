@@ -505,7 +505,7 @@ if (isset($_POST['register'])) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Student Registration - Institute of Advanced Studies</title>
+    <title>DNSC Student Registration - Institute of Advanced Studies</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
@@ -544,15 +544,15 @@ if (isset($_POST['register'])) {
 </head>
 <body class="d-flex justify-content-center align-items-start py-4">
     <div class="register-container">
-        <h3 class="register-title">Student Registration</h3>
-        <p class="text-center text-muted small mb-4">Faculty, Program Chairperson, and Dean accounts are created through authorized staff channels.</p>
+        <h3 class="register-title">DNSC Student Registration</h3>
+        <p class="text-center text-muted small mb-4">This form is intended for DNSC student accounts only. Faculty, Program Chairperson, and Dean accounts are created through authorized staff channels.</p>
         <?php echo $message; ?>
         <form method="POST" enctype="multipart/form-data" id="registration">
             <div class="mb-3">
                 <label class="form-label">Account Type</label>
                 <input type="hidden" name="role" id="role" value="student">
                 <input type="text" class="form-control" value="Student" disabled>
-                <div class="form-text">This form is reserved for student accounts only.</div>
+                <div class="form-text">This form is reserved for DNSC student accounts only.</div>
             </div>
 
             <div class="section-title">Account Credentials</div>
