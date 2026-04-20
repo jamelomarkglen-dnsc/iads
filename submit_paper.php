@@ -446,6 +446,7 @@ $action = $_POST['action'] ?? '';
 $proposalColumns = ensureSubmissionProposalColumns($conn);
 $proposalFileColumns = ensureSubmissionProposalFileColumns($conn);
 $proposalFileColumns = ensureSubmissionProposalFileColumns($conn);
+$allowedSubmissionTypes = ['Thesis', 'Capstone', 'Dissertation'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
     $submissionId = (int)($_POST['submission_id'] ?? 0);
@@ -507,8 +508,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
             $error = "Unable to locate the submission you want to edit.";
         } else {
             $updatedType = trim($_POST['type'] ?? '');
-            if ($updatedType === '') {
-                $error = "Please select the research type for this submission.";
+            $existingType = trim((string)($existingSubmission['type'] ?? ''));
+            $editableTypes = $allowedSubmissionTypes;
+            if ($existingType !== '' && !in_array($existingType, $editableTypes, true)) {
+                $editableTypes[] = $existingType;
+            }
+            if ($updatedType === '' || !in_array($updatedType, $editableTypes, true)) {
+                $error = "Please select a valid research type for this submission.";
             }
 
             $conceptProposals = [
@@ -518,10 +524,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
             ];
             $providedConcepts = array_filter($conceptProposals, fn($value) => $value !== '');
             if (!$error && empty($providedConcepts)) {
-                $error = "Please provide at least one concept proposal title.";
+                $error = "Please provide at least one title option.";
             }
             if (!$error && hasDuplicateConceptValues($conceptProposals)) {
-                $error = "Concept proposal titles must be unique.";
+                $error = "Title options must be unique.";
             }
             if (
                 !$error
@@ -563,13 +569,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
 
                 if ($fileInfo && $fileInfo['error'] === UPLOAD_ERR_OK) {
                     if (!isPdfUpload($fileInfo)) {
-                        $error = "Concept Proposal {$index} must be uploaded as a PDF file.";
+                        $error = "Title Option {$index} must be uploaded as a PDF file.";
                         break;
                     }
                     $conceptFilename = uniqid("concept{$index}_", true) . "_" . basename($fileInfo['name']);
                     $conceptPath = $conceptUploadDir . $conceptFilename;
                     if (!move_uploaded_file($fileInfo['tmp_name'], $conceptPath)) {
-                        $error = "Unable to upload the file for Concept Proposal {$index}. Please try again.";
+                        $error = "Unable to upload the file for Title Option {$index}. Please try again.";
                         break;
                     }
                     $updatedFiles[$fileKey] = $conceptPath;
@@ -579,7 +585,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
                     }
                 } else {
                     if (!$currentPath) {
-                        $error = "Please upload a PDF document for Concept Proposal {$index}.";
+                        $error = "Please upload a PDF document for Title Option {$index}.";
                         break;
                     }
                     $updatedFiles[$fileKey] = $currentPath;
@@ -588,7 +594,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
 
             $primaryFilePath = $updatedFiles['concept_file_1'] ?? null;
             if (!$error && $conceptProposals['concept_proposal_1'] !== '' && !$primaryFilePath) {
-                $error = "Concept Proposal 1 requires a supporting PDF document.";
+                $error = "Title Option 1 requires a supporting PDF document.";
             }
 
             if (!$error) {
@@ -659,6 +665,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
     $type = $formData['type'];
     $abstract = '';
     $keywords = '';
+    if ($type === '' || !in_array($type, $allowedSubmissionTypes, true)) {
+        $error = "Please select a valid research type for this submission.";
+    }
     $conceptProposals = [
         'concept_proposal_1' => $formData['concept_proposal_1'],
         'concept_proposal_2' => $formData['concept_proposal_2'],
@@ -668,12 +677,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
     foreach ([1, 2, 3] as $index) {
         $proposalKey = "concept_proposal_{$index}";
         if (trim($conceptProposals[$proposalKey] ?? '') === '') {
-            $error = "Please provide a title for Concept Proposal {$index}.";
+            $error = "Please provide a title for Title Option {$index}.";
             break;
         }
     }
     if (!$error && hasDuplicateConceptValues($conceptProposals)) {
-        $error = "Concept proposal titles must be unique.";
+        $error = "Title options must be unique.";
     }
     if (
         !$error
@@ -699,24 +708,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
             $proposalValue = trim($conceptProposals[$proposalKey] ?? '');
 
             if ($proposalValue === '') {
-                $error = "Please provide a title for Concept Proposal {$index}.";
+                $error = "Please provide a title for Title Option {$index}.";
                 break;
             }
 
             if (!$fileInfo || $fileInfo['error'] !== UPLOAD_ERR_OK) {
-                $error = "Please upload a document for Concept Proposal {$index}.";
+                $error = "Please upload a document for Title Option {$index}.";
                 break;
             }
 
             if (!isPdfUpload($fileInfo)) {
-                $error = "Concept Proposal {$index} must be uploaded as a PDF file.";
+                $error = "Title Option {$index} must be uploaded as a PDF file.";
                 break;
             }
 
             $conceptFilename = uniqid("concept{$index}_", true) . "_" . basename($fileInfo['name']);
             $conceptPath = $conceptUploadDir . $conceptFilename;
             if (!move_uploaded_file($fileInfo['tmp_name'], $conceptPath)) {
-                $error = "Unable to upload the file for Concept Proposal {$index}. Please try again.";
+                $error = "Unable to upload the file for Title Option {$index}. Please try again.";
                 break;
             }
             $conceptFiles[$fileKey] = $conceptPath;
@@ -725,7 +734,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
 
     $primaryFilePath = $conceptFiles['concept_file_1'] ?? null;
     if (!$error && !$primaryFilePath) {
-        $error = "Concept Proposal 1 requires a supporting PDF document.";
+        $error = "Title Option 1 requires a supporting PDF document.";
     }
 
     if (!$error) {
@@ -765,7 +774,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
             if ($stmt && bindStatementParams($stmt, $insertTypes, $insertValues)) {
                 if ($stmt->execute()) {
                 $submissionId = (int)$stmt->insert_id;
-                $_SESSION['flash_success'] = "Your concept paper and proposals were submitted successfully. Track the live status on the right.";
+                $_SESSION['flash_success'] = "Your submission and title options were submitted successfully. Track the live status on the right.";
                 $formData = array_map(fn() => '', $formData);
 
                 $nameStmt = $conn->prepare("SELECT firstname, lastname FROM users WHERE id = ?");
@@ -783,11 +792,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
                 }
 
                 $titleSnippet = $title !== '' ? " titled \"{$title}\"" : '';
-                $message = "{$studentName} submitted a new paper{$titleSnippet}.";
+                $message = "{$studentName} submitted a new research entry{$titleSnippet}.";
                 notify_roles(
                     $conn,
                     ['program_chairperson', 'committee_chairperson', 'committee_chair', 'adviser'],
-                    'New paper submission',
+                    'New research submission',
                     $message,
                     'submissions.php?view=all'
                 );
@@ -834,7 +843,7 @@ $latestSubmission = $submissionHistory[0] ?? null;
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Submit Paper - DNSC IAdS</title>
+  <title>Submit Research Entry - DNSC IAdS</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
   <style>
@@ -927,8 +936,8 @@ $latestSubmission = $submissionHistory[0] ?? null;
         <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3">
           <div>
             <p class="text-uppercase small mb-1">Student workspace</p>
-            <h2 class="fw-bold mb-1">Submit Concept Paper & Track Approvals</h2>
-            <p class="mb-0">Upload your manuscript, list the three concept proposals, and monitor the live status of every submission.</p>
+            <h2 class="fw-bold mb-1">Submit Research Entry & Track Approvals</h2>
+            <p class="mb-0">Upload your manuscript, list the three title options, and monitor the live status of every submission.</p>
           </div>
           <div class="text-lg-end">
             <span class="badge bg-light text-success fs-6">
@@ -957,7 +966,7 @@ $latestSubmission = $submissionHistory[0] ?? null;
               <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2">
                 <div>
                   <p class="text-uppercase small text-muted mb-1">Step 1</p>
-                  <h4 class="submission-card__title mb-0"><i class="bi bi-upload me-2"></i>Paper Submission Form</h4>
+                  <h4 class="submission-card__title mb-0"><i class="bi bi-upload me-2"></i>Research Submission Form</h4>
                 </div>
                 <span class="badge bg-success-subtle text-success">
                   <i class="bi bi-shield-check me-1"></i> Secure upload
@@ -973,10 +982,9 @@ $latestSubmission = $submissionHistory[0] ?? null;
                       <label class="form-label fw-semibold">Research Type <span class="text-danger">*</span></label>
                       <select class="form-select" name="type" required>
                         <option value="">Select type...</option>
-                        <option value="Concept Paper" <?= $formData['type'] === 'Concept Paper' ? 'selected' : ''; ?>>Concept Paper</option>
-                        <option value="Thesis" <?= $formData['type'] === 'Thesis' ? 'selected' : ''; ?>>Thesis</option>
-                        <option value="Dissertation" <?= $formData['type'] === 'Dissertation' ? 'selected' : ''; ?>>Dissertation</option>
-                        <option value="Capstone" <?= $formData['type'] === 'Capstone' ? 'selected' : ''; ?>>Capstone</option>
+                        <?php foreach ($allowedSubmissionTypes as $submissionType): ?>
+                          <option value="<?= htmlspecialchars($submissionType); ?>" <?= $formData['type'] === $submissionType ? 'selected' : ''; ?>><?= htmlspecialchars($submissionType); ?></option>
+                        <?php endforeach; ?>
                       </select>
                     </div>
                   </div>
@@ -985,31 +993,31 @@ $latestSubmission = $submissionHistory[0] ?? null;
                 <div class="concept-proposal-box mb-4">
                   <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
                     <div>
-                      <p class="fw-semibold mb-0">Concept Proposal Titles <span class="text-danger">*</span></p>
-                      <small class="text-muted">List up to three concept proposals so reviewers can rank them.</small>
+                      <p class="fw-semibold mb-0">Title Options <span class="text-danger">*</span></p>
+                      <small class="text-muted">List up to three research title options so reviewers can rank them.</small>
                     </div>
                   </div>
                   <div class="concept-proposal-stack">
                     <div class="proposal-column">
-                      <label class="form-label small text-muted">Concept Proposal 1</label>
+                      <label class="form-label small text-muted">Title Option 1</label>
                       <input type="text" class="form-control" name="concept_proposal_1" value="<?= htmlspecialchars($formData['concept_proposal_1']); ?>" required>
                       <label class="form-label small text-muted mt-3 mb-1">Upload Manuscript <span class="text-danger">*</span></label>
                       <input type="file" class="form-control" name="concept_file_1" accept=".pdf" required>
-                      <small class="text-muted d-block mt-2">Upload the manuscript for Proposal 1 (PDF only).</small>
+                      <small class="text-muted d-block mt-2">Upload the manuscript for Option 1 (PDF only).</small>
                     </div>
                     <div class="proposal-column">
-                      <label class="form-label small text-muted">Concept Proposal 2</label>
+                      <label class="form-label small text-muted">Title Option 2</label>
                       <input type="text" class="form-control" name="concept_proposal_2" value="<?= htmlspecialchars($formData['concept_proposal_2']); ?>" required>
                       <label class="form-label small text-muted mt-3 mb-1">Upload Manuscript <span class="text-danger">*</span></label>
                       <input type="file" class="form-control" name="concept_file_2" accept=".pdf" required>
-                      <small class="text-muted d-block mt-2">Upload the manuscript for Proposal 2 (PDF only).</small>
+                      <small class="text-muted d-block mt-2">Upload the manuscript for Option 2 (PDF only).</small>
                     </div>
                     <div class="proposal-column">
-                      <label class="form-label small text-muted">Concept Proposal 3</label>
+                      <label class="form-label small text-muted">Title Option 3</label>
                       <input type="text" class="form-control" name="concept_proposal_3" value="<?= htmlspecialchars($formData['concept_proposal_3']); ?>" required>
                       <label class="form-label small text-muted mt-3 mb-1">Upload Manuscript <span class="text-danger">*</span></label>
                       <input type="file" class="form-control" name="concept_file_3" accept=".pdf" required>
-                      <small class="text-muted d-block mt-2">Upload the manuscript for Proposal 3 (PDF only).</small>
+                      <small class="text-muted d-block mt-2">Upload the manuscript for Option 3 (PDF only).</small>
                     </div>
                   </div>
                 </div>
@@ -1050,7 +1058,7 @@ $latestSubmission = $submissionHistory[0] ?? null;
               <?php if (empty($submissionHistory)): ?>
                 <div class="empty-state">
                   <i class="bi bi-folder-plus fs-1 d-block mb-2"></i>
-                  <p class="mb-0">You have not submitted a concept paper yet. Your status timeline will appear here after your first upload.</p>
+                  <p class="mb-0">You have not submitted a research entry yet. Your status timeline will appear here after your first upload.</p>
                 </div>
               <?php else: ?>
                 <?php if (!empty($statusCounts)): ?>
@@ -1106,17 +1114,23 @@ $latestSubmission = $submissionHistory[0] ?? null;
                           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
-                          <p class="text-muted small mb-3">Update the proposal titles or upload replacement PDFs. Saving changes moves the submission back to <strong>Pending</strong>.</p>
+                          <p class="text-muted small mb-3">Update the title options or upload replacement PDFs. Saving changes moves the submission back to <strong>Pending</strong>.</p>
                           <input type="hidden" name="action" value="edit_submission">
                           <input type="hidden" name="submission_id" value="<?= (int)$submission['id']; ?>">
                           <div class="mb-3">
                             <label class="form-label fw-semibold">Research Type <span class="text-danger">*</span></label>
                             <select class="form-select" name="type" required>
                               <option value="">Select type...</option>
-                              <option value="Concept Paper" <?= ($submission['type'] ?? '') === 'Concept Paper' ? 'selected' : ''; ?>>Concept Paper</option>
-                              <option value="Thesis" <?= ($submission['type'] ?? '') === 'Thesis' ? 'selected' : ''; ?>>Thesis</option>
-                              <option value="Dissertation" <?= ($submission['type'] ?? '') === 'Dissertation' ? 'selected' : ''; ?>>Dissertation</option>
-                              <option value="Capstone" <?= ($submission['type'] ?? '') === 'Capstone' ? 'selected' : ''; ?>>Capstone</option>
+                              <?php
+                                $currentSubmissionType = trim((string)($submission['type'] ?? ''));
+                                $editSubmissionTypes = $allowedSubmissionTypes;
+                                if ($currentSubmissionType !== '' && !in_array($currentSubmissionType, $editSubmissionTypes, true)) {
+                                    $editSubmissionTypes[] = $currentSubmissionType;
+                                }
+                              ?>
+                              <?php foreach ($editSubmissionTypes as $submissionType): ?>
+                                <option value="<?= htmlspecialchars($submissionType); ?>" <?= $currentSubmissionType === $submissionType ? 'selected' : ''; ?>><?= htmlspecialchars($submissionType); ?></option>
+                              <?php endforeach; ?>
                             </select>
                           </div>
                           <div class="concept-proposal-stack">
@@ -1125,7 +1139,7 @@ $latestSubmission = $submissionHistory[0] ?? null;
                                 $proposalField = "concept_proposal_{$modalProposalIndex}";
                                 $fileField = "concept_file_{$modalProposalIndex}";
                                 $proposalValue = $submission[$proposalField] ?? '';
-                                $proposalLabel = "Concept Proposal {$modalProposalIndex}";
+                                $proposalLabel = "Title Option {$modalProposalIndex}";
                               ?>
                               <div class="proposal-column">
                                 <label class="form-label small text-muted"><?= htmlspecialchars($proposalLabel); ?><?= $modalProposalIndex === 1 ? ' *' : ''; ?></label>
@@ -1140,8 +1154,8 @@ $latestSubmission = $submissionHistory[0] ?? null;
                                 <input type="file" class="form-control" name="<?= $fileField; ?>" accept=".pdf">
                                 <small class="text-muted d-block mt-2">
                                   <?= $modalProposalIndex === 1
-                                    ? 'A PDF is required for Proposal 1. Leave the upload blank to keep the current file.'
-                                    : 'Upload a new PDF only if you need to replace the current file for this proposal.'; ?>
+                                    ? 'A PDF is required for Option 1. Leave the upload blank to keep the current file.'
+                                    : 'Upload a new PDF only if you need to replace the current file for this option.'; ?>
                                 </small>
                               </div>
                             <?php endfor; ?>
@@ -1166,7 +1180,7 @@ $latestSubmission = $submissionHistory[0] ?? null;
                         <div class="modal-body">
                           <input type="hidden" name="action" value="delete_submission">
                           <input type="hidden" name="submission_id" value="<?= (int)$submission['id']; ?>">
-                          <p class="mb-2">Are you sure you want to remove this concept paper submission?</p>
+                          <p class="mb-2">Are you sure you want to remove this research submission?</p>
                           <p class="fw-semibold mb-0"><?= htmlspecialchars($displayTitle); ?></p>
                           <small class="text-muted d-block mt-2">All uploaded PDFs tied to this submission will be deleted.</small>
                         </div>

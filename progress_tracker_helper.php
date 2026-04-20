@@ -15,10 +15,10 @@ if (!function_exists('progress_tracker_step_definitions')) {
     function progress_tracker_step_definitions(): array
     {
         return [
-            ['key' => 'concept_submitted', 'label' => 'Concept / Thesis / Capstone / Dissertation Submitted'],
-            ['key' => 'concept_review_assigned', 'label' => 'Concept Review Assigned / In Review'],
-            ['key' => 'final_concept_recommended', 'label' => 'Final Concept Recommended'],
-            ['key' => 'concept_pdf_submitted', 'label' => 'Concept Paper Submitted to Adviser (PDF Submission)'],
+            ['key' => 'concept_submitted', 'label' => 'Research Submission Submitted'],
+            ['key' => 'concept_review_assigned', 'label' => 'Title Review Assigned / In Review'],
+            ['key' => 'final_concept_recommended', 'label' => 'Final Title Recommendation'],
+            ['key' => 'concept_pdf_submitted', 'label' => 'Research PDF Submitted to Adviser (PDF Submission)'],
             ['key' => 'endorsement_submitted', 'label' => 'Endorsement Request Submitted'],
             ['key' => 'endorsement_verified', 'label' => 'Endorsement Verified'],
             ['key' => 'payment_submitted', 'label' => 'Payment Proof Submitted'],
@@ -426,10 +426,10 @@ if (!function_exists('progress_tracker_compute_legacy_data')) {
 
         if ($totalSubmissions === 0) {
             $progressSteps = [
-                ['label' => 'Concept / Thesis / Capstone / Dissertation Submitted', 'complete' => false],
-                ['label' => 'Concept Review Assigned / In Review', 'complete' => false],
-                ['label' => 'Final Concept Recommended', 'complete' => false],
-                ['label' => 'Concept Paper Submitted to Adviser (PDF Submission)', 'complete' => false],
+                ['label' => 'Research Submission Submitted', 'complete' => false],
+                ['label' => 'Title Review Assigned / In Review', 'complete' => false],
+                ['label' => 'Final Title Recommendation', 'complete' => false],
+                ['label' => 'Research PDF Submitted to Adviser (PDF Submission)', 'complete' => false],
                 ['label' => 'Endorsement Request Submitted', 'complete' => false],
                 ['label' => 'Endorsement Verified', 'complete' => false],
                 ['label' => 'Payment Proof Submitted', 'complete' => false],
@@ -911,10 +911,10 @@ if (!function_exists('progress_tracker_compute_legacy_data')) {
         }
 
         $progressSteps = [
-            ['label' => 'Concept / Thesis / Capstone / Dissertation Submitted', 'complete' => $conceptSubmissionComplete],
-            ['label' => 'Concept Review Assigned / In Review', 'complete' => $conceptReviewAssigned],
-            ['label' => 'Final Concept Recommended', 'complete' => $hasFinalPickRecommendation],
-            ['label' => 'Concept Paper Submitted to Adviser (PDF Submission)', 'complete' => $conceptPdfSubmitted],
+            ['label' => 'Research Submission Submitted', 'complete' => $conceptSubmissionComplete],
+            ['label' => 'Title Review Assigned / In Review', 'complete' => $conceptReviewAssigned],
+            ['label' => 'Final Title Recommendation', 'complete' => $hasFinalPickRecommendation],
+            ['label' => 'Research PDF Submitted to Adviser (PDF Submission)', 'complete' => $conceptPdfSubmitted],
             ['label' => 'Endorsement Request Submitted', 'complete' => $endorsementSubmitted],
             ['label' => 'Endorsement Verified', 'complete' => $endorsementVerified],
             ['label' => 'Payment Proof Submitted', 'complete' => $paymentSubmitted],
