@@ -370,8 +370,7 @@ $paperIds = array_values(array_unique(array_map('intval', $_POST['paper_ids'] ??
 $roleAssignments = [];
 foreach ($reviewerRoles as $roleKey)
 {
-$field = "{$roleKey}
-_ids";
+$field = "{$roleKey}_ids";
 $roleAssignments[$roleKey] = array_values(array_unique(array_filter(array_map('intval', $_POST[$field] ?? []))));
 }
  $dedupePriority = ['faculty'];
