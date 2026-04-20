@@ -155,18 +155,12 @@ if ($stmt) {
             overflow: hidden;
         }
         .invite-header {
-            background: #ffffff;
-            color: #1f2937;
-            border-bottom: 1px solid #e7ece8;
+            background: linear-gradient(135deg, #16562c, #0f3e1f);
+            color: #fff;
             border-radius: 0;
         }
-        .invite-header .h4,
-        .invite-header .h5 {
-            color: #13251a;
-            font-weight: 800;
-        }
-        .invite-header .invite-subtitle {
-            color: #5d6a61;
+        .invite-subtitle {
+            color: rgba(255, 255, 255, 0.78);
         }
         .form-label {
             font-size: 0.85rem;
@@ -291,7 +285,7 @@ if ($stmt) {
             <div class="col-lg-7">
                 <div class="card invite-card">
                     <div class="card-header invite-header py-4 px-4">
-                        <h1 class="h4 mb-1">Invite Details</h1>
+                        <h1 class="h4 mb-1 ">Invite Details</h1>
                         <p class="mb-0 invite-subtitle">Configure the role, email, and validity period.</p>
                     </div>
                     <div class="card-body p-4">
