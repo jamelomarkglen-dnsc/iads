@@ -571,6 +571,7 @@ if ($rankingResult) {
             'score_key' => [
                 $avgScore,
                 $scoreCount,
+                (int)($row['concept_id'] ?? 0),
             ],
         ];
         $rankingBoardFull[$studentId]['concepts'][] = $concept;
