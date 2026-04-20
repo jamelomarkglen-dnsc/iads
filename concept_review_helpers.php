@@ -517,7 +517,7 @@ function syncConceptPapersFromSubmissions(mysqli $conn): void
                {$createdAtSql},
                {$proposalSql}
         FROM submissions
-        WHERE type = 'Concept Paper'
+        WHERE type IN ('Concept Paper', 'Thesis', 'Capstone', 'Dissertation')
     ";
     $submissionResult = $conn->query($submissionSql);
     if (!$submissionResult) {
