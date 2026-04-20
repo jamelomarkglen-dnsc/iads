@@ -392,7 +392,7 @@ if ($error !== '' && !$invite) {
         <div class="card account-card">
             <div class="card-header">
                 <h1 class="page-title">Create Your Account</h1>
-                <p class="mb-0 text-muted small">This form is intended for DNSC faculty and program chairperson accounts only.</p>
+                <p class="mb-0 text-muted small text-center">This form is intended for DNSC faculty and program chairperson accounts only.</p>
             </div>
             <div class="card-body">
                 <?php if ($error !== ''): ?>
