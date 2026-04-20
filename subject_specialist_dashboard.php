@@ -80,32 +80,11 @@ function formatReadableDateTime(?string $dateTime): string
 }
 
 $feedback = ['type' => '', 'message' => ''];
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_rank_update'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_save_reviews'])) {
     $studentId = (int)($_POST['student_id'] ?? 0);
-    $rankAssignmentsInput = $_POST['rank_assignments'] ?? [];
-    $rankAssignments = [];
-    $usedRanks = [];
-    $duplicateRank = null;
-    foreach ($rankAssignmentsInput as $assignmentId => $rankValue) {
-        $assignment = (int)$assignmentId;
-        $rank = (int)$rankValue;
-        if ($assignment <= 0 || $rank < 1 || $rank > 3) {
-            continue;
-        }
-        if (isset($usedRanks[$rank])) {
-            $duplicateRank = $rank;
-            break;
-        }
-        $usedRanks[$rank] = $assignment;
-        $rankAssignments[$assignment] = $rank;
-    }
+    $reviewsInput = is_array($_POST['reviews'] ?? null) ? $_POST['reviews'] : [];
     if ($studentId <= 0) {
-        $feedback = ['type' => 'warning', 'message' => 'Please select a student to rank.'];
-    } elseif ($duplicateRank !== null) {
-        $feedback = [
-            'type' => 'warning',
-            'message' => sprintf('Rank %d can only be assigned to one title per student. Clear the existing selection before reusing it.', $duplicateRank),
-        ];
+        $feedback = ['type' => 'warning', 'message' => 'Please select a student before saving reviews.'];
     } else {
         $assignmentStmt = $conn->prepare("
             SELECT
@@ -124,15 +103,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_rank_update'])) 
             FROM concept_reviewer_assignments cra
             LEFT JOIN concept_reviews cr ON cr.assignment_id = cra.id
             WHERE cra.reviewer_id = ? AND cra.student_id = ?
+            ORDER BY cra.id ASC
         ");
+        $assignmentsForStudent = [];
         if ($assignmentStmt) {
             $assignmentStmt->bind_param('ii', $reviewerId, $studentId);
             $assignmentStmt->execute();
             $result = $assignmentStmt->get_result();
             $assignmentsForStudent = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
             $assignmentStmt->close();
-        } else {
-            $assignmentsForStudent = [];
         }
         if (!empty($assignmentsForStudent)) {
             $assignmentsForStudent = array_values(array_filter(
@@ -144,76 +123,160 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_rank_update'])) 
         }
 
         if (empty($assignmentsForStudent)) {
-            $feedback = ['type' => 'warning', 'message' => 'No assigned concept titles were found for ranking.'];
+            $feedback = ['type' => 'warning', 'message' => 'No assigned title cards were found for this student.'];
         } else {
-            $reviewStmt = $conn->prepare("
-                INSERT INTO concept_reviews (assignment_id, concept_paper_id, reviewer_id, reviewer_role, score, recommendation, rank_order, is_preferred, notes, comment_suggestions, adviser_interest)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                    rank_order = VALUES(rank_order),
-                    is_preferred = VALUES(is_preferred),
-                    notes = VALUES(notes),
-                    comment_suggestions = VALUES(comment_suggestions),
-                    adviser_interest = VALUES(adviser_interest),
-                    updated_at = CURRENT_TIMESTAMP
-            ");
-            $statusStmt = $conn->prepare("
-                UPDATE concept_reviewer_assignments
-                SET status = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ? AND reviewer_id = ?
-            ");
-            if ($reviewStmt && $statusStmt) {
-                foreach ($assignmentsForStudent as $row) {
-                    $assignmentId = (int)($row['id'] ?? 0);
-                    $conceptId = (int)($row['concept_paper_id'] ?? 0);
-                    if ($assignmentId <= 0 || $conceptId <= 0) {
-                        continue;
-                    }
-                    $assignmentReviewerRole = resolveAssignmentRole($role, $row['reviewer_role'] ?? null);
-                    $selectedRank = $rankAssignments[$assignmentId] ?? null;
-                    $rankOrderParam = $selectedRank !== null ? (int)$selectedRank : null;
-                    $scoreValue = (int)($row['review_score'] ?? 0);
-                    $recommendationValue = (string)($row['review_recommendation'] ?? '');
-                    $notesValue = (string)($row['review_notes'] ?? '');
-                    $commentsValue = (string)($row['review_comments'] ?? '');
-                    if ($commentsValue === '' && $notesValue !== '') {
-                        $commentsValue = $notesValue;
-                    }
-                    if ($notesValue === '' && $commentsValue !== '') {
-                        $notesValue = $commentsValue;
-                    }
-                    $interestValue = (int)($row['review_adviser_interest'] ?? 0);
-                    $isPreferred = $selectedRank === 1 ? 1 : 0;
+            $rowsToSave = [];
+            $usedScores = [];
+            $duplicateScore = null;
+            $missingScore = false;
+            $missingRecommendation = false;
+            $missingComments = false;
+            $interestSelections = 0;
 
-                    $reviewStmt->bind_param(
-                        'iiisisiissi',
-                        $assignmentId,
-                        $conceptId,
-                        $reviewerId,
-                        $assignmentReviewerRole,
-                        $scoreValue,
-                        $recommendationValue,
-                        $rankOrderParam,
-                        $isPreferred,
-                        $notesValue,
-                        $commentsValue,
-                        $interestValue
-                    );
-                    $reviewStmt->execute();
-
-                    $newStatus = $selectedRank !== null ? 'in_progress' : 'pending';
-                    $statusStmt->bind_param('sii', $newStatus, $assignmentId, $reviewerId);
-                    $statusStmt->execute();
+            foreach ($assignmentsForStudent as $row) {
+                $assignmentId = (int)($row['id'] ?? 0);
+                if ($assignmentId <= 0) {
+                    continue;
                 }
-                $feedback = ['type' => 'success', 'message' => 'Ranking updated successfully.'];
+                $input = is_array($reviewsInput[$assignmentId] ?? null) ? $reviewsInput[$assignmentId] : [];
+                $score = (int)($input['score'] ?? 0);
+                $recommendation = trim((string)($input['recommendation'] ?? ''));
+                $commentSuggestions = trim((string)($input['comment_suggestions'] ?? ''));
+                $notes = trim((string)($input['notes'] ?? ''));
+                if ($commentSuggestions === '' && $notes !== '') {
+                    $commentSuggestions = $notes;
+                }
+                if ($notes === '' && $commentSuggestions !== '') {
+                    $notes = $commentSuggestions;
+                }
+                $adviserInterest = !empty($input['adviser_interest']) ? 1 : 0;
+
+                if ($score < 1 || $score > 5) {
+                    $missingScore = true;
+                    break;
+                }
+                if (isset($usedScores[$score])) {
+                    $duplicateScore = $score;
+                    break;
+                }
+                if ($recommendation === '') {
+                    $missingRecommendation = true;
+                    break;
+                }
+                if ($commentSuggestions === '') {
+                    $missingComments = true;
+                    break;
+                }
+
+                $usedScores[$score] = $assignmentId;
+                $interestSelections += $adviserInterest;
+                $rowsToSave[] = [
+                    'assignment_id' => $assignmentId,
+                    'concept_paper_id' => (int)($row['concept_paper_id'] ?? 0),
+                    'reviewer_role' => resolveAssignmentRole($role, $row['reviewer_role'] ?? null),
+                    'score' => $score,
+                    'recommendation' => $recommendation,
+                    'notes' => $notes,
+                    'comment_suggestions' => $commentSuggestions,
+                    'adviser_interest' => $adviserInterest,
+                ];
+            }
+
+            if ($missingScore) {
+                $feedback = ['type' => 'warning', 'message' => 'Please choose a rating for every title before saving.'];
+            } elseif ($duplicateScore !== null) {
+                $feedback = [
+                    'type' => 'warning',
+                    'message' => sprintf('Rating %d can only be used once per student. Pick a different rating for the other title.', $duplicateScore),
+                ];
+            } elseif ($missingRecommendation) {
+                $feedback = ['type' => 'warning', 'message' => 'Please choose a recommendation for every title before saving.'];
+            } elseif ($missingComments) {
+                $feedback = ['type' => 'warning', 'message' => 'Please provide comments and suggestions for every title before saving.'];
+            } elseif ($interestSelections > 1) {
+                $feedback = ['type' => 'warning', 'message' => 'Only one title per student can be marked for mentoring interest.'];
+            } elseif (count($rowsToSave) !== count($assignmentsForStudent)) {
+                $feedback = ['type' => 'warning', 'message' => 'Some assigned titles were not included in the save request. Please refresh and try again.'];
             } else {
-                $feedback = ['type' => 'danger', 'message' => 'Unable to prepare ranking statements.'];
-            }
-            if ($reviewStmt) {
-                $reviewStmt->close();
-            }
-            if ($statusStmt) {
-                $statusStmt->close();
+                usort($rowsToSave, static function (array $left, array $right): int {
+                    if ($left['score'] === $right['score']) {
+                        return $left['assignment_id'] <=> $right['assignment_id'];
+                    }
+                    return $right['score'] <=> $left['score'];
+                });
+
+                $reviewStmt = $conn->prepare("
+                    INSERT INTO concept_reviews (assignment_id, concept_paper_id, reviewer_id, reviewer_role, score, recommendation, rank_order, is_preferred, notes, comment_suggestions, adviser_interest)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        score = VALUES(score),
+                        recommendation = VALUES(recommendation),
+                        rank_order = VALUES(rank_order),
+                        is_preferred = VALUES(is_preferred),
+                        notes = VALUES(notes),
+                        comment_suggestions = VALUES(comment_suggestions),
+                        adviser_interest = VALUES(adviser_interest),
+                        updated_at = CURRENT_TIMESTAMP
+                ");
+                $statusStmt = $conn->prepare("
+                    UPDATE concept_reviewer_assignments
+                    SET status = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ? AND reviewer_id = ?
+                ");
+                if ($reviewStmt && $statusStmt) {
+                    $conn->begin_transaction();
+                    $saved = true;
+                    foreach ($rowsToSave as $index => $row) {
+                        $rankOrder = $index + 1;
+                        $isPreferred = $rankOrder === 1 ? 1 : 0;
+                        $assignmentId = (int)$row['assignment_id'];
+                        $conceptId = (int)$row['concept_paper_id'];
+                        $reviewerRole = (string)$row['reviewer_role'];
+                        $scoreValue = (int)$row['score'];
+                        $recommendationValue = (string)$row['recommendation'];
+                        $notesValue = (string)$row['notes'];
+                        $commentsValue = (string)$row['comment_suggestions'];
+                        $interestValue = (int)$row['adviser_interest'];
+
+                        $reviewStmt->bind_param(
+                            'iiisisiissi',
+                            $assignmentId,
+                            $conceptId,
+                            $reviewerId,
+                            $reviewerRole,
+                            $scoreValue,
+                            $recommendationValue,
+                            $rankOrder,
+                            $isPreferred,
+                            $notesValue,
+                            $commentsValue,
+                            $interestValue
+                        );
+                        if (!$reviewStmt->execute()) {
+                            $saved = false;
+                            break;
+                        }
+
+                        $status = 'completed';
+                        $statusStmt->bind_param('sii', $status, $assignmentId, $reviewerId);
+                        if (!$statusStmt->execute()) {
+                            $saved = false;
+                            break;
+                        }
+                    }
+
+                    if ($saved) {
+                        $conn->commit();
+                        $feedback = ['type' => 'success', 'message' => 'All title reviews were saved successfully.'];
+                    } else {
+                        $conn->rollback();
+                        $feedback = ['type' => 'danger', 'message' => 'Unable to save all title reviews at this time.'];
+                    }
+                    $reviewStmt->close();
+                    $statusStmt->close();
+                } else {
+                    $feedback = ['type' => 'danger', 'message' => 'Unable to prepare title review statements.'];
+                }
             }
         }
     }
@@ -559,7 +622,7 @@ $roleTitles = [
     'adviser' => 'Adviser Reviewer',
 ];
 $roleTitle = $overrideRoleTitle ?? ($roleTitles[$role] ?? 'Reviewer');
-$heroDescription = $overrideHeroDescription ?? 'Review the concept titles assigned by the Program Chairperson, rate each concept paper, and recommend the most viable title for the student to pursue.';
+$heroDescription = $overrideHeroDescription ?? 'Review the title options assigned by the Program Chairperson, rate each title option, and recommend the most viable title for the student to pursue.';
 $bodyClass = $isAdviserView ? 'adviser-view' : '';
 $heroLabelClass = 'text-uppercase small text-muted mb-1';
 $heroDescClass = 'text-muted mb-0';
@@ -995,20 +1058,20 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                         <div class="card-body">
                             <div class="empty-state">
                                 <i class="bi bi-emoji-smile fs-1 d-block mb-2"></i>
-                                No concept papers are assigned to you yet.
+                                No title options are assigned to you yet.
                             </div>
                             <?php if ($role === 'adviser' && !empty($adviserConceptPreview)): ?>
                                 <?php foreach ($adviserConceptPreview as $preview): ?>
                                     <?php $rankPlaceholderTextClass = $isAdviserView ? 'text-muted' : 'text-white-50'; ?>
                                     <div class="rank-card mt-3">
-                                        <p class="text-uppercase small <?= $rankPlaceholderTextClass; ?> mb-1">Advisee concept set</p>
+                                        <p class="text-uppercase small <?= $rankPlaceholderTextClass; ?> mb-1">Advisee title set</p>
                                         <h5 class="mb-2"><?= htmlspecialchars($preview['student_name']); ?></h5>
                                         <small class="<?= $rankPlaceholderTextClass; ?>">These titles were created for this advisee in assign_faculty_replacement.php. Ranking activates automatically once the Program Chairperson routes the student to you.</small>
                                         <div class="table-responsive mt-3">
                                             <table class="table table-borderless align-middle rank-table mb-0">
                                                 <thead>
                                                     <tr>
-                                                        <th scope="col">Concept Title</th>
+                                                        <th scope="col">Title Option</th>
                                                         <th scope="col" class="text-center">Rank 1</th>
                                                         <th scope="col" class="text-center">Rank 2</th>
                                                         <th scope="col" class="text-center">Rank 3</th>
@@ -1019,7 +1082,7 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                     <?php foreach ($preview['concepts'] as $index => $concept): ?>
                                                         <tr>
                                                             <td>
-                                                                <strong><?= $concept['has_title'] ? htmlspecialchars($concept['title']) : 'Concept Title ' . ($index + 1); ?></strong>
+                                                                    <strong><?= $concept['has_title'] ? htmlspecialchars($concept['title']) : 'Title Option ' . ($index + 1); ?></strong>
                                                                 <div class="small <?= $rankPlaceholderTextClass; ?>">
                                                                     <?php if ($concept['has_title']): ?>
                                                                         Submitted <?= htmlspecialchars($concept['created_at'] ? formatReadableDate($concept['created_at']) : 'recently'); ?>
@@ -1064,7 +1127,7 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                         <table class="table table-hover align-middle rank-table mb-0">
                                                             <thead>
                                                                 <tr>
-                                                                    <th scope="col" class="w-50">Concept Title</th>
+                                                                    <th scope="col" class="w-50">Title Option</th>
                                                                     <th scope="col" class="text-center w-10">Rank 1</th>
                                                                     <th scope="col" class="text-center w-10">Rank 2</th>
                                                                     <th scope="col" class="text-center w-10">Rank 3</th>
@@ -1080,7 +1143,7 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                                                     <?= $slot; ?>
                                                                                 </div>
                                                                                 <div>
-                                                                                    <strong class="d-block">Concept Title <?= $slot; ?></strong>
+                                                                                    <strong class="d-block">Title Option <?= $slot; ?></strong>
                                                                                     <small class="text-muted">Awaiting assignment</small>
                                                                                 </div>
                                                                             </div>
@@ -1103,7 +1166,7 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                     </div>
                                                     <div class="alert alert-info mt-3 mb-0">
                                                         <i class="bi bi-info-circle me-2"></i>
-                                                        Ranking will be activated once concept titles are assigned by the Program Chairperson.
+                                                        Ranking will be activated once title options are assigned by the Program Chairperson.
                                                     </div>
                                                 </form>
                                             </div>
@@ -1152,7 +1215,7 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                         <h5 class="mb-2">Reviewer Tips</h5>
                                                         <ul class="text-muted small mb-0">
                                                             <li>Assess clarity, feasibility, and originality for each title.</li>
-                                                            <li>Use the "preferred concept" toggle to highlight the strongest title.</li>
+                                                            <li>Use the top-choice toggle to highlight the strongest title.</li>
                                                             <li>Keep notes actionable; the Program Chairperson shares them with the student.</li>
                                                             <li>Update your review status to help scheduling move forward.</li>
                                                         </ul>
@@ -1167,15 +1230,26 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                     </div>
                 <?php else: ?>
                     <?php foreach ($groupedAssignments as $student): ?>
-                        <div class="card assignment-card mb-4">
+                        <div class="card assignment-card mb-4" data-student-review-group data-student-id="<?= (int)$student['student_id']; ?>">
                             <div class="card-body">
                                 <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start gap-3">
                                     <div>
                                         <h4 class="mb-1 text-success"><?= htmlspecialchars($student['student_name']); ?></h4>
                                         <small class="text-muted"><?= htmlspecialchars($student['student_email']); ?></small>
                                     </div>
-                                    <span class="badge bg-light text-success"><?= count($student['items']); ?> concept titles</span>
+                                    <div class="text-lg-end">
+                                        <span class="badge bg-light text-success"><?= count($student['items']); ?> title options</span>
+                                        <div class="mt-2">
+                                            <button type="button" class="btn btn-success btn-sm" data-bulk-save-trigger>
+                                                <i class="bi bi-save2 me-1"></i> Save All Reviews
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
+                                <form method="POST" class="d-none" data-bulk-review-form>
+                                    <input type="hidden" name="bulk_save_reviews" value="1">
+                                    <input type="hidden" name="student_id" value="<?= (int)$student['student_id']; ?>">
+                                </form>
                                 <div class="mt-3">
                                     <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
                                         <?php foreach ($student['items'] as $item): ?>
@@ -1191,17 +1265,14 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                             ?>
                                             <div class="col">
                                                 <div class="d-flex flex-column h-100 gap-3">
-                                                    <form method="POST" class="review-form">
-                                                    <input type="hidden" name="save_review" value="1">
-                                                    <input type="hidden" name="assignment_id" value="<?= (int)$item['assignment_id']; ?>">
-                                                    <input type="hidden" name="concept_id" value="<?= (int)$item['concept_paper_id']; ?>">
+                                                    <div class="review-form" data-review-item data-assignment-id="<?= (int)$item['assignment_id']; ?>">
                                                     <div class="concept-mini h-100 d-flex flex-column">
                                                         <div class="mb-2 concept-header">
                                                             <div>
-                                                                <p class="text-uppercase small text-muted mb-1">Concept title</p>
+                                                                <p class="text-uppercase small text-muted mb-1">Title option</p>
                                                                 <div class="concept-title-row">
-                                                                    <h5 class="mb-1 concept-title" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="title-tooltip" data-bs-title="<?= htmlspecialchars($item['title'] ?? 'Untitled Concept'); ?>">
-                                                                        <?= htmlspecialchars($item['title'] ?? 'Untitled Concept'); ?>
+                                                                    <h5 class="mb-1 concept-title" data-bs-toggle="tooltip" data-bs-placement="top" data-bs-custom-class="title-tooltip" data-bs-title="<?= htmlspecialchars($item['title'] ?? 'Untitled Title Option'); ?>">
+                                                                        <?= htmlspecialchars($item['title'] ?? 'Untitled Title Option'); ?>
                                                                     </h5>
                                                                 </div>
                                                                 <div class="concept-actions mt-1">
@@ -1250,7 +1321,7 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                                     <?php foreach ([1 => 'Poor', 2 => 'Fair', 3 => 'Good', 4 => 'Very Good', 5 => 'Excellent'] as $ratingValue => $ratingLabel): ?>
                                                                         <?php $ratingId = 'score' . (int)$item['assignment_id'] . '_' . (int)$ratingValue; ?>
                                                                         <div class="form-check rating-item">
-                                                                            <input class="form-check-input" type="radio" name="score" id="<?= $ratingId; ?>" value="<?= $ratingValue; ?>" <?= (int)($review['score'] ?? 0) === $ratingValue ? 'checked' : ''; ?>>
+                                                                            <input class="form-check-input" type="radio" name="score_<?= (int)$item['assignment_id']; ?>" id="<?= $ratingId; ?>" value="<?= $ratingValue; ?>" data-score-value="<?= $ratingValue; ?>" <?= (int)($review['score'] ?? 0) === $ratingValue ? 'checked' : ''; ?>>
                                                                             <label class="form-check-label small" for="<?= $ratingId; ?>"><?= $ratingValue; ?> - <?= $ratingLabel; ?></label>
                                                                         </div>
                                                                     <?php endforeach; ?>
@@ -1271,7 +1342,7 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                             $isPreferredChecked = !empty($review['is_preferred']) || (int)($review['rank_order'] ?? 0) === 1;
                                                         ?>
                                                         <div class="form-check form-switch mb-3">
-                                                            <input class="form-check-input" type="checkbox" role="switch" id="preferred<?= (int)$item['assignment_id']; ?>" name="is_preferred" value="1" data-preferred-toggle data-student-id="<?= (int)$student['student_id']; ?>" <?= $isPreferredChecked ? 'checked' : ''; ?>>
+                                                            <input class="form-check-input" type="checkbox" role="switch" id="preferred<?= (int)$item['assignment_id']; ?>" name="is_preferred_<?= (int)$item['assignment_id']; ?>" value="1" data-preferred-toggle data-student-id="<?= (int)$student['student_id']; ?>" <?= $isPreferredChecked ? 'checked' : ''; ?>>
                                                             <label class="form-check-label" for="preferred<?= (int)$item['assignment_id']; ?>">
                                                                 Recommended to Pursue (Top Choice)
                                                             </label>
@@ -1280,10 +1351,10 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
 
                                                         <div class="mb-3">
                                                             <label class="form-label fw-semibold">Comments &amp; Suggestions</label>
-                                                            <textarea class="form-control" name="comment_suggestions" rows="4" placeholder="Provide detailed comments or suggestions for this candidate" required><?= htmlspecialchars($review['comment_suggestions'] ?? ($review['notes'] ?? '')); ?></textarea>
+                                                            <textarea class="form-control" name="comment_suggestions_<?= (int)$item['assignment_id']; ?>" rows="4" placeholder="Provide detailed comments or suggestions for this candidate" required><?= htmlspecialchars($review['comment_suggestions'] ?? ($review['notes'] ?? '')); ?></textarea>
                                                         </div>
                                                         <div class="form-check form-switch mb-1">
-                                                            <input class="form-check-input" type="checkbox" role="switch" id="interest<?= (int)$item['assignment_id']; ?>" name="adviser_interest" value="1" data-mentoring-toggle data-student-id="<?= (int)$student['student_id']; ?>" <?= !empty($review['adviser_interest']) ? 'checked' : ''; ?>>
+                                                            <input class="form-check-input" type="checkbox" role="switch" id="interest<?= (int)$item['assignment_id']; ?>" name="adviser_interest_<?= (int)$item['assignment_id']; ?>" value="1" data-mentoring-toggle data-student-id="<?= (int)$student['student_id']; ?>" <?= !empty($review['adviser_interest']) ? 'checked' : ''; ?>>
                                                             <label class="form-check-label" for="interest<?= (int)$item['assignment_id']; ?>">
                                                                 Interested in mentoring the candidate as a <strong>Thesis Adviser</strong>? (Please check)
                                                             </label>
@@ -1312,14 +1383,11 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                                         <div class="d-flex justify-content-between align-items-center mt-auto">
                                                             <div class="d-flex flex-column">
                                                                 <small class="text-muted">Saving updates your reviewer status.</small>
-                                                                <a href="view_concept.php?id=<?= (int)$item['concept_paper_id']; ?>" class="small text-decoration-none">Preview concept</a>
+                                                                <a href="view_concept.php?id=<?= (int)$item['concept_paper_id']; ?>" class="small text-decoration-none">Preview title</a>
                                                             </div>
-                                                            <button type="submit" class="btn btn-success">
-                                                                <i class="bi bi-save"></i> Save Review
-                                                            </button>
                                                         </div>
                                                     </div>
-                                                </form>
+                                                </div>
                                                     <div class="conversation-card">
                                                         <div class="d-flex justify-content-between align-items-center mb-2">
                                                             <span class="fw-semibold"><i class="bi bi-chat-dots me-1"></i>Reviewer Conversation</span>
@@ -1400,6 +1468,153 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
         const tooltipTriggers = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
         tooltipTriggers.forEach((el) => {
             new bootstrap.Tooltip(el);
+        });
+    })();
+
+    (function() {
+        const studentGroups = document.querySelectorAll('[data-student-review-group]');
+        if (!studentGroups.length) {
+            return;
+        }
+
+        const appendHiddenInput = (form, name, value) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = value;
+            input.dataset.generatedInput = '1';
+            form.appendChild(input);
+        };
+
+        const syncGroupState = (group) => {
+            const reviewForms = Array.from(group.querySelectorAll('[data-review-item]'));
+            const selectedScoreOwners = new Map();
+            const selectedByForm = [];
+
+            reviewForms.forEach((form) => {
+                const selected = form.querySelector('input[type="radio"][data-score-value]:checked');
+                if (!selected) {
+                    return;
+                }
+                const scoreValue = selected.getAttribute('data-score-value');
+                if (selectedScoreOwners.has(scoreValue)) {
+                    selected.checked = false;
+                    return;
+                }
+                selectedScoreOwners.set(scoreValue, form);
+                selectedByForm.push({
+                    form,
+                    score: parseInt(scoreValue, 10) || 0,
+                });
+            });
+
+            reviewForms.forEach((form) => {
+                form.querySelectorAll('input[type="radio"][data-score-value]').forEach((radio) => {
+                    const scoreValue = radio.getAttribute('data-score-value');
+                    const ownerForm = selectedScoreOwners.get(scoreValue);
+                    radio.disabled = !!ownerForm && ownerForm !== form;
+                });
+            });
+
+            const preferredForm = selectedByForm
+                .sort((left, right) => right.score - left.score)[0]?.form ?? null;
+
+            reviewForms.forEach((form) => {
+                const preferredToggle = form.querySelector('[data-preferred-toggle]');
+                if (preferredToggle) {
+                    preferredToggle.checked = !!preferredForm && preferredForm === form;
+                }
+            });
+        };
+
+        const collectGroupReviews = (group) => {
+            const reviewForms = Array.from(group.querySelectorAll('[data-review-item]'));
+            const usedScores = new Set();
+            const reviews = [];
+
+            for (const form of reviewForms) {
+                const assignmentId = form.getAttribute('data-assignment-id') || '';
+                const scoreInput = form.querySelector('input[type="radio"][data-score-value]:checked');
+                const recommendation = (form.querySelector('select[name="recommendation"]')?.value || '').trim();
+                const commentSuggestions = (form.querySelector('textarea[name^="comment_suggestions_"]')?.value || '').trim();
+                const notes = (form.querySelector('textarea[name^="comment_suggestions_"]')?.value || '').trim();
+                const adviserInterest = form.querySelector('input[name^="adviser_interest_"]')?.checked ? 1 : 0;
+
+                if (!assignmentId) {
+                    return { error: 'Missing assignment details for one of the titles.' };
+                }
+                if (!scoreInput) {
+                    return { error: 'Please choose a rating for every title before saving.' };
+                }
+                const score = parseInt(scoreInput.value, 10) || 0;
+                if (usedScores.has(score)) {
+                    return { error: `Rating ${score} can only be used once per student.` };
+                }
+                if (!recommendation) {
+                    return { error: 'Please choose a recommendation for every title before saving.' };
+                }
+                if (!commentSuggestions) {
+                    return { error: 'Please provide comments and suggestions for every title before saving.' };
+                }
+
+                usedScores.add(score);
+                reviews.push({
+                    assignmentId,
+                    score,
+                    recommendation,
+                    commentSuggestions,
+                    notes,
+                    adviserInterest,
+                });
+            }
+
+            return { reviews };
+        };
+
+        studentGroups.forEach((group) => {
+            group.querySelectorAll('input[type="radio"][data-score-value]').forEach((radio) => {
+                radio.addEventListener('change', () => {
+                    syncGroupState(group);
+                });
+            });
+
+            group.querySelectorAll('[data-preferred-toggle]').forEach((toggle) => {
+                toggle.addEventListener('change', () => {
+                    if (!toggle.checked) {
+                        return;
+                    }
+                    const studentId = toggle.getAttribute('data-student-id');
+                    group.querySelectorAll('[data-preferred-toggle]').forEach((other) => {
+                        if (other !== toggle && other.getAttribute('data-student-id') === studentId) {
+                            other.checked = false;
+                        }
+                    });
+                });
+            });
+
+            const trigger = group.querySelector('[data-bulk-save-trigger]');
+            const bulkForm = group.querySelector('[data-bulk-review-form]');
+            if (trigger && bulkForm) {
+                trigger.addEventListener('click', () => {
+                    syncGroupState(group);
+                    const result = collectGroupReviews(group);
+                    if (result.error) {
+                        alert(result.error);
+                        return;
+                    }
+                    bulkForm.querySelectorAll('[data-generated-input]').forEach((input) => input.remove());
+                    result.reviews.forEach((review) => {
+                        appendHiddenInput(bulkForm, `reviews[${review.assignmentId}][score]`, review.score);
+                        appendHiddenInput(bulkForm, `reviews[${review.assignmentId}][recommendation]`, review.recommendation);
+                        appendHiddenInput(bulkForm, `reviews[${review.assignmentId}][comment_suggestions]`, review.commentSuggestions);
+                        appendHiddenInput(bulkForm, `reviews[${review.assignmentId}][notes]`, review.notes);
+                        appendHiddenInput(bulkForm, `reviews[${review.assignmentId}][adviser_interest]`, review.adviserInterest);
+                    });
+                    bulkForm.submit();
+                });
+            }
+
+            syncGroupState(group);
         });
     })();
 
