@@ -1,4 +1,770 @@
-<?php session_start(); require_once 'db.php'; require_once 'notifications_helper.php'; require_once 'concept_review_helpers.php'; require_once 'chair_scope_helper.php'; require_once 'progress_tracker_helper.php'; if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'program_chairperson') { header('Location: login.php'); exit; } ensureConceptReviewTables($conn); syncConceptPapersFromSubmissions($conn); $reviewerRoles = ['faculty']; $reviewerRoleLabels = [ 'faculty' => 'Faculty Reviewers', ]; $reviewerDashboardLinks = [ 'faculty' => 'subject_specialist_dashboard.php', ]; function formatDateToReadable(?string $date): string { if (!$date) { return 'Not specified'; } try { $dt = new DateTimeImmutable($date); return $dt->format('F d, Y g:i A'); } catch (Exception $e) { return $date; } } function reviewerStatusBadge(string $status): string { return match ($status) { 'completed' => 'bg-success-subtle text-success', 'in_progress' => 'bg-primary-subtle text-primary', 'declined' => 'bg-danger-subtle text-danger', default => 'bg-warning-subtle text-warning', }; } function tableColumnExists(mysqli $conn, string $table, string $column): bool { static $cache = []; $key = "{$table}.{$column}"; if (array_key_exists($key, $cache)) { return $cache[$key]; } $tableEscaped = $conn->real_escape_string($table); $columnEscaped = $conn->real_escape_string($column); $sql = " SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{$tableEscaped}' AND COLUMN_NAME = '{$columnEscaped}' LIMIT 1 "; $result = $conn->query($sql); $exists = $result && $result->num_rows > 0; if ($result) { $result->free(); } $cache[$key] = $exists; return $exists; } function scopeValueEquals(?string $left, ?string $right): bool { $left = trim((string)$left); $right = trim((string)$right); if ($left === '' || $right === '') { return false; } return strcasecmp($left, $right) === 0; } function reviewerMatchesChairScope(array $reviewer, array $scope): bool { $program = trim((string)($scope['program'] ?? '')); $department = trim((string)($scope['department'] ?? '')); $college = trim((string)($scope['college'] ?? '')); if ($program === '' && $department === '' && $college === '') { return true; } $reviewerProgram = trim((string)($reviewer['program'] ?? '')); $reviewerDepartment = trim((string)($reviewer['department'] ?? '')); $reviewerCollege = trim((string)($reviewer['college'] ?? '')); if ($program !== '') { return scopeValueEquals($reviewerProgram, $program) || scopeValueEquals($reviewerDepartment, $program); } if ($department !== '') { return scopeValueEquals($reviewerDepartment, $department) || scopeValueEquals($reviewerProgram, $department); } if ($college !== '') { return scopeValueEquals($reviewerCollege, $college); } return true; } function normalizeSubmissionTypeKey(?string $type): string { $value = strtolower(trim((string)$type)); if ($value === '') { return 'concept'; } if (strpos($value, 'dissertation') !== false) { return 'dissertation'; } if (strpos($value, 'thesis') !== false) { return 'thesis'; } if (strpos($value, 'capstone') !== false) { return 'capstone'; } if (strpos($value, 'concept') !== false || strpos($value, 'proposal') !== false) { return 'concept'; } return 'others'; } function classifySubmissionStatusBucket(?string $status): string { $value = strtolower(trim((string)$status)); if ($value === '') { return 'pending'; } $approvedTokens = ['approved', 'accepted', 'completed', 'cleared', 'confirmed', 'granted']; foreach ($approvedTokens as $token) { if ($token !== '' && strpos($value, $token) !== false) { return 'approved'; } } $inReviewTokens = ['review', 'checking', 'processing', 'evaluat', 'assigned']; foreach ($inReviewTokens as $token) { if ($token !== '' && strpos($value, $token) !== false) { return 'in_review'; } } return 'pending'; } function submissionStatusBadge(string $status): string { $bucket = classifySubmissionStatusBucket($status); return match ($bucket) { 'approved' => 'bg-success-subtle text-success', 'in_review' => 'bg-primary-subtle text-primary', default => 'bg-warning-subtle text-warning', }; } function sanitizeTextarea(string $input, int $maxLength = 800): string { $trimmed = trim(strip_tags($input)); if (function_exists('mb_strlen')) { if (mb_strlen($trimmed) > $maxLength) { $trimmed = mb_substr($trimmed, 0, $maxLength); } } else { if (strlen($trimmed) > $maxLength) { $trimmed = substr($trimmed, 0, $maxLength); } } return $trimmed; } function resolveReviewerRoleConflicts(array $roleAssignments, array $priority): array { $resolved = []; $seen = []; foreach ($priority as $role) { $resolved[$role] = []; foreach (($roleAssignments[$role] ?? []) as $id) { $id = (int)$id; if ($id <= 0 || isset($seen[$id])) { continue; } $seen[$id] = true; $resolved[$role][] = $id; } } foreach ($roleAssignments as $role => $ids) { if (array_key_exists($role, $resolved)) { continue; } $resolved[$role] = []; foreach ($ids as $id) { $id = (int)$id; if ($id <= 0 || isset($seen[$id])) { continue; } $seen[$id] = true; $resolved[$role][] = $id; } } return $resolved; } function fetchConceptGroups(mysqli $conn): array { $sql = " SELECT cp.id, cp.title, cp.assigned_faculty, cp.student_id, cp.created_at, u.firstname, u.lastname, u.email FROM concept_papers cp LEFT JOIN users u ON u.id = cp.student_id ORDER BY u.lastname ASC, cp.created_at ASC "; $result = $conn->query($sql); $groups = []; if ($result) { while ($row = $result->fetch_assoc()) { $studentId = (int)($row['student_id'] ?? 0); if (!$studentId) { $studentId = -1 * $row['id']; } if (!isset($groups[$studentId])) { $groups[$studentId] = [ 'student_id' => $studentId, 'student_name' => trim(($row['firstname'] ?? '') . ' ' . ($row['lastname'] ?? '')) ?: 'Unknown Student', 'student_email' => $row['email'] ?? 'Not provided', 'papers' => [], ]; } $groups[$studentId]['papers'][] = [ 'id' => (int)$row['id'], 'title' => $row['title'] ?? 'Untitled', 'assigned_faculty' => $row['assigned_faculty'] ?? '', 'created_at' => $row['created_at'] ?? null, ]; } $result->free(); } return $groups; } function fetchStudentInfo(mysqli $conn, int $studentId): ?array { if ($studentId <= 0) { return null; } $stmt = $conn->prepare("SELECT id, firstname, lastname, email FROM users WHERE id = ? LIMIT 1"); if (!$stmt) { return null; } $stmt->bind_param('i', $studentId); $stmt->execute(); $result = $stmt->get_result(); $row = $result ? $result->fetch_assoc() : null; $stmt->close(); return $row ?: null; } function papersBelongToStudent(mysqli $conn, int $studentId, array $paperIds): bool { if ($studentId <= 0 || empty($paperIds)) { return false; } $stmt = $conn->prepare("SELECT student_id FROM concept_papers WHERE id = ? LIMIT 1"); if (!$stmt) { return false; } foreach ($paperIds as $paperId) { $stmt->bind_param('i', $paperId); if (!$stmt->execute()) { $stmt->close(); return false; } $stmt->bind_result($ownerId); if (!$stmt->fetch() || (int)$ownerId !== $studentId) { $stmt->close(); return false; } $stmt->free_result(); } $stmt->close(); return true; } /** * Sync reviewer assignments per role and concept paper. * * @param array<int,int> $paperIds * @param array<string,array<int>> $roleAssignments * @return array<string,array<int>> Newly added reviewer IDs per role */ function syncReviewerAssignments(mysqli $conn, array $paperIds, int $studentId, array $roleAssignments, ?string $instructions, ?string $dueDate, int $assignerId): array { ensureConceptReviewTables($conn); $newAssignments = []; $selectStmt = $conn->prepare("SELECT reviewer_id FROM concept_reviewer_assignments WHERE concept_paper_id = ? AND reviewer_role = ?"); $deleteStmt = $conn->prepare("DELETE FROM concept_reviewer_assignments WHERE concept_paper_id = ? AND reviewer_role = ? AND reviewer_id = ?"); $insertStmt = $conn->prepare(" INSERT INTO concept_reviewer_assignments (concept_paper_id, student_id, reviewer_id, reviewer_role, assigned_by, instructions, due_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE instructions = VALUES(instructions), due_at = VALUES(due_at), assigned_by = VALUES(assigned_by), status = 'pending' "); foreach ($paperIds as $paperId) { foreach ($roleAssignments as $role => $reviewerIds) { $reviewerIds = array_values(array_unique(array_filter(array_map('intval', $reviewerIds)))); if ($selectStmt) { $existing = []; $selectStmt->bind_param('is', $paperId, $role); if ($selectStmt->execute()) { $result = $selectStmt->get_result(); if ($result) { while ($row = $result->fetch_assoc()) { $existing[] = (int)$row['reviewer_id']; } $result->free(); } } } else { $existing = []; } $toRemove = array_diff($existing, $reviewerIds); if ($deleteStmt) { foreach ($toRemove as $removeId) { $deleteStmt->bind_param('isi', $paperId, $role, $removeId); $deleteStmt->execute(); } } if ($insertStmt) { foreach ($reviewerIds as $reviewerId) { $insertStmt->bind_param( 'iiisiss', $paperId, $studentId, $reviewerId, $role, $assignerId, $instructions, $dueDate ); $insertStmt->execute(); if (!in_array($reviewerId, $existing, true)) { if (!isset($newAssignments[$role])) { $newAssignments[$role] = []; } $newAssignments[$role][] = $reviewerId; } } } } } if ($selectStmt) { $selectStmt->close(); } if ($deleteStmt) { $deleteStmt->close(); } if ($insertStmt) { $insertStmt->close(); } return $newAssignments; } $message = ''; $messageClass = ''; if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['assign_reviewers'])) { $facultySelections = array_values(array_filter([ (int)($_POST['faculty_id_1'] ?? 0), (int)($_POST['faculty_id_2'] ?? 0), (int)($_POST['faculty_id_3'] ?? 0), ])); if (!empty($facultySelections)) { $_POST['faculty_ids'] = array_values(array_unique($facultySelections)); } $studentId = (int)($_POST['student_id'] ?? 0); $paperIds = array_values(array_unique(array_map('intval', $_POST['paper_ids'] ?? []))); $roleAssignments = []; foreach ($reviewerRoles as $roleKey) { $field = "{$roleKey}_ids"; $roleAssignments[$roleKey] = array_values(array_unique(array_filter(array_map('intval', $_POST[$field] ?? [])))); } $dedupePriority = ['faculty']; $roleAssignments = resolveReviewerRoleConflicts($roleAssignments, $dedupePriority); $instructions = sanitizeTextarea($_POST['instructions'] ?? ''); $dueDateInput = trim((string)($_POST['due_at'] ?? '')); $dueDate = null; if ($dueDateInput !== '') { $dueDateObj = DateTime::createFromFormat('Y-m-d', $dueDateInput); if ($dueDateObj && $dueDateObj->format('Y-m-d') === $dueDateInput) { $dueDate = $dueDateInput; } else { $message = 'Please provide a valid due date (YYYY-MM-DD).'; $messageClass = 'danger'; } } $selectedCount = array_sum(array_map('count', $roleAssignments)); if (!$message && (!$studentId || empty($paperIds) || $selectedCount === 0)) { $message = 'Please select the student concept set and at least one faculty reviewer.'; $messageClass = 'danger'; } elseif (!$message && !papersBelongToStudent($conn, $studentId, $paperIds)) { $message = 'The submitted concept papers do not belong to the selected student.'; $messageClass = 'danger'; } if (!$message) { $facultyString = implode(',', $roleAssignments['faculty']); $updateStmt = $conn->prepare("UPDATE concept_papers SET assigned_faculty = ? WHERE id = ?"); if ($updateStmt) { foreach ($paperIds as $paperId) { $updateStmt->bind_param('si', $facultyString, $paperId); $updateStmt->execute(); } $updateStmt->close(); } $newAssignments = syncReviewerAssignments( $conn, $paperIds, $studentId, $roleAssignments, $instructions !== '' ? $instructions : null, $dueDate, (int)($_SESSION['user_id'] ?? 0) ); if (function_exists('progress_tracker_mark_step_complete')) { progress_tracker_mark_step_complete($conn, $studentId, 'concept_review_assigned', 'concept_reviewer_assignments', null); } $summaryChunks = []; foreach ($roleAssignments as $role => $ids) { if (!empty($ids)) { $label = ucwords(str_replace('_', ' ', $role)); $summaryChunks[] = "{$label} (" . count($ids) . ")"; } } $message = 'Review assignment updated: ' . implode(', ', $summaryChunks); $messageClass = 'success'; $studentInfo = fetchStudentInfo($conn, $studentId); $studentName = trim(($studentInfo['firstname'] ?? '') . ' ' . ($studentInfo['lastname'] ?? '')) ?: 'the student'; $reviewersToNotify = []; foreach ($newAssignments as $role => $ids) { foreach ($ids as $id) { $reviewersToNotify[$id] = true; } } $reviewersToNotify = array_keys($reviewersToNotify); if (!empty($reviewersToNotify)) { foreach ($newAssignments as $roleKey => $ids) { if (empty($ids)) { continue; } $roleLabel = $reviewerRoleLabels[$roleKey] ?? ucwords(str_replace('_', ' ', $roleKey)); $body = "You have been assigned as {$roleLabel} to review the concept titles submitted by {$studentName}. Please rate each title and recommend which one to pursue."; if ($dueDate) { $body .= ' Kindly submit your evaluation by ' . date('F j, Y', strtotime($dueDate)) . '.'; } if ($instructions) { $body .= "\n\nInstructions from the Program Chairperson:\n" . $instructions; } $dashboardLink = $reviewerDashboardLinks[$roleKey] ?? 'subject_specialist_dashboard.php'; foreach ($ids as $rid) { notify_user( $conn, (int)$rid, 'Review assignment', $body, $dashboardLink, false ); } } } if ($studentId > 0) { $studentMessage = 'Reviewers were assigned to evaluate your concept papers.'; if ($dueDate) { $studentMessage .= ' Expect their recommendation on or before ' . date('F j, Y', strtotime($dueDate)) . '.'; } else { $studentMessage .= ' Expect feedback soon.'; } notify_user( $conn, $studentId, 'Reviewers assigned', $studentMessage, 'student_dashboard.php' ); } } } $directoryRoles = ['faculty']; $reviewerDirectory = fetchReviewerDirectory($conn, $directoryRoles); $chairScope = get_program_chair_scope($conn, (int)($_SESSION['user_id'] ?? 0)); if (!empty($reviewerDirectory['by_role']['faculty']) && !empty($chairScope)) { $reviewerDirectory['by_role']['faculty'] = array_filter($reviewerDirectory['by_role']['faculty'], static function ($reviewer) use ($chairScope) { return reviewerMatchesChairScope($reviewer, $chairScope); }); } $facultyPool = $reviewerDirectory['by_role']['faculty'] ?? []; foreach ($reviewerRoles as $roleKey) { $reviewerDirectory['by_role'][$roleKey] = $facultyPool; } $reviewerShowcase = []; foreach ($reviewerRoles as $roleKey) { $roleRecords = array_values($reviewerDirectory['by_role'][$roleKey] ?? []); usort($roleRecords, function ($a, $b) { $nameA = trim(($a['lastname'] ?? '') . ' ' . ($a['firstname'] ?? '')); $nameB = trim(($b['lastname'] ?? '') . ' ' . ($b['firstname'] ?? '')); return strcasecmp($nameA, $nameB); }); $reviewerShowcase[$roleKey] = array_slice($roleRecords, 0, 6); } $conceptGroups = fetchConceptGroups($conn); $studentPaperMap = []; $assignmentIndex = fetchConceptAssignmentIndex($conn); $reviewerLookup = $reviewerDirectory['flat'] ?? []; $missingReviewerIds = []; foreach ($assignmentIndex as $paperData) { foreach (($paperData['all'] ?? []) as $assignment) { $rid = (int)($assignment['reviewer_id'] ?? 0); if ($rid > 0 && !isset($reviewerLookup[$rid])) { $missingReviewerIds[$rid] = true; } } } if (!empty($missingReviewerIds)) { $idList = implode(',', array_map('intval', array_keys($missingReviewerIds))); $reviewerResult = $conn->query("SELECT id, firstname, lastname FROM users WHERE id IN ({$idList})"); if ($reviewerResult) { while ($row = $reviewerResult->fetch_assoc()) { $rid = (int)($row['id'] ?? 0); if ($rid > 0) { $reviewerLookup[$rid] = $row; } } $reviewerResult->free(); } } foreach ($conceptGroups as &$group) { $group['needs_reviewers'] = false; $group['instructions'] = ''; $group['due_at'] = null; $searchParts = [$group['student_name'] ?? '', $group['student_email'] ?? '']; foreach ($group['papers'] as &$paper) { $paperId = (int)($paper['id'] ?? 0); $paperAssignments = $assignmentIndex[$paperId] ?? [ 'all' => [], 'by_role' => [], 'latest_instructions' => null, 'latest_due_at' => null, ]; $paper['review_assignments'] = $paperAssignments; $searchParts[] = $paper['title'] ?? ''; $hasAssignments = !empty($paperAssignments['all']); if (!$hasAssignments && trim((string)$paper['assigned_faculty']) === '') { $group['needs_reviewers'] = true; } if (!$group['instructions'] && !empty($paperAssignments['latest_instructions'])) { $group['instructions'] = $paperAssignments['latest_instructions']; } if (!$group['due_at'] && !empty($paperAssignments['latest_due_at'])) { $group['due_at'] = $paperAssignments['latest_due_at']; } } unset($paper); $group['search_index'] = strtolower(implode(' ', array_filter($searchParts))); $group['status_label'] = $group['needs_reviewers'] ? 'needs' : 'assigned'; $sid = (int)($group['student_id'] ?? 0); if ($sid) { $studentPaperMap[$sid] = array_map(fn($p) => (int)($p['id'] ?? 0), $group['papers']); } } unset($group); $studentsNeedingReviewers = array_filter($conceptGroups, fn($group) => !empty($group['needs_reviewers'])); $needsCount = count($studentsNeedingReviewers); $totalStudents = count($conceptGroups); $totalPapers = array_sum(array_map(fn($group) => count($group['papers']), $conceptGroups)); $assignedStudents = max(0, $totalStudents - $needsCount); $assignmentStats = getConceptAssignmentStats($conn); $reviewerPoolTotal = count($reviewerDirectory['flat']); $submissionsTableExists = tableColumnExists($conn, 'submissions', 'id'); $submissionsHasType = $submissionsTableExists && tableColumnExists($conn, 'submissions', 'type'); $submissionsHasStatus = $submissionsTableExists && tableColumnExists($conn, 'submissions', 'status'); $submissionsHasStudent = $submissionsTableExists && tableColumnExists($conn, 'submissions', 'student_id'); $submissionsHasCreatedAt = $submissionsTableExists && tableColumnExists($conn, 'submissions', 'created_at'); $pipelineStages = [ 'concept' => ['label' => 'Concept Papers', 'icon' => 'bi-layers-half', 'color' => 'success', 'total' => 0, 'pending' => 0, 'in_review' => 0, 'approved' => 0], 'thesis' => ['label' => 'Thesis Manuscripts', 'icon' => 'bi-journal-text', 'color' => 'primary', 'total' => 0, 'pending' => 0, 'in_review' => 0, 'approved' => 0], 'capstone' => ['label' => 'Capstone Projects', 'icon' => 'bi-layers', 'color' => 'info', 'total' => 0, 'pending' => 0, 'in_review' => 0, 'approved' => 0], 'dissertation' => ['label' => 'Dissertation Tracks', 'icon' => 'bi-mortarboard', 'color' => 'warning', 'total' => 0, 'pending' => 0, 'in_review' => 0, 'approved' => 0], 'others' => ['label' => 'Other Research', 'icon' => 'bi-columns-gap', 'color' => 'secondary', 'total' => 0, 'pending' => 0, 'in_review' => 0, 'approved' => 0], ]; $pipelineStageOrder = ['concept', 'thesis', 'capstone', 'dissertation', 'others']; if ($submissionsTableExists) { $typeExpr = $submissionsHasType ? "LOWER(COALESCE(type, 'concept paper'))" : "'concept paper'"; $statusExpr = $submissionsHasStatus ? "LOWER(COALESCE(status, 'pending'))" : "'pending'"; $pipelineSql = " SELECT {$typeExpr} AS type_key, {$statusExpr} AS status_key, COUNT(*) AS total FROM submissions GROUP BY type_key, status_key "; if ($pipelineResult = $conn->query($pipelineSql)) { while ($row = $pipelineResult->fetch_assoc()) { $stageKey = normalizeSubmissionTypeKey($row['type_key'] ?? ''); if (!isset($pipelineStages[$stageKey])) { $stageKey = 'others'; } $bucket = classifySubmissionStatusBucket($row['status_key'] ?? ''); $count = (int)($row['total'] ?? 0); $pipelineStages[$stageKey]['total'] += $count; $bucketKey = $bucket === 'approved' ? 'approved' : ($bucket === 'in_review' ? 'in_review' : 'pending'); $pipelineStages[$stageKey][$bucketKey] += $count; } $pipelineResult->free(); } } else { $inProgressAssignments = max(0, ($assignmentStats['total'] ?? 0) - ($assignmentStats['completed'] ?? 0)); $pipelineStages['concept']['total'] = $totalPapers; $pipelineStages['concept']['pending'] = $needsCount; $pipelineStages['concept']['in_review'] = $inProgressAssignments; $pipelineStages['concept']['approved'] = $assignmentStats['completed'] ?? 0; } $pipelineStageDisplay = []; foreach ($pipelineStageOrder as $stageKey) { if (!isset($pipelineStages[$stageKey])) { continue; } if ($stageKey === 'others' && ($pipelineStages[$stageKey]['total'] ?? 0) === 0) { continue; } $pipelineStageDisplay[$stageKey] = $pipelineStages[$stageKey]; } $pipelineTotalCount = array_reduce($pipelineStages, fn($carry, $stage) => $carry + ($stage['total'] ?? 0), 0); $latestSubmissionFeed = []; if ($submissionsTableExists) { $typeSelect = $submissionsHasType ? "COALESCE(s.type, 'Concept Paper')" : "'Concept Paper'"; $statusSelect = $submissionsHasStatus ? "COALESCE(s.status, 'Pending')" : "'Pending'"; $createdSelect = $submissionsHasCreatedAt ? 's.created_at' : 'NULL'; $studentNameSelect = $submissionsHasStudent ? "TRIM(CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, '')))" : "'Student'"; $studentIdSelect = $submissionsHasStudent ? 's.student_id' : 'NULL'; $studentJoin = $submissionsHasStudent ? 'LEFT JOIN users u ON u.id = s.student_id' : ''; $orderColumn = $submissionsHasCreatedAt ? 's.created_at' : 's.id'; $submissionSql = " SELECT s.id, s.title, {$typeSelect} AS submission_type, {$statusSelect} AS submission_status, {$createdSelect} AS submission_created_at, {$studentNameSelect} AS student_name, {$studentIdSelect} AS student_id FROM submissions s {$studentJoin} ORDER BY {$orderColumn} DESC LIMIT 6 "; if ($submissionResult = $conn->query($submissionSql)) { while ($row = $submissionResult->fetch_assoc()) { $latestSubmissionFeed[] = [ 'id' => (int)($row['id'] ?? 0), 'title' => $row['title'] ?? 'Untitled submission', 'type' => $row['submission_type'] ?? 'Concept Paper', 'status' => $row['submission_status'] ?? 'Pending', 'created_at' => $row['submission_created_at'] ?? null, 'student_name' => trim($row['student_name'] ?? 'Student'), 'student_id' => (int)($row['student_id'] ?? 0), ]; } $submissionResult->free(); } } $filterStudentId = isset($_GET['student_id']) ? (int)$_GET['student_id'] : 0; $filteredStudentName = ''; if ($filterStudentId > 0) { foreach ($conceptGroups as $group) { if ((int)($group['student_id'] ?? 0) === $filterStudentId) { $filteredStudentName = $group['student_name']; break; } } if ($filteredStudentName === '') { $info = fetchStudentInfo($conn, $filterStudentId); if ($info) { $filteredStudentName = trim(($info['firstname'] ?? '') . ' ' . ($info['lastname'] ?? '')); } } } $visibleConceptGroups = array_values($conceptGroups); if ($filterStudentId > 0) { $visibleConceptGroups = array_values(array_filter($conceptGroups, fn($group) => (int)($group['student_id'] ?? 0) === $filterStudentId)); } $allStudents = [];  $studentSql = "SELECT id, firstname, lastname, email FROM users WHERE role = 'student' ORDER BY lastname, firstname, id"; $studentResult = $conn->query($studentSql); if ($studentResult) { while ($row = $studentResult->fetch_assoc()) { $sid = (int)($row['id'] ?? 0); if (!$sid) { continue; } $allStudents[$sid] = [ 'id' => $sid, 'firstname' => $row['firstname'] ?? '', 'lastname' => $row['lastname'] ?? '', 'email' => $row['email'] ?? '', 'paper_ids' => $studentPaperMap[$sid] ?? [], ]; } $studentResult->free(); } $assignedSummaryIndex = []; $roleMap = [ 'faculty' => 'Faculty', ]; foreach ($assignmentIndex as $paperData) { foreach ($paperData['all'] as $assignment) { $sid = (int)($assignment['student_id'] ?? 0); $rid = (int)($assignment['reviewer_id'] ?? 0); $roleKey = $assignment['reviewer_role'] ?? ''; if (!$sid || !$rid || !isset($roleMap[$roleKey])) { continue; } $studentName = trim(($allStudents[$sid]['lastname'] ?? '') . ', ' . ($allStudents[$sid]['firstname'] ?? '')); if ($studentName === '' || $studentName === ',') { $studentName = 'Student #' . $sid; } $label = $roleMap[$roleKey]; if (!isset($assignedSummaryIndex[$sid])) { $assignedSummaryIndex[$sid] = [ 'student' => $studentName, 'roles' => [ 'Faculty' => [], ], ]; } $info = $reviewerLookup[$rid] ?? null; if ($info) { $name = trim(($info['firstname'] ?? '') . ' ' . ($info['lastname'] ?? '')); if ($name !== '' && !in_array($name, $assignedSummaryIndex[$sid]['roles'][$label], true)) { $assignedSummaryIndex[$sid]['roles'][$label][] = $name; } } } } $assignedSummary = array_values($assignedSummaryIndex); usort($assignedSummary, fn($a, $b) => strcasecmp($a['student'], $b['student'])); include 'header.php'; include 'sidebar.php'; ?> <!DOCTYPE html> <html lang="en"> <head> <meta charset="UTF-8"> <title>Assign Faculty Reviewers</title> <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"> <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"> <style>
+<?php session_start();
+require_once 'db.php';
+require_once 'notifications_helper.php';
+require_once 'concept_review_helpers.php';
+require_once 'chair_scope_helper.php';
+require_once 'progress_tracker_helper.php';
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'program_chairperson')
+{
+header('Location: login.php');
+exit;
+}
+ ensureConceptReviewTables($conn);
+syncConceptPapersFromSubmissions($conn);
+$reviewerRoles = ['faculty'];
+$reviewerRoleLabels = [ 'faculty' => 'Faculty Reviewers', ];
+$reviewerDashboardLinks = [ 'faculty' => 'subject_specialist_dashboard.php', ];
+function formatDateToReadable(?string $date): string
+{
+if (!$date)
+{
+return 'Not specified';
+}
+ try
+{
+$dt = new DateTimeImmutable($date);
+return $dt->format('F d, Y g:i A');
+}
+ catch (Exception $e)
+{
+return $date;
+}
+ }
+ function reviewerStatusBadge(string $status): string
+{
+return match ($status)
+{
+'completed' => 'bg-success-subtle text-success', 'in_progress' => 'bg-primary-subtle text-primary', 'declined' => 'bg-danger-subtle text-danger', default => 'bg-warning-subtle text-warning', }
+;
+}
+ function tableColumnExists(mysqli $conn, string $table, string $column): bool
+{
+static $cache = [];
+$key = "{$table}.{$column}";
+if (array_key_exists($key, $cache))
+{
+return $cache[$key];
+}
+ $tableEscaped = $conn->real_escape_string($table);
+$columnEscaped = $conn->real_escape_string($column);
+$sql = " SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{$tableEscaped}
+' AND COLUMN_NAME = '{$columnEscaped}
+' LIMIT 1 ";
+$result = $conn->query($sql);
+$exists = $result && $result->num_rows > 0;
+if ($result)
+{
+$result->free();
+}
+ $cache[$key] = $exists;
+return $exists;
+}
+ function scopeValueEquals(?string $left, ?string $right): bool
+{
+$left = trim((string)$left);
+$right = trim((string)$right);
+if ($left === '' || $right === '')
+{
+return false;
+}
+ return strcasecmp($left, $right) === 0;
+}
+ function reviewerMatchesChairScope(array $reviewer, array $scope): bool
+{
+$program = trim((string)($scope['program'] ?? ''));
+$department = trim((string)($scope['department'] ?? ''));
+$college = trim((string)($scope['college'] ?? ''));
+if ($program === '' && $department === '' && $college === '')
+{
+return true;
+}
+ $reviewerProgram = trim((string)($reviewer['program'] ?? ''));
+$reviewerDepartment = trim((string)($reviewer['department'] ?? ''));
+$reviewerCollege = trim((string)($reviewer['college'] ?? ''));
+if ($program !== '')
+{
+return scopeValueEquals($reviewerProgram, $program) || scopeValueEquals($reviewerDepartment, $program);
+}
+ if ($department !== '')
+{
+return scopeValueEquals($reviewerDepartment, $department) || scopeValueEquals($reviewerProgram, $department);
+}
+ if ($college !== '')
+{
+return scopeValueEquals($reviewerCollege, $college);
+}
+ return true;
+}
+ function normalizeSubmissionTypeKey(?string $type): string
+{
+$value = strtolower(trim((string)$type));
+if ($value === '')
+{
+return 'concept';
+}
+ if (strpos($value, 'dissertation') !== false)
+{
+return 'dissertation';
+}
+ if (strpos($value, 'thesis') !== false)
+{
+return 'thesis';
+}
+ if (strpos($value, 'capstone') !== false)
+{
+return 'capstone';
+}
+ if (strpos($value, 'concept') !== false || strpos($value, 'proposal') !== false)
+{
+return 'concept';
+}
+ return 'others';
+}
+ function classifySubmissionStatusBucket(?string $status): string
+{
+$value = strtolower(trim((string)$status));
+if ($value === '')
+{
+return 'pending';
+}
+ $approvedTokens = ['approved', 'accepted', 'completed', 'cleared', 'confirmed', 'granted'];
+foreach ($approvedTokens as $token)
+{
+if ($token !== '' && strpos($value, $token) !== false)
+{
+return 'approved';
+}
+ }
+ $inReviewTokens = ['review', 'checking', 'processing', 'evaluat', 'assigned'];
+foreach ($inReviewTokens as $token)
+{
+if ($token !== '' && strpos($value, $token) !== false)
+{
+return 'in_review';
+}
+ }
+ return 'pending';
+}
+ function submissionStatusBadge(string $status): string
+{
+$bucket = classifySubmissionStatusBucket($status);
+return match ($bucket)
+{
+'approved' => 'bg-success-subtle text-success', 'in_review' => 'bg-primary-subtle text-primary', default => 'bg-warning-subtle text-warning', }
+;
+}
+ function sanitizeTextarea(string $input, int $maxLength = 800): string
+{
+$trimmed = trim(strip_tags($input));
+if (function_exists('mb_strlen'))
+{
+if (mb_strlen($trimmed) > $maxLength)
+{
+$trimmed = mb_substr($trimmed, 0, $maxLength);
+}
+ }
+ else
+{
+if (strlen($trimmed) > $maxLength)
+{
+$trimmed = substr($trimmed, 0, $maxLength);
+}
+ }
+ return $trimmed;
+}
+ function resolveReviewerRoleConflicts(array $roleAssignments, array $priority): array
+{
+$resolved = [];
+$seen = [];
+foreach ($priority as $role)
+{
+$resolved[$role] = [];
+foreach (($roleAssignments[$role] ?? []) as $id)
+{
+$id = (int)$id;
+if ($id <= 0 || isset($seen[$id]))
+{
+continue;
+}
+ $seen[$id] = true;
+$resolved[$role][] = $id;
+}
+ }
+ foreach ($roleAssignments as $role => $ids)
+{
+if (array_key_exists($role, $resolved))
+{
+continue;
+}
+ $resolved[$role] = [];
+foreach ($ids as $id)
+{
+$id = (int)$id;
+if ($id <= 0 || isset($seen[$id]))
+{
+continue;
+}
+ $seen[$id] = true;
+$resolved[$role][] = $id;
+}
+ }
+ return $resolved;
+}
+ function fetchConceptGroups(mysqli $conn): array
+{
+$sql = " SELECT cp.id, cp.title, cp.assigned_faculty, cp.student_id, cp.created_at, u.firstname, u.lastname, u.email FROM concept_papers cp LEFT JOIN users u ON u.id = cp.student_id ORDER BY u.lastname ASC, cp.created_at ASC ";
+$result = $conn->query($sql);
+$groups = [];
+if ($result)
+{
+while ($row = $result->fetch_assoc())
+{
+$studentId = (int)($row['student_id'] ?? 0);
+if (!$studentId)
+{
+$studentId = -1 * $row['id'];
+}
+ if (!isset($groups[$studentId]))
+{
+$groups[$studentId] = [ 'student_id' => $studentId, 'student_name' => trim(($row['firstname'] ?? '') . ' ' . ($row['lastname'] ?? '')) ?: 'Unknown Student', 'student_email' => $row['email'] ?? 'Not provided', 'papers' => [], ];
+}
+ $groups[$studentId]['papers'][] = [ 'id' => (int)$row['id'], 'title' => $row['title'] ?? 'Untitled', 'assigned_faculty' => $row['assigned_faculty'] ?? '', 'created_at' => $row['created_at'] ?? null, ];
+}
+ $result->free();
+}
+ return $groups;
+}
+ function fetchStudentInfo(mysqli $conn, int $studentId): ?array
+{
+if ($studentId <= 0)
+{
+return null;
+}
+ $stmt = $conn->prepare("SELECT id, firstname, lastname, email FROM users WHERE id = ? LIMIT 1");
+if (!$stmt)
+{
+return null;
+}
+ $stmt->bind_param('i', $studentId);
+$stmt->execute();
+$result = $stmt->get_result();
+$row = $result ? $result->fetch_assoc() : null;
+$stmt->close();
+return $row ?: null;
+}
+ function papersBelongToStudent(mysqli $conn, int $studentId, array $paperIds): bool
+{
+if ($studentId <= 0 || empty($paperIds))
+{
+return false;
+}
+ $stmt = $conn->prepare("SELECT student_id FROM concept_papers WHERE id = ? LIMIT 1");
+if (!$stmt)
+{
+return false;
+}
+ foreach ($paperIds as $paperId)
+{
+$stmt->bind_param('i', $paperId);
+if (!$stmt->execute())
+{
+$stmt->close();
+return false;
+}
+ $stmt->bind_result($ownerId);
+if (!$stmt->fetch() || (int)$ownerId !== $studentId)
+{
+$stmt->close();
+return false;
+}
+ $stmt->free_result();
+}
+ $stmt->close();
+return true;
+}
+ /** * Sync reviewer assignments per role and concept paper. * * @param array<int,int> $paperIds * @param array<string,array<int>> $roleAssignments * @return array<string,array<int>> Newly added reviewer IDs per role */ function syncReviewerAssignments(mysqli $conn, array $paperIds, int $studentId, array $roleAssignments, ?string $instructions, ?string $dueDate, int $assignerId): array
+{
+ensureConceptReviewTables($conn);
+$newAssignments = [];
+$selectStmt = $conn->prepare("SELECT reviewer_id FROM concept_reviewer_assignments WHERE concept_paper_id = ? AND reviewer_role = ?");
+$deleteStmt = $conn->prepare("DELETE FROM concept_reviewer_assignments WHERE concept_paper_id = ? AND reviewer_role = ? AND reviewer_id = ?");
+$insertStmt = $conn->prepare(" INSERT INTO concept_reviewer_assignments (concept_paper_id, student_id, reviewer_id, reviewer_role, assigned_by, instructions, due_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE instructions = VALUES(instructions), due_at = VALUES(due_at), assigned_by = VALUES(assigned_by), status = 'pending' ");
+foreach ($paperIds as $paperId)
+{
+foreach ($roleAssignments as $role => $reviewerIds)
+{
+$reviewerIds = array_values(array_unique(array_filter(array_map('intval', $reviewerIds))));
+if ($selectStmt)
+{
+$existing = [];
+$selectStmt->bind_param('is', $paperId, $role);
+if ($selectStmt->execute())
+{
+$result = $selectStmt->get_result();
+if ($result)
+{
+while ($row = $result->fetch_assoc())
+{
+$existing[] = (int)$row['reviewer_id'];
+}
+ $result->free();
+}
+ }
+ }
+ else
+{
+$existing = [];
+}
+ $toRemove = array_diff($existing, $reviewerIds);
+if ($deleteStmt)
+{
+foreach ($toRemove as $removeId)
+{
+$deleteStmt->bind_param('isi', $paperId, $role, $removeId);
+$deleteStmt->execute();
+}
+ }
+ if ($insertStmt)
+{
+foreach ($reviewerIds as $reviewerId)
+{
+$insertStmt->bind_param( 'iiisiss', $paperId, $studentId, $reviewerId, $role, $assignerId, $instructions, $dueDate );
+$insertStmt->execute();
+if (!in_array($reviewerId, $existing, true))
+{
+if (!isset($newAssignments[$role]))
+{
+$newAssignments[$role] = [];
+}
+ $newAssignments[$role][] = $reviewerId;
+}
+ }
+ }
+ }
+ }
+ if ($selectStmt)
+{
+$selectStmt->close();
+}
+ if ($deleteStmt)
+{
+$deleteStmt->close();
+}
+ if ($insertStmt)
+{
+$insertStmt->close();
+}
+ return $newAssignments;
+}
+ $message = '';
+$messageClass = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['assign_reviewers']))
+{
+$facultySelections = array_values(array_filter([ (int)($_POST['faculty_id_1'] ?? 0), (int)($_POST['faculty_id_2'] ?? 0), (int)($_POST['faculty_id_3'] ?? 0), ]));
+if (!empty($facultySelections))
+{
+$_POST['faculty_ids'] = array_values(array_unique($facultySelections));
+}
+ $studentId = (int)($_POST['student_id'] ?? 0);
+$paperIds = array_values(array_unique(array_map('intval', $_POST['paper_ids'] ?? [])));
+$roleAssignments = [];
+foreach ($reviewerRoles as $roleKey)
+{
+$field = "{$roleKey}
+_ids";
+$roleAssignments[$roleKey] = array_values(array_unique(array_filter(array_map('intval', $_POST[$field] ?? []))));
+}
+ $dedupePriority = ['faculty'];
+$roleAssignments = resolveReviewerRoleConflicts($roleAssignments, $dedupePriority);
+$instructions = sanitizeTextarea($_POST['instructions'] ?? '');
+$dueDateInput = trim((string)($_POST['due_at'] ?? ''));
+$dueDate = null;
+if ($dueDateInput !== '')
+{
+$dueDateObj = DateTime::createFromFormat('Y-m-d', $dueDateInput);
+if ($dueDateObj && $dueDateObj->format('Y-m-d') === $dueDateInput)
+{
+$dueDate = $dueDateInput;
+}
+ else
+{
+$message = 'Please provide a valid due date (YYYY-MM-DD).';
+$messageClass = 'danger';
+}
+ }
+ $selectedCount = array_sum(array_map('count', $roleAssignments));
+if (!$message && (!$studentId || empty($paperIds) || $selectedCount === 0))
+{
+$message = 'Please select the student concept set and at least one faculty reviewer.';
+$messageClass = 'danger';
+}
+ elseif (!$message && !papersBelongToStudent($conn, $studentId, $paperIds))
+{
+$message = 'The submitted concept papers do not belong to the selected student.';
+$messageClass = 'danger';
+}
+ if (!$message)
+{
+$facultyString = implode(',', $roleAssignments['faculty']);
+$updateStmt = $conn->prepare("UPDATE concept_papers SET assigned_faculty = ? WHERE id = ?");
+if ($updateStmt)
+{
+foreach ($paperIds as $paperId)
+{
+$updateStmt->bind_param('si', $facultyString, $paperId);
+$updateStmt->execute();
+}
+ $updateStmt->close();
+}
+ $newAssignments = syncReviewerAssignments( $conn, $paperIds, $studentId, $roleAssignments, $instructions !== '' ? $instructions : null, $dueDate, (int)($_SESSION['user_id'] ?? 0) );
+if (function_exists('progress_tracker_mark_step_complete'))
+{
+progress_tracker_mark_step_complete($conn, $studentId, 'concept_review_assigned', 'concept_reviewer_assignments', null);
+}
+ $summaryChunks = [];
+foreach ($roleAssignments as $role => $ids)
+{
+if (!empty($ids))
+{
+$label = ucwords(str_replace('_', ' ', $role));
+$summaryChunks[] = "{$label}
+ (" . count($ids) . ")";
+}
+ }
+ $message = 'Review assignment updated: ' . implode(', ', $summaryChunks);
+$messageClass = 'success';
+$studentInfo = fetchStudentInfo($conn, $studentId);
+$studentName = trim(($studentInfo['firstname'] ?? '') . ' ' . ($studentInfo['lastname'] ?? '')) ?: 'the student';
+$reviewersToNotify = [];
+foreach ($newAssignments as $role => $ids)
+{
+foreach ($ids as $id)
+{
+$reviewersToNotify[$id] = true;
+}
+ }
+ $reviewersToNotify = array_keys($reviewersToNotify);
+if (!empty($reviewersToNotify))
+{
+foreach ($newAssignments as $roleKey => $ids)
+{
+if (empty($ids))
+{
+continue;
+}
+ $roleLabel = $reviewerRoleLabels[$roleKey] ?? ucwords(str_replace('_', ' ', $roleKey));
+$body = "You have been assigned as
+{$roleLabel}
+ to review the concept titles submitted by
+{$studentName}
+. Please rate each title and recommend which one to pursue.";
+if ($dueDate)
+{
+$body .= ' Kindly submit your evaluation by ' . date('F j, Y', strtotime($dueDate)) . '.';
+}
+ if ($instructions)
+{
+$body .= "\n\nInstructions from the Program Chairperson:\n" . $instructions;
+}
+ $dashboardLink = $reviewerDashboardLinks[$roleKey] ?? 'subject_specialist_dashboard.php';
+foreach ($ids as $rid)
+{
+notify_user( $conn, (int)$rid, 'Review assignment', $body, $dashboardLink, false );
+}
+ }
+ }
+ if ($studentId > 0)
+{
+$studentMessage = 'Reviewers were assigned to evaluate your concept papers.';
+if ($dueDate)
+{
+$studentMessage .= ' Expect their recommendation on or before ' . date('F j, Y', strtotime($dueDate)) . '.';
+}
+ else
+{
+$studentMessage .= ' Expect feedback soon.';
+}
+ notify_user( $conn, $studentId, 'Reviewers assigned', $studentMessage, 'student_dashboard.php' );
+}
+ }
+ }
+ $directoryRoles = ['faculty'];
+$reviewerDirectory = fetchReviewerDirectory($conn, $directoryRoles);
+$chairScope = get_program_chair_scope($conn, (int)($_SESSION['user_id'] ?? 0));
+if (!empty($reviewerDirectory['by_role']['faculty']) && !empty($chairScope))
+{
+$reviewerDirectory['by_role']['faculty'] = array_filter($reviewerDirectory['by_role']['faculty'], static function ($reviewer) use ($chairScope)
+{
+return reviewerMatchesChairScope($reviewer, $chairScope);
+}
+);
+}
+ $facultyPool = $reviewerDirectory['by_role']['faculty'] ?? [];
+foreach ($reviewerRoles as $roleKey)
+{
+$reviewerDirectory['by_role'][$roleKey] = $facultyPool;
+}
+ $reviewerShowcase = [];
+foreach ($reviewerRoles as $roleKey)
+{
+$roleRecords = array_values($reviewerDirectory['by_role'][$roleKey] ?? []);
+usort($roleRecords, function ($a, $b)
+{
+$nameA = trim(($a['lastname'] ?? '') . ' ' . ($a['firstname'] ?? ''));
+$nameB = trim(($b['lastname'] ?? '') . ' ' . ($b['firstname'] ?? ''));
+return strcasecmp($nameA, $nameB);
+}
+);
+$reviewerShowcase[$roleKey] = array_slice($roleRecords, 0, 6);
+}
+ $conceptGroups = fetchConceptGroups($conn);
+$studentPaperMap = [];
+$assignmentIndex = fetchConceptAssignmentIndex($conn);
+$reviewerLookup = $reviewerDirectory['flat'] ?? [];
+$missingReviewerIds = [];
+foreach ($assignmentIndex as $paperData)
+{
+foreach (($paperData['all'] ?? []) as $assignment)
+{
+$rid = (int)($assignment['reviewer_id'] ?? 0);
+if ($rid > 0 && !isset($reviewerLookup[$rid]))
+{
+$missingReviewerIds[$rid] = true;
+}
+ }
+ }
+ if (!empty($missingReviewerIds))
+{
+$idList = implode(',', array_map('intval', array_keys($missingReviewerIds)));
+$reviewerResult = $conn->query("SELECT id, firstname, lastname FROM users WHERE id IN ({$idList}
+)");
+if ($reviewerResult)
+{
+while ($row = $reviewerResult->fetch_assoc())
+{
+$rid = (int)($row['id'] ?? 0);
+if ($rid > 0)
+{
+$reviewerLookup[$rid] = $row;
+}
+ }
+ $reviewerResult->free();
+}
+ }
+ foreach ($conceptGroups as &$group)
+{
+$group['needs_reviewers'] = false;
+$group['instructions'] = '';
+$group['due_at'] = null;
+$searchParts = [$group['student_name'] ?? '', $group['student_email'] ?? ''];
+foreach ($group['papers'] as &$paper)
+{
+$paperId = (int)($paper['id'] ?? 0);
+$paperAssignments = $assignmentIndex[$paperId] ?? [ 'all' => [], 'by_role' => [], 'latest_instructions' => null, 'latest_due_at' => null, ];
+$paper['review_assignments'] = $paperAssignments;
+$searchParts[] = $paper['title'] ?? '';
+$hasAssignments = !empty($paperAssignments['all']);
+if (!$hasAssignments && trim((string)$paper['assigned_faculty']) === '')
+{
+$group['needs_reviewers'] = true;
+}
+ if (!$group['instructions'] && !empty($paperAssignments['latest_instructions']))
+{
+$group['instructions'] = $paperAssignments['latest_instructions'];
+}
+ if (!$group['due_at'] && !empty($paperAssignments['latest_due_at']))
+{
+$group['due_at'] = $paperAssignments['latest_due_at'];
+}
+ }
+ unset($paper);
+$group['search_index'] = strtolower(implode(' ', array_filter($searchParts)));
+$group['status_label'] = $group['needs_reviewers'] ? 'needs' : 'assigned';
+$sid = (int)($group['student_id'] ?? 0);
+if ($sid)
+{
+$studentPaperMap[$sid] = array_map(fn($p) => (int)($p['id'] ?? 0), $group['papers']);
+}
+ }
+ unset($group);
+$studentsNeedingReviewers = array_filter($conceptGroups, fn($group) => !empty($group['needs_reviewers']));
+$needsCount = count($studentsNeedingReviewers);
+$totalStudents = count($conceptGroups);
+$totalPapers = array_sum(array_map(fn($group) => count($group['papers']), $conceptGroups));
+$assignedStudents = max(0, $totalStudents - $needsCount);
+$assignmentStats = getConceptAssignmentStats($conn);
+$reviewerPoolTotal = count($reviewerDirectory['flat']);
+$submissionsTableExists = tableColumnExists($conn, 'submissions', 'id');
+$submissionsHasType = $submissionsTableExists && tableColumnExists($conn, 'submissions', 'type');
+$submissionsHasStatus = $submissionsTableExists && tableColumnExists($conn, 'submissions', 'status');
+$submissionsHasStudent = $submissionsTableExists && tableColumnExists($conn, 'submissions', 'student_id');
+$submissionsHasCreatedAt = $submissionsTableExists && tableColumnExists($conn, 'submissions', 'created_at');
+$pipelineStages = [ 'concept' => ['label' => 'Concept Papers', 'icon' => 'bi-layers-half', 'color' => 'success', 'total' => 0, 'pending' => 0, 'in_review' => 0, 'approved' => 0], 'thesis' => ['label' => 'Thesis Manuscripts', 'icon' => 'bi-journal-text', 'color' => 'primary', 'total' => 0, 'pending' => 0, 'in_review' => 0, 'approved' => 0], 'capstone' => ['label' => 'Capstone Projects', 'icon' => 'bi-layers', 'color' => 'info', 'total' => 0, 'pending' => 0, 'in_review' => 0, 'approved' => 0], 'dissertation' => ['label' => 'Dissertation Tracks', 'icon' => 'bi-mortarboard', 'color' => 'warning', 'total' => 0, 'pending' => 0, 'in_review' => 0, 'approved' => 0], 'others' => ['label' => 'Other Research', 'icon' => 'bi-columns-gap', 'color' => 'secondary', 'total' => 0, 'pending' => 0, 'in_review' => 0, 'approved' => 0], ];
+$pipelineStageOrder = ['concept', 'thesis', 'capstone', 'dissertation', 'others'];
+if ($submissionsTableExists)
+{
+$typeExpr = $submissionsHasType ? "LOWER(COALESCE(type, 'concept paper'))" : "'concept paper'";
+$statusExpr = $submissionsHasStatus ? "LOWER(COALESCE(status, 'pending'))" : "'pending'";
+$pipelineSql = " SELECT
+{$typeExpr}
+ AS type_key,
+{$statusExpr}
+ AS status_key, COUNT(*) AS total FROM submissions GROUP BY type_key, status_key ";
+if ($pipelineResult = $conn->query($pipelineSql))
+{
+while ($row = $pipelineResult->fetch_assoc())
+{
+$stageKey = normalizeSubmissionTypeKey($row['type_key'] ?? '');
+if (!isset($pipelineStages[$stageKey]))
+{
+$stageKey = 'others';
+}
+ $bucket = classifySubmissionStatusBucket($row['status_key'] ?? '');
+$count = (int)($row['total'] ?? 0);
+$pipelineStages[$stageKey]['total'] += $count;
+$bucketKey = $bucket === 'approved' ? 'approved' : ($bucket === 'in_review' ? 'in_review' : 'pending');
+$pipelineStages[$stageKey][$bucketKey] += $count;
+}
+ $pipelineResult->free();
+}
+ }
+ else
+{
+$inProgressAssignments = max(0, ($assignmentStats['total'] ?? 0) - ($assignmentStats['completed'] ?? 0));
+$pipelineStages['concept']['total'] = $totalPapers;
+$pipelineStages['concept']['pending'] = $needsCount;
+$pipelineStages['concept']['in_review'] = $inProgressAssignments;
+$pipelineStages['concept']['approved'] = $assignmentStats['completed'] ?? 0;
+}
+ $pipelineStageDisplay = [];
+foreach ($pipelineStageOrder as $stageKey)
+{
+if (!isset($pipelineStages[$stageKey]))
+{
+continue;
+}
+ if ($stageKey === 'others' && ($pipelineStages[$stageKey]['total'] ?? 0) === 0)
+{
+continue;
+}
+ $pipelineStageDisplay[$stageKey] = $pipelineStages[$stageKey];
+}
+ $pipelineTotalCount = array_reduce($pipelineStages, fn($carry, $stage) => $carry + ($stage['total'] ?? 0), 0);
+$latestSubmissionFeed = [];
+if ($submissionsTableExists)
+{
+$typeSelect = $submissionsHasType ? "COALESCE(s.type, 'Concept Paper')" : "'Concept Paper'";
+$statusSelect = $submissionsHasStatus ? "COALESCE(s.status, 'Pending')" : "'Pending'";
+$createdSelect = $submissionsHasCreatedAt ? 's.created_at' : 'NULL';
+$studentNameSelect = $submissionsHasStudent ? "TRIM(CONCAT(COALESCE(u.firstname, ''), ' ', COALESCE(u.lastname, '')))" : "'Student'";
+$studentIdSelect = $submissionsHasStudent ? 's.student_id' : 'NULL';
+$studentJoin = $submissionsHasStudent ? 'LEFT JOIN users u ON u.id = s.student_id' : '';
+$orderColumn = $submissionsHasCreatedAt ? 's.created_at' : 's.id';
+$submissionSql = " SELECT s.id, s.title,
+{$typeSelect}
+ AS submission_type,
+{$statusSelect}
+ AS submission_status,
+{$createdSelect}
+ AS submission_created_at,
+{$studentNameSelect}
+ AS student_name,
+{$studentIdSelect}
+ AS student_id FROM submissions s
+{$studentJoin}
+ ORDER BY
+{$orderColumn}
+ DESC LIMIT 6 ";
+if ($submissionResult = $conn->query($submissionSql))
+{
+while ($row = $submissionResult->fetch_assoc())
+{
+$latestSubmissionFeed[] = [ 'id' => (int)($row['id'] ?? 0), 'title' => $row['title'] ?? 'Untitled submission', 'type' => $row['submission_type'] ?? 'Concept Paper', 'status' => $row['submission_status'] ?? 'Pending', 'created_at' => $row['submission_created_at'] ?? null, 'student_name' => trim($row['student_name'] ?? 'Student'), 'student_id' => (int)($row['student_id'] ?? 0), ];
+}
+ $submissionResult->free();
+}
+ }
+ $filterStudentId = isset($_GET['student_id']) ? (int)$_GET['student_id'] : 0;
+$filteredStudentName = '';
+if ($filterStudentId > 0)
+{
+foreach ($conceptGroups as $group)
+{
+if ((int)($group['student_id'] ?? 0) === $filterStudentId)
+{
+$filteredStudentName = $group['student_name'];
+break;
+}
+ }
+ if ($filteredStudentName === '')
+{
+$info = fetchStudentInfo($conn, $filterStudentId);
+if ($info)
+{
+$filteredStudentName = trim(($info['firstname'] ?? '') . ' ' . ($info['lastname'] ?? ''));
+}
+ }
+ }
+ $visibleConceptGroups = array_values($conceptGroups);
+if ($filterStudentId > 0)
+{
+$visibleConceptGroups = array_values(array_filter($conceptGroups, fn($group) => (int)($group['student_id'] ?? 0) === $filterStudentId));
+}
+ $allStudents = [];
+ $studentSql = "SELECT id, firstname, lastname, email FROM users WHERE role = 'student' ORDER BY lastname, firstname, id";
+$studentResult = $conn->query($studentSql);
+if ($studentResult)
+{
+while ($row = $studentResult->fetch_assoc())
+{
+$sid = (int)($row['id'] ?? 0);
+if (!$sid)
+{
+continue;
+}
+ $allStudents[$sid] = [ 'id' => $sid, 'firstname' => $row['firstname'] ?? '', 'lastname' => $row['lastname'] ?? '', 'email' => $row['email'] ?? '', 'paper_ids' => $studentPaperMap[$sid] ?? [], ];
+}
+ $studentResult->free();
+}
+ $assignedSummaryIndex = [];
+$roleMap = [ 'faculty' => 'Faculty', ];
+foreach ($assignmentIndex as $paperData)
+{
+foreach ($paperData['all'] as $assignment)
+{
+$sid = (int)($assignment['student_id'] ?? 0);
+$rid = (int)($assignment['reviewer_id'] ?? 0);
+$roleKey = $assignment['reviewer_role'] ?? '';
+if (!$sid || !$rid || !isset($roleMap[$roleKey]))
+{
+continue;
+}
+ $studentName = trim(($allStudents[$sid]['lastname'] ?? '') . ', ' . ($allStudents[$sid]['firstname'] ?? ''));
+if ($studentName === '' || $studentName === ',')
+{
+$studentName = 'Student #' . $sid;
+}
+ $label = $roleMap[$roleKey];
+if (!isset($assignedSummaryIndex[$sid]))
+{
+$assignedSummaryIndex[$sid] = [ 'student' => $studentName, 'roles' => [ 'Faculty' => [], ], ];
+}
+ $info = $reviewerLookup[$rid] ?? null;
+if ($info)
+{
+$name = trim(($info['firstname'] ?? '') . ' ' . ($info['lastname'] ?? ''));
+if ($name !== '' && !in_array($name, $assignedSummaryIndex[$sid]['roles'][$label], true))
+{
+$assignedSummaryIndex[$sid]['roles'][$label][] = $name;
+}
+ }
+ }
+ }
+ $assignedSummary = array_values($assignedSummaryIndex);
+usort($assignedSummary, fn($a, $b) => strcasecmp($a['student'], $b['student']));
+include 'header.php';
+include 'sidebar.php';
+?> <!DOCTYPE html> <html lang="en"> <head> <meta charset="UTF-8"> <title>Assign Faculty Reviewers</title> <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"> <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap"> <style>
 :root {
   --bg: #f4f6fb;
   --card: #ffffff;
