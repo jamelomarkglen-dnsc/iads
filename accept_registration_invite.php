@@ -3,10 +3,12 @@ session_start();
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/role_helpers.php';
 require_once __DIR__ . '/registration_invite_helpers.php';
+require_once __DIR__ . '/notifications_helper.php';
 
 ensureRoleInfrastructure($conn);
 ensure_registration_invites_table($conn);
 ensure_registration_account_status_column($conn);
+notifications_bootstrap($conn);
 
 $inviteToken = trim((string)($_GET['token'] ?? $_POST['token'] ?? ''));
 $invite = $inviteToken !== '' ? get_registration_invite_by_token($conn, $inviteToken) : null;
@@ -84,6 +86,32 @@ function generateUniqueUsername(mysqli $conn, string $email, string $firstName, 
     return $candidate;
 }
 
+function notify_verification_for_invite_registration(
+    mysqli $conn,
+    string $role,
+    string $fullname,
+    string $department,
+    string $college
+): void {
+    $role = trim($role);
+    $fullname = trim($fullname);
+
+    if ($role === 'faculty') {
+        $title = 'Faculty Verification Required';
+        $details = $department !== '' ? " Program: {$department}." : '';
+        $message = $fullname !== '' ? "New faculty account pending verification: {$fullname}.{$details}" : "New faculty account pending verification.{$details}";
+        notify_role($conn, 'program_chairperson', $title, $message, 'verify_faculty.php', false);
+        return;
+    }
+
+    if ($role === 'program_chairperson') {
+        $title = 'Program Chairperson Verification Required';
+        $details = $department !== '' ? " Program: {$department}." : '';
+        $message = $fullname !== '' ? "New program chairperson account pending verification: {$fullname}.{$details}" : "New program chairperson account pending verification.{$details}";
+        notify_role($conn, 'dean', $title, $message, 'verify_program_chair.php');
+    }
+}
+
 if (!$error && $invite) {
     if (!empty($invite['is_expired'])) {
         $error = 'This invite has expired.';
@@ -135,7 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
         $lastname = $oldInput['last_name'];
         $generatedUsername = $generatedUsername ?? generateUniqueUsername($conn, $postedEmail, $firstname, $lastname);
         $passwordHashed = password_hash($passwordPlain, PASSWORD_DEFAULT);
-        $accountStatus = 'approved';
+        $accountStatus = 'pending';
         if ($role === 'faculty') {
             $columns = ['firstname', 'lastname', 'username', 'password', 'email', 'role', 'contact', 'gender', 'department', 'college', 'account_status'];
             $values = [
@@ -182,7 +210,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
                     $userId = (int)$conn->insert_id;
                     ensureRoleBundleAssignments($conn, $userId, $role);
                     consume_registration_invite($conn, (int)$invite['id'], $userId);
-                    $success = 'Account created successfully. You can now log in.';
+                    notify_verification_for_invite_registration(
+                        $conn,
+                        $role,
+                        trim($firstname . ' ' . $lastname),
+                        trim((string)$oldInput['department']),
+                        trim((string)$oldInput['college'])
+                    );
+                    $success = 'Registration successful! Your account is pending verification by the Program Chairperson.';
                 }
                 $insertStmt->close();
             }
@@ -227,7 +262,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
                     $userId = (int)$conn->insert_id;
                     ensureRoleBundleAssignments($conn, $userId, $role);
                     consume_registration_invite($conn, (int)$invite['id'], $userId);
-                    $success = 'Account created successfully. You can now log in.';
+                    notify_verification_for_invite_registration(
+                        $conn,
+                        $role,
+                        trim($firstname . ' ' . $lastname),
+                        trim((string)$oldInput['department']),
+                        trim((string)$oldInput['college'])
+                    );
+                    $success = 'Registration successful! Your account is pending verification by the Dean.';
                 }
                 $insertStmt->close();
             }
