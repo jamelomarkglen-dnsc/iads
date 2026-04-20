@@ -197,7 +197,7 @@ if ($stmt) {
                 <p class="text-muted mb-0">Review and update faculty, adviser, committee, and panel assignments.</p>
             </div>
             <div class="d-flex gap-2">
-                <a href="assign_faculty.php" class="btn btn-success">
+                <a href="assign_faculty_replacement.php" class="btn btn-success">
                     <i class="bi bi-person-gear me-2"></i> Assign Reviewers
                 </a>
                 <a href="create_faculty.php" class="btn btn-outline-success">

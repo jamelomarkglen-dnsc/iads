@@ -420,7 +420,7 @@ include 'sidebar.php';
                         <a href="review_submission.php?id=<?= (int)$submissionId; ?>" class="btn btn-success">
                             <i class="bi bi-clipboard-check"></i> Review Submission
                         </a>
-                        <a href="assign_faculty.php" class="btn btn-outline-primary">
+                        <a href="assign_faculty_replacement.php" class="btn btn-outline-primary">
                             <i class="bi bi-people"></i> Manage Reviewers
                         </a>
                         <button class="btn btn-outline-secondary" onclick="window.print()">

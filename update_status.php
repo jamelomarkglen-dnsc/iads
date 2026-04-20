@@ -76,7 +76,7 @@ $quickActions = [
         'message' => 'Submission flagged for reviewer assignment.',
         'fallback_redirect' => function (int $id): string {
             $query = rawurlencode("submission {$id}");
-            return "assign_faculty.php?status=all&source=submissions&q={$query}";
+            return "assign_faculty_replacement.php?status=all&source=submissions&q={$query}";
         },
     ],
 ];

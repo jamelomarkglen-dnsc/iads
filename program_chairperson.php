@@ -1271,7 +1271,7 @@ if ($endorsementStmt) {
                             <div class="icon-pill bg-warning-subtle text-warning">
                                 <i class="bi bi-clipboard-check"></i>
                             </div>
-                            <a href="assign_faculty.php" class="btn btn-outline-warning btn-sm">Assign Reviewers</a>
+                            <a href="assign_faculty_replacement.php" class="btn btn-outline-warning btn-sm">Assign Reviewers</a>
                         </div>
                         <h6 class="text-uppercase text-muted small mb-1">Concept Review Workload</h6>
                         <h2 class="fw-bold text-warning mb-3"><?php echo number_format($pendingReviews); ?></h2>
@@ -1312,7 +1312,7 @@ if ($endorsementStmt) {
                             <a href="completed_rankings.php" class="btn btn-sm btn-outline-secondary">
                                 <i class="bi bi-list-check me-1"></i> Completed Directory
                             </a>
-                            <a href="assign_faculty.php" class="btn btn-sm btn-outline-success">
+                            <a href="assign_faculty_replacement.php" class="btn btn-sm btn-outline-success">
                                 <i class="bi bi-people-fill me-1"></i> Adjust Assignments
                             </a>
                         </div>
@@ -1697,7 +1697,7 @@ if ($endorsementStmt) {
                                 <li>Assignments awaiting scores: <strong><?= number_format($assignmentStats['pending']); ?></strong></li>
                                 <li>Reviewer deadlines due soon: <strong><?= number_format($assignmentStats['due_soon']); ?></strong></li>
                             </ul>
-                            <a href="assign_faculty.php" class="btn btn-outline-success w-100">
+                            <a href="assign_faculty_replacement.php" class="btn btn-outline-success w-100">
                                 <i class="bi bi-stars me-1"></i> Accelerate scoring cycle
                             </a>
                         </div>
@@ -1796,7 +1796,7 @@ if ($endorsementStmt) {
                             <h2 class="h6 fw-semibold mb-1">Final Picks &amp; Status</h2>
                             <p class="text-muted small mb-0">Auto-generated recommendations based on reviewer scores.</p>
                         </div>
-                        <a href="assign_faculty.php" class="btn btn-sm btn-outline-success">
+                        <a href="assign_faculty_replacement.php" class="btn btn-sm btn-outline-success">
                             <i class="bi bi-arrow-repeat me-1"></i> Refresh Assignments
                         </a>
                     </div>
@@ -1979,7 +1979,7 @@ if ($endorsementStmt) {
                             <p class="text-muted mb-0">Faculty coverage data will appear once members are added.</p>
                         <?php endif; ?>
                         <div class="mt-4">
-                            <a href="assign_faculty.php" class="btn btn-success w-100">
+                            <a href="assign_faculty_replacement.php" class="btn btn-success w-100">
                                 <i class="bi bi-person-gear me-2"></i> Manage Faculty Assignments
                             </a>
                         </div>
@@ -2071,7 +2071,7 @@ if ($endorsementStmt) {
                                                 ?>
                                             </div>
                                         </div>
-                                        <a href="assign_faculty.php?paper=<?php echo (int)($assignment['id'] ?? 0); ?>" class="btn btn-outline-success btn-sm">
+                                        <a href="assign_faculty_replacement.php?paper=<?php echo (int)($assignment['id'] ?? 0); ?>" class="btn btn-outline-success btn-sm">
                                             <i class="bi bi-arrow-up-right"></i>
                                         </a>
                                     </li>

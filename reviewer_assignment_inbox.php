@@ -123,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['assignment_action']))
                             ['program_chairperson'],
                             'Reviewer declined assignment',
                             $notifyMessage,
-                            'assign_faculty.php'
+                            'assign_faculty_replacement.php'
                         );
                     } else {
                         $feedback = ['type' => 'danger', 'message' => 'Unable to decline the assignment at the moment.'];

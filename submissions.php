@@ -604,7 +604,7 @@ function renderTypeBadge(?string $type): string
                 if ($assignFilterTarget === '') {
                     $assignFilterTarget = (string)($s['id'] ?? '');
                 }
-                $assignUrl = 'assign_faculty.php?status=all&source=submissions&q=' . rawurlencode($assignFilterTarget);
+                $assignUrl = 'assign_faculty_replacement.php?status=all&source=submissions&q=' . rawurlencode($assignFilterTarget);
                 $studentId = (int)($s['student_id'] ?? 0);
                 if ($studentId > 0) {
                     $assignUrl .= '&student_id=' . $studentId;

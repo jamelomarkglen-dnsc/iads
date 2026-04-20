@@ -1003,7 +1003,7 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                     <div class="rank-card mt-3">
                                         <p class="text-uppercase small <?= $rankPlaceholderTextClass; ?> mb-1">Advisee concept set</p>
                                         <h5 class="mb-2"><?= htmlspecialchars($preview['student_name']); ?></h5>
-                                        <small class="<?= $rankPlaceholderTextClass; ?>">These titles were created for this advisee in assign_faculty.php. Ranking activates automatically once the Program Chairperson routes the student to you.</small>
+                                        <small class="<?= $rankPlaceholderTextClass; ?>">These titles were created for this advisee in assign_faculty_replacement.php. Ranking activates automatically once the Program Chairperson routes the student to you.</small>
                                         <div class="table-responsive mt-3">
                                             <table class="table table-borderless align-middle rank-table mb-0">
                                                 <thead>

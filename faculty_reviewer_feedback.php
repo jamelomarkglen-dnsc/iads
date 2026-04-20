@@ -167,7 +167,7 @@ $quickActions = [
         'icon' => 'person-plus',
         'label' => 'Assign Faculty Reviewers',
         'description' => 'Route a new subject specialist or adviser.',
-        'url' => 'assign_faculty.php',
+        'url' => 'assign_faculty_replacement.php',
     ],
     [
         'icon' => 'diagram-3',
@@ -463,7 +463,7 @@ $pageTitle = 'Faculty Management - Reviewer Feedback';
                                     <?= nl2br(htmlspecialchars($feedback['reason'] ?? 'No additional notes provided.')); ?>
                                 </div>
                                 <div class="d-flex flex-wrap gap-2 mb-4">
-                                    <a href="assign_faculty.php<?= $studentId ? '?student_id=' . (int)$studentId : ''; ?>" class="btn btn-outline-success btn-sm">
+                                    <a href="assign_faculty_replacement.php<?= $studentId ? '?student_id=' . (int)$studentId : ''; ?>" class="btn btn-outline-success btn-sm">
                                         <i class="bi bi-person-plus"></i> Assign Faculty
                                     </a>
                                     <a href="assign_panel.php<?= $studentId ? '?student_id=' . (int)$studentId : ''; ?>" class="btn btn-outline-secondary btn-sm">

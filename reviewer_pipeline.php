@@ -413,7 +413,7 @@ $insightBullets = [
                     <p class="mb-0">Monitor how every reviewer group is progressing with assigned concept titles and quickly spot bottlenecks.</p>
                 </div>
                 <div class="d-flex flex-wrap gap-2">
-                    <a href="assign_faculty.php" class="btn btn-warning text-dark fw-semibold">
+                    <a href="assign_faculty_replacement.php" class="btn btn-warning text-dark fw-semibold">
                         <i class="bi bi-diagram-3 me-1"></i> Assign Reviewers
                     </a>
                     <a href="assign_panel.php" class="btn btn-outline-light fw-semibold">
