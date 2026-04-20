@@ -505,7 +505,7 @@ if ($userLastLogin !== '') {
                         </a>
                         <?php endif; ?>
                         <a href="verify_students.php" class="nav-link <?php echo ($currentPage == 'verify_students.php') ? 'active' : ''; ?>">
-                            <i class="bi bi-person-check"></i> <span class="link-text">Verify Students</span>
+                            <i class="bi bi-person-check"></i> <span class="link-text">Student Verification</span>
                         </a>
                     <?php endif; ?>
 
@@ -542,7 +542,7 @@ if ($userLastLogin !== '') {
                         </button>
                         <div class="nav-section-links">
                             <a href="verify_faculty.php" class="nav-sub-link <?php echo ($currentPage == 'verify_faculty.php') ? 'active' : ''; ?>">
-                                Verify Faculty
+                                Faculty Verification
                             </a>
                             <a href="assign_adviser.php" class="nav-sub-link <?php echo ($currentPage == 'assign_adviser.php') ? 'active' : ''; ?>">
                                 Assign Students
@@ -643,7 +643,7 @@ if ($userLastLogin !== '') {
                         <i class="bi bi-link-45deg"></i> <span class="link-text">Registration Invites</span>
                     </a>
                     <a href="verify_program_chair.php" class="nav-link <?php echo ($currentPage == 'verify_program_chair.php') ? 'active' : ''; ?>">
-                        <i class="bi bi-person-check"></i> <span class="link-text">Verify Program Chair</span>
+                        <i class="bi bi-person-check"></i> <span class="link-text">Program Chairperson Verification</span>
                     </a>
                     <a href="dean_defense_committee.php" class="nav-link <?php echo ($currentPage == 'dean_defense_committee.php') ? 'active' : ''; ?>">
                         <i class="bi bi-clipboard-check"></i> <span class="link-text">Defense Committee</span>
