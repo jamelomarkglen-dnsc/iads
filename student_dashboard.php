@@ -284,7 +284,8 @@ $recentNotifications = fetch_user_notifications($conn, $studentId, 'student', 5)
 $finalPickMessages = array_values(array_filter(
     $recentNotifications,
     static function ($notification): bool {
-        return isset($notification['title']) && $notification['title'] === 'Final concept recommendation';
+        $title = isset($notification['title']) ? trim((string)$notification['title']) : '';
+        return in_array($title, ['Final title recommendation', 'Final concept recommendation'], true);
     }
 ));
 $latestFinalPickMessage = $finalPickMessages[0] ?? null;
@@ -294,7 +295,7 @@ if (function_exists('notifications_bootstrap')) {
 $finalPickMessageStmt = $conn->prepare("
     SELECT id, title, message, created_at
     FROM notifications
-    WHERE user_id = ? AND title = 'Final concept recommendation'
+    WHERE user_id = ? AND title IN ('Final title recommendation', 'Final concept recommendation')
     ORDER BY created_at DESC
     LIMIT 1
 ");
