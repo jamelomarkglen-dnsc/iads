@@ -70,7 +70,7 @@ $version_info = get_version_chain_info($conn, $submission_id);
     <title>View PDF Feedback - IAdS</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="pdf_annotation_styles.css?v=20260422-search12">
+    <link rel="stylesheet" href="pdf_annotation_styles.css?v=20260422-search13">
     <style>
         /* Fix sidebar overlap and improve responsiveness */
         body {
@@ -424,9 +424,7 @@ $version_info = get_version_chain_info($conn, $submission_id);
                         <div class="pdf-toolbar-right">
                             <div class="pdf-zoom-controls">
                                 <button id="zoomOutBtn" title="Zoom Out">−</button>
-                                <span id="zoomLevel">100%</span>
                                 <button id="zoomInBtn" title="Zoom In">+</button>
-                                <button id="resetZoomBtn" title="Reset Zoom">Reset</button>
                             </div>
                         </div>
                     </div>
@@ -486,7 +484,7 @@ $version_info = get_version_chain_info($conn, $submission_id);
 
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="pdf_viewer.js?v=20260422-search12"></script>
+    <script src="pdf_viewer.js?v=20260422-search13"></script>
     <script src="annotation_manager.js?v=20260421-search"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     
@@ -575,7 +573,6 @@ $version_info = get_version_chain_info($conn, $submission_id);
         // Zoom controls
         document.getElementById('zoomInBtn').addEventListener('click', () => pdfViewer.zoomIn());
         document.getElementById('zoomOutBtn').addEventListener('click', () => pdfViewer.zoomOut());
-        document.getElementById('resetZoomBtn').addEventListener('click', () => pdfViewer.resetZoom());
 
         const revisionStatusModalEl = document.getElementById('revisionStatusModal');
         const revisionStatusModal = revisionStatusModalEl ? new bootstrap.Modal(revisionStatusModalEl) : null;

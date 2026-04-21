@@ -95,7 +95,7 @@ include 'sidebar.php';
     <title>Final Defense Annotations</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="pdf_annotation_styles.css?v=20260422-search12">
+    <link rel="stylesheet" href="pdf_annotation_styles.css?v=20260422-search13">
     <style>
         body { background: #f4f8f4; font-family: "Segoe UI", Arial, sans-serif; }
         .content { margin-left: var(--sidebar-width-expanded, 240px); transition: margin-left 0.3s ease; padding: 20px; min-height: 100vh; }
@@ -187,7 +187,6 @@ include 'sidebar.php';
                             <button class="btn btn-sm btn-outline-secondary" id="nextPageBtn">Next</button>
                             <button class="btn btn-sm btn-outline-secondary" id="zoomInBtn">+</button>
                             <button class="btn btn-sm btn-outline-secondary" id="zoomOutBtn">-</button>
-                            <button class="btn btn-sm btn-outline-secondary" id="resetZoomBtn">Reset</button>
                         </div>
                     </div>
                     <?php if ($normalizedRole === 'student' && !$canAnnotate): ?>
@@ -273,7 +272,7 @@ include 'sidebar.php';
 <?php endif; ?>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="pdf_viewer.js?v=20260422-search12"></script>
+<script src="pdf_viewer.js?v=20260422-search13"></script>
 <script src="annotation_manager.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
@@ -299,7 +298,6 @@ include 'sidebar.php';
     const nextBtn = document.getElementById('nextPageBtn');
     const zoomInBtn = document.getElementById('zoomInBtn');
     const zoomOutBtn = document.getElementById('zoomOutBtn');
-    const resetZoomBtn = document.getElementById('resetZoomBtn');
     const pageJumpInput = document.getElementById('pageJumpInput');
     const pageJumpBtn = document.getElementById('pageJumpBtn');
     const pageJumpTotal = document.getElementById('pageJumpTotal');
@@ -308,7 +306,6 @@ include 'sidebar.php';
     if (nextBtn) nextBtn.addEventListener('click', () => pdfViewer.nextPage());
     if (zoomInBtn) zoomInBtn.addEventListener('click', () => pdfViewer.zoomIn());
     if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => pdfViewer.zoomOut());
-    if (resetZoomBtn) resetZoomBtn.addEventListener('click', () => pdfViewer.resetZoom());
 
     const syncPageJumpMeta = () => {
         if (!pageJumpInput || !pageJumpTotal) {

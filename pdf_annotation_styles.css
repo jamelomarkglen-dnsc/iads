@@ -112,11 +112,11 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 16px;
+    padding: 10px 14px;
     background: white;
     border-bottom: 1px solid var(--border-color);
     flex-wrap: wrap;
-    gap: 12px;
+    gap: 8px;
 }
 
 .pdf-toolbar-left {
@@ -124,12 +124,16 @@
     align-items: center;
     gap: 12px;
     flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .pdf-toolbar-right {
     display: flex;
     align-items: center;
     gap: 12px;
+    flex: 0 0 auto;
+    margin-left: auto;
 }
 
 .pdf-page-info {
@@ -141,11 +145,11 @@
 .pdf-zoom-controls {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
 
 .pdf-zoom-controls button {
-    padding: 6px 10px;
+    padding: 5px 8px;
     border: 1px solid var(--border-color);
     background: white;
     color: var(--primary-color);
@@ -165,6 +169,8 @@
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .pdf-search-label {
@@ -180,6 +186,7 @@
     overflow: hidden;
     background: white;
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03);
+    min-width: 0;
 }
 
 .pdf-search-icon {
@@ -196,7 +203,7 @@
     flex: 1 1 auto;
     border: 0;
     outline: none;
-    min-width: 220px;
+    min-width: 180px;
     padding: 8px 10px;
     font-size: 14px;
 }
@@ -226,7 +233,7 @@
 }
 
 .pdf-search-count {
-    min-width: 56px;
+    min-width: 48px;
     text-align: center;
     font-weight: 600;
     color: var(--primary-color);
@@ -236,6 +243,7 @@
     font-size: 12px;
     color: #6c757d;
     white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .pdf-search-results-panel {
