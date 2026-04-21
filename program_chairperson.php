@@ -27,12 +27,55 @@ $finalPickAlert = null;
 $endorsementAlert = null;
 $reviewerMessageAlert = null;
 
+function buildFinalPickRecommendationMessage(array $data): string
+{
+    $studentName = trim((string)($data['student_name'] ?? 'Student'));
+    $finalTitle = trim((string)($data['final_title'] ?? 'Final title'));
+    $avgScore = trim((string)($data['avg_score'] ?? '0'));
+    $reviewCount = trim((string)($data['review_count'] ?? '0'));
+
+    $normalizeTitle = static function ($value): string {
+        $value = trim((string)$value);
+        return $value !== '' ? $value : 'No additional scored title available';
+    };
+    $formatScore = static function ($value): string {
+        $value = trim((string)$value);
+        return ($value !== '' && $value !== '0') ? "{$value}/5" : 'n/a';
+    };
+
+    $topOneTitle = $normalizeTitle($data['top_one_title'] ?? '');
+    $topTwoTitle = $normalizeTitle($data['top_two_title'] ?? '');
+    $topThreeTitle = $normalizeTitle($data['top_three_title'] ?? '');
+    $topOneScore = $formatScore($data['top_one_score'] ?? '');
+    $topTwoScore = $formatScore($data['top_two_score'] ?? '');
+    $topThreeScore = $formatScore($data['top_three_score'] ?? '');
+    $avgLabel = ($avgScore !== '' && $avgScore !== '0') ? "{$avgScore}/5" : 'n/a';
+    $reviewLabel = ($reviewCount !== '' && $reviewCount !== '0') ? $reviewCount : '0';
+
+    return sprintf(
+        'Hi %s, based on the title ranking board, the recommended title to pursue is "%s". Final average score: %s from %s review(s). Top-scoring titles: 1) %s (%s), 2) %s (%s), 3) %s (%s). Your title is recommended.',
+        $studentName,
+        $finalTitle,
+        $avgLabel,
+        $reviewLabel,
+        $topOneTitle,
+        $topOneScore,
+        $topTwoTitle,
+        $topTwoScore,
+        $topThreeTitle,
+        $topThreeScore
+    );
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_final_pick_message'])) {
     $studentId = (int)($_POST['student_id'] ?? 0);
     $studentName = trim((string)($_POST['student_name'] ?? 'the student'));
     $finalTitle = trim((string)($_POST['final_title'] ?? ''));
     $conceptId = (int)($_POST['concept_id'] ?? 0);
     $messageBody = trim(strip_tags((string)($_POST['final_pick_message'] ?? '')));
+    if ($messageBody === '') {
+        $messageBody = buildFinalPickRecommendationMessage($_POST);
+    }
 
     if ($studentId <= 0 || $finalTitle === '') {
         $finalPickAlert = ['type' => 'danger', 'message' => 'Unable to send the final recommendation. Missing student or title details.'];
@@ -42,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_final_pick_messa
         notify_user(
             $conn,
             $studentId,
-            'Final concept recommendation',
+            'Final title recommendation',
             $messageBody,
             'student_dashboard.php'
         );
@@ -1904,28 +1947,26 @@ if ($endorsementStmt) {
                                                 </td>
                                                 <td class="text-end">
                                                     <?php if ($rankingComplete): ?>
-                                                        <button
-                                                            type="button"
-                                                            class="btn btn-success btn-sm final-pick-btn"
-                                                            data-bs-toggle="modal"
-                                                            data-bs-target="#finalPickModal"
-                                                            data-student-id="<?= (int)$pick['student_id']; ?>"
-                                                            data-student-name="<?= htmlspecialchars($pick['student_name'], ENT_QUOTES); ?>"
-                                                            data-student-email="<?= htmlspecialchars($pick['student_email'] ?: 'Not available', ENT_QUOTES); ?>"
-                                                            data-final-title="<?= htmlspecialchars($pick['title'], ENT_QUOTES); ?>"
-                                                            data-concept-id="<?= (int)$pick['concept_id']; ?>"
-                                                            data-avg-score="<?= htmlspecialchars(number_format((float)($pick['avg_score'] ?? 0), 1), ENT_QUOTES); ?>"
-                                                            data-review-count="<?= (int)($pick['review_count'] ?? 0); ?>"
-                                                            data-top-one-title="<?= htmlspecialchars($pick['top_one_title'] ?? '', ENT_QUOTES); ?>"
-                                                            data-top-two-title="<?= htmlspecialchars($pick['top_two_title'] ?? '', ENT_QUOTES); ?>"
-                                                            data-top-three-title="<?= htmlspecialchars($pick['top_three_title'] ?? '', ENT_QUOTES); ?>"
-                                                            data-top-one-score="<?= htmlspecialchars(number_format((float)($pick['top_one_score'] ?? 0), 1), ENT_QUOTES); ?>"
-                                                            data-top-two-score="<?= htmlspecialchars(number_format((float)($pick['top_two_score'] ?? 0), 1), ENT_QUOTES); ?>"
-                                                            data-top-three-score="<?= htmlspecialchars(number_format((float)($pick['top_three_score'] ?? 0), 1), ENT_QUOTES); ?>"
-                                                            data-has-tie="<?= !empty($pick['has_tie_on_top']) ? '1' : '0'; ?>"
-                                                        >
-                                                            Message student
-                                                        </button>
+                                                        <form method="POST" class="d-inline">
+                                                            <input type="hidden" name="send_final_pick_message" value="1">
+                                                            <input type="hidden" name="student_id" value="<?= (int)$pick['student_id']; ?>">
+                                                            <input type="hidden" name="student_name" value="<?= htmlspecialchars($pick['student_name'], ENT_QUOTES); ?>">
+                                                            <input type="hidden" name="student_email" value="<?= htmlspecialchars($pick['student_email'] ?: 'Not available', ENT_QUOTES); ?>">
+                                                            <input type="hidden" name="final_title" value="<?= htmlspecialchars($pick['title'], ENT_QUOTES); ?>">
+                                                            <input type="hidden" name="concept_id" value="<?= (int)$pick['concept_id']; ?>">
+                                                            <input type="hidden" name="avg_score" value="<?= htmlspecialchars(number_format((float)($pick['avg_score'] ?? 0), 1), ENT_QUOTES); ?>">
+                                                            <input type="hidden" name="review_count" value="<?= (int)($pick['review_count'] ?? 0); ?>">
+                                                            <input type="hidden" name="top_one_title" value="<?= htmlspecialchars($pick['top_one_title'] ?? '', ENT_QUOTES); ?>">
+                                                            <input type="hidden" name="top_two_title" value="<?= htmlspecialchars($pick['top_two_title'] ?? '', ENT_QUOTES); ?>">
+                                                            <input type="hidden" name="top_three_title" value="<?= htmlspecialchars($pick['top_three_title'] ?? '', ENT_QUOTES); ?>">
+                                                            <input type="hidden" name="top_one_score" value="<?= htmlspecialchars(number_format((float)($pick['top_one_score'] ?? 0), 1), ENT_QUOTES); ?>">
+                                                            <input type="hidden" name="top_two_score" value="<?= htmlspecialchars(number_format((float)($pick['top_two_score'] ?? 0), 1), ENT_QUOTES); ?>">
+                                                            <input type="hidden" name="top_three_score" value="<?= htmlspecialchars(number_format((float)($pick['top_three_score'] ?? 0), 1), ENT_QUOTES); ?>">
+                                                            <input type="hidden" name="has_tie" value="<?= !empty($pick['has_tie_on_top']) ? '1' : '0'; ?>">
+                                                            <button type="submit" class="btn btn-success btn-sm">
+                                                                Send Recommendation
+                                                            </button>
+                                                        </form>
                                                     <?php else: ?>
                                                         <button type="button" class="btn btn-outline-secondary btn-sm" disabled>
                                                             Waiting scores
@@ -2260,7 +2301,7 @@ if ($endorsementStmt) {
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-success">Send</button>
+                <button type="submit" class="btn btn-success">Send Recommendation</button>
             </div>
         </form>
     </div>
@@ -2600,7 +2641,7 @@ if ($endorsementStmt) {
             const topThreeLabel = `${normalizeTitle(topThreeTitle)} (${formatScore(topThreeScore)})`;
             const avgLabel = avgScore && avgScore !== '0' ? `${avgScore}/5` : 'n/a';
             const reviewLabel = reviewCount && reviewCount !== '0' ? reviewCount : '0';
-            textarea.value = `Hi ${studentName}, based on the concept ranking board, the recommended title to pursue is "${finalTitle}". Final average score: ${avgLabel} from ${reviewLabel} review(s). Top-scoring titles: 1) ${topOneLabel}, 2) ${topTwoLabel}, 3) ${topThreeLabel}. Your title is recommended.`;
+            textarea.value = `Hi ${studentName}, based on the title ranking board, the recommended title to pursue is "${finalTitle}". Final average score: ${avgLabel} from ${reviewLabel} review(s). Top-scoring titles: 1) ${topOneLabel}, 2) ${topTwoLabel}, 3) ${topThreeLabel}. Your title is recommended.`;
         };
 
         document.querySelectorAll('.final-pick-btn').forEach((button) => {
