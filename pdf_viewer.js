@@ -125,7 +125,6 @@ class PDFViewer {
                 </div>
                 <div class="pdf-search-results-header-actions">
                     <span class="pdf-search-results-count">0</span>
-                    <button type="button" class="pdf-search-results-toggle" aria-label="Hide search results" title="Hide search results">Hide</button>
                 </div>
             </div>
             <div class="pdf-search-results-list">
@@ -135,10 +134,6 @@ class PDFViewer {
         container.appendChild(this.searchResultsPanel);
         this.searchResultsList = this.searchResultsPanel.querySelector('.pdf-search-results-list');
         this.searchResultsCount = this.searchResultsPanel.querySelector('.pdf-search-results-count');
-        this.searchResultsToggleBtn = this.searchResultsPanel.querySelector('.pdf-search-results-toggle');
-        if (this.searchResultsToggleBtn) {
-            this.searchResultsToggleBtn.addEventListener('click', () => this.toggleSearchResultsPanel());
-        }
 
         this.searchResultsDockBtn = document.createElement('button');
         this.searchResultsDockBtn.type = 'button';
