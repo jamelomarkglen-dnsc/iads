@@ -1197,6 +1197,45 @@ if ($endorsementStmt) {
         .ranking-board-shell {
             grid-template-columns: 1fr !important;
         }
+        .reviewer-feedback-card .reviewer-feedback-table {
+            table-layout: fixed;
+            width: 100%;
+        }
+        .reviewer-feedback-card .reviewer-feedback-table thead th {
+            padding: 0.35rem 0.45rem;
+            font-size: 0.72rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .reviewer-feedback-card .reviewer-feedback-table tbody td {
+            padding: 0.35rem 0.45rem;
+            vertical-align: middle;
+            font-size: 0.9rem;
+            line-height: 1.1;
+        }
+        .reviewer-feedback-card .reviewer-feedback-table td:nth-child(1) { width: 18%; }
+        .reviewer-feedback-card .reviewer-feedback-table td:nth-child(2) { width: 10%; }
+        .reviewer-feedback-card .reviewer-feedback-table td:nth-child(3) { width: 40%; }
+        .reviewer-feedback-card .reviewer-feedback-table td:nth-child(4) { width: 16%; }
+        .reviewer-feedback-card .reviewer-feedback-table td:nth-child(5) { width: 16%; }
+        .reviewer-feedback-card .feedback-note {
+            display: block;
+            max-width: 100%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .reviewer-feedback-card .reviewer-message-btn {
+            padding: 0.3rem 0.65rem;
+            font-size: 0.8rem;
+            line-height: 1.1;
+            min-width: 105px;
+            white-space: nowrap;
+        }
+        .reviewer-feedback-card .badge {
+            font-size: 0.7rem;
+        }
     </style>
     <div class="container-fluid py-4">
         <div class="mb-4">
