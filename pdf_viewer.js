@@ -39,6 +39,7 @@ class PDFViewer {
         this.searchResultsList = null;
         this.searchResultsCount = null;
         this.searchResultsToggleBtn = null;
+        this.searchResultsDockBtn = null;
         this.searchResultsCollapsed = false;
         this.searchDebounceTimer = null;
         this.searchToken = 0;
@@ -138,6 +139,16 @@ class PDFViewer {
         if (this.searchResultsToggleBtn) {
             this.searchResultsToggleBtn.addEventListener('click', () => this.toggleSearchResultsPanel());
         }
+
+        this.searchResultsDockBtn = document.createElement('button');
+        this.searchResultsDockBtn.type = 'button';
+        this.searchResultsDockBtn.className = 'pdf-search-results-dock-toggle';
+        this.searchResultsDockBtn.textContent = 'Hide';
+        this.searchResultsDockBtn.setAttribute('aria-label', 'Hide search results');
+        this.searchResultsDockBtn.title = 'Hide search results';
+        this.searchResultsDockBtn.addEventListener('click', () => this.toggleSearchResultsPanel());
+        container.appendChild(this.searchResultsDockBtn);
+
         this.canvasWrapper = canvasWrapper;
         this.scrollToTop();
     }
@@ -652,6 +663,11 @@ class PDFViewer {
             this.searchResultsToggleBtn.setAttribute('aria-label', nextState ? 'Show search results' : 'Hide search results');
             this.searchResultsToggleBtn.title = nextState ? 'Show search results' : 'Hide search results';
             this.searchResultsToggleBtn.textContent = nextState ? 'Show' : 'Hide';
+        }
+        if (this.searchResultsDockBtn) {
+            this.searchResultsDockBtn.textContent = nextState ? 'Show' : 'Hide';
+            this.searchResultsDockBtn.setAttribute('aria-label', nextState ? 'Show search results' : 'Hide search results');
+            this.searchResultsDockBtn.title = nextState ? 'Show search results' : 'Hide search results';
         }
         if (this.canvasWrapper) {
             this.canvasWrapper.classList.toggle('search-results-collapsed', nextState);

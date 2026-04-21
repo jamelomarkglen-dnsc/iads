@@ -261,6 +261,29 @@
     display: none;
 }
 
+.pdf-search-results-dock-toggle {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 30;
+    min-width: 0;
+    padding: 4px 8px;
+    border: 0;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--primary-color);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.pdf-search-results-dock-toggle:hover {
+    opacity: 0.85;
+    transform: translateY(-1px);
+}
+
 .pdf-search-results-header {
     display: flex;
     align-items: flex-start;
