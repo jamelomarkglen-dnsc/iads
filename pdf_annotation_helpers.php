@@ -14,7 +14,7 @@ require_once 'db.php';
 // =====================================================
 function create_annotation(mysqli $conn, $submission_id, $adviser_id, $annotation_type, $annotation_content, $page_number, $x_coordinate, $y_coordinate, $selected_text = null, $position_width = 5, $position_height = 5) {
     // Validate annotation type
-    $valid_types = ['comment'];
+    $valid_types = ['comment', 'highlight', 'suggestion'];
     if (!in_array($annotation_type, $valid_types)) {
         return ['success' => false, 'error' => 'Invalid annotation type.'];
     }
@@ -138,7 +138,7 @@ function fetch_submission_annotations(mysqli $conn, $submission_id) {
         FROM pdf_annotations pa
         LEFT JOIN users u ON pa.adviser_id = u.id
         LEFT JOIN annotation_replies ar ON pa.annotation_id = ar.annotation_id
-        WHERE pa.submission_id = ? AND pa.annotation_type = 'comment'
+        WHERE pa.submission_id = ?
         GROUP BY pa.annotation_id
         ORDER BY pa.page_number ASC, pa.creation_timestamp ASC
     ";
@@ -181,7 +181,7 @@ function fetch_page_annotations(mysqli $conn, $submission_id, $page_number) {
         FROM pdf_annotations pa
         LEFT JOIN users u ON pa.adviser_id = u.id
         LEFT JOIN annotation_replies ar ON pa.annotation_id = ar.annotation_id
-        WHERE pa.submission_id = ? AND pa.page_number = ? AND pa.annotation_type = 'comment'
+        WHERE pa.submission_id = ? AND pa.page_number = ?
         GROUP BY pa.annotation_id
         ORDER BY pa.creation_timestamp ASC
     ";
@@ -403,14 +403,26 @@ function fetch_annotation_replies(mysqli $conn, $annotation_id) {
 // FUNCTION: Get annotation type label
 // =====================================================
 function get_annotation_type_label($type) {
-    return 'Comment';
+    $labels = [
+        'comment' => 'Comment',
+        'highlight' => 'Highlight',
+        'suggestion' => 'Suggestion'
+    ];
+
+    return $labels[$type] ?? ucfirst((string)$type);
 }
 
 // =====================================================
 // FUNCTION: Get annotation type badge class
 // =====================================================
 function get_annotation_type_class($type) {
-    return 'badge bg-primary';
+    $classes = [
+        'comment' => 'badge bg-primary',
+        'highlight' => 'badge bg-warning text-dark',
+        'suggestion' => 'badge bg-info text-dark'
+    ];
+
+    return $classes[$type] ?? 'badge bg-secondary';
 }
 
 // =====================================================
@@ -443,7 +455,13 @@ function get_annotation_status_class($status) {
 // FUNCTION: Get annotation color code
 // =====================================================
 function get_annotation_color($type) {
-    return '#FFD700';
+    $colors = [
+        'comment' => '#FFD700',
+        'highlight' => '#0d6efd',
+        'suggestion' => '#198754'
+    ];
+
+    return $colors[$type] ?? '#FFD700';
 }
 
 // =====================================================
@@ -462,7 +480,7 @@ function get_annotation_statistics(mysqli $conn, $submission_id) {
         FROM pdf_submissions ps
         LEFT JOIN pdf_annotations pa ON ps.submission_id = pa.submission_id
         LEFT JOIN annotation_replies ar ON pa.annotation_id = ar.annotation_id
-        WHERE ps.submission_id = ? AND (pa.annotation_type = 'comment' OR pa.annotation_id IS NULL)
+        WHERE ps.submission_id = ?
     ";
     
     $stmt = $conn->prepare($sql);
@@ -499,7 +517,7 @@ function get_adviser_annotations(mysqli $conn, $submission_id, $adviser_id) {
             COUNT(ar.reply_id) AS reply_count
         FROM pdf_annotations pa
         LEFT JOIN annotation_replies ar ON pa.annotation_id = ar.annotation_id
-        WHERE pa.submission_id = ? AND pa.adviser_id = ? AND pa.annotation_type = 'comment'
+        WHERE pa.submission_id = ? AND pa.adviser_id = ?
         GROUP BY pa.annotation_id
         ORDER BY pa.creation_timestamp DESC
     ";

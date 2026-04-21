@@ -21,9 +21,23 @@ class PDFViewer {
         this.scale = options.scale || 1.5;
         this.canvas = null;
         this.ctx = null;
+        this.textLayer = null;
         this.isLoading = false;
         this.annotations = [];
         this.onAnnotationClick = options.onAnnotationClick || null;
+        this.searchQuery = '';
+        this.searchRawQuery = '';
+        this.searchMatches = [];
+        this.currentSearchIndex = -1;
+        this.searchInput = null;
+        this.searchCount = null;
+        this.searchStatus = null;
+        this.searchPrevBtn = null;
+        this.searchNextBtn = null;
+        this.searchClearBtn = null;
+        this.searchDebounceTimer = null;
+        this.searchToken = 0;
+        this.pageTextCache = new Map();
         
         this.init();
     }
@@ -47,6 +61,7 @@ class PDFViewer {
             
             // Create canvas
             this.createCanvas();
+            this.setupSearchControls();
             
             // Render first page
             await this.renderPage(1);
@@ -86,13 +101,603 @@ class PDFViewer {
         this.canvas = document.createElement('canvas');
         this.canvas.className = 'pdf-canvas';
         this.ctx = this.canvas.getContext('2d');
-        
+
         canvasWrapper.appendChild(this.canvas);
+
+        this.textLayer = document.createElement('div');
+        this.textLayer.className = 'pdf-text-layer';
+        canvasWrapper.appendChild(this.textLayer);
+
         container.appendChild(canvasWrapper);
         this.canvasWrapper = canvasWrapper;
         this.scrollToTop();
     }
-    
+
+    /**
+     * Setup WPS-style PDF search controls
+     */
+    setupSearchControls() {
+        const toolbarLeft = document.querySelector('.pdf-toolbar-left');
+        if (!toolbarLeft || toolbarLeft.querySelector('.pdf-search-controls')) {
+            return;
+        }
+
+        const searchControls = document.createElement('div');
+        searchControls.className = 'pdf-search-controls';
+        searchControls.innerHTML = `
+            <label class="small text-muted mb-0 pdf-search-label">Find</label>
+            <div class="pdf-search-box">
+                <span class="pdf-search-icon" aria-hidden="true">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input type="search" class="pdf-search-input" placeholder="Search words or letters" aria-label="Search in PDF">
+                <button type="button" class="pdf-search-btn pdf-search-prev" title="Previous match" aria-label="Previous match">
+                    <i class="bi bi-chevron-up"></i>
+                </button>
+                <button type="button" class="pdf-search-btn pdf-search-next" title="Next match" aria-label="Next match">
+                    <i class="bi bi-chevron-down"></i>
+                </button>
+                <button type="button" class="pdf-search-btn pdf-search-clear" title="Clear search" aria-label="Clear search">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <span class="pdf-search-count">0/0</span>
+            <span class="pdf-search-status">Type to search</span>
+        `;
+
+        toolbarLeft.appendChild(searchControls);
+
+        this.searchInput = searchControls.querySelector('.pdf-search-input');
+        this.searchCount = searchControls.querySelector('.pdf-search-count');
+        this.searchStatus = searchControls.querySelector('.pdf-search-status');
+        this.searchPrevBtn = searchControls.querySelector('.pdf-search-prev');
+        this.searchNextBtn = searchControls.querySelector('.pdf-search-next');
+        this.searchClearBtn = searchControls.querySelector('.pdf-search-clear');
+
+        if (this.searchInput) {
+            this.searchInput.addEventListener('input', () => this.debouncedSearch(this.searchInput.value));
+            this.searchInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    this.searchNow(this.searchInput.value);
+                } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    this.clearSearch();
+                    this.searchInput.value = '';
+                }
+            });
+        }
+
+        if (this.searchPrevBtn) {
+            this.searchPrevBtn.addEventListener('click', () => this.previousSearchMatch());
+        }
+
+        if (this.searchNextBtn) {
+            this.searchNextBtn.addEventListener('click', () => this.nextSearchMatch());
+        }
+
+        if (this.searchClearBtn) {
+            this.searchClearBtn.addEventListener('click', () => {
+                if (this.searchInput) {
+                    this.searchInput.value = '';
+                }
+                this.clearSearch();
+            });
+        }
+
+        this.updateSearchControls();
+    }
+
+    /**
+     * Debounce search input
+     */
+    debouncedSearch(query) {
+        clearTimeout(this.searchDebounceTimer);
+        this.searchDebounceTimer = setTimeout(() => {
+            this.searchNow(query);
+        }, 250);
+    }
+
+    /**
+     * Normalize search text for matching
+     */
+    normalizeSearchText(text) {
+        return String(text || '')
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    /**
+     * Escape HTML for safe text rendering
+     */
+    escapeHtml(text) {
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    /**
+     * Escape text for use inside a regular expression
+     */
+    escapeRegExp(text) {
+        return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    /**
+     * Build a whole-word search pattern for a query
+     */
+    buildSearchPattern(query) {
+        const normalizedQuery = this.normalizeSearchText(query);
+        if (!normalizedQuery) {
+            return null;
+        }
+
+        const parts = normalizedQuery.split(' ').filter(Boolean).map(part => this.escapeRegExp(part));
+        if (!parts.length) {
+            return null;
+        }
+
+        const pattern = parts.join('\\s*');
+        return new RegExp(`(^|[^\\w])(${pattern})(?=$|[^\\w])`, 'gi');
+    }
+
+    /**
+     * Find all occurrences of a needle in a haystack
+     */
+    findOccurrences(haystack, needle) {
+        const matches = [];
+        if (!haystack || !needle) {
+            return matches;
+        }
+
+        let index = 0;
+        while (index >= 0) {
+            index = haystack.indexOf(needle, index);
+            if (index === -1) {
+                break;
+            }
+            matches.push(index);
+            index += Math.max(1, needle.length);
+        }
+
+        return matches;
+    }
+
+    /**
+     * Clear all search state
+     */
+    clearSearch() {
+        this.searchToken += 1;
+        this.searchQuery = '';
+        this.searchRawQuery = '';
+        this.searchMatches = [];
+        this.currentSearchIndex = -1;
+        this.clearSearchHighlights();
+        this.updateSearchControls();
+        if (this.pdfDoc && this.currentPage) {
+            void this.renderTextLayer(this.currentPage);
+        }
+    }
+
+    /**
+     * Search now
+     */
+    async searchNow(query) {
+        const rawQuery = String(query || '').trim();
+        const normalizedQuery = this.normalizeSearchText(rawQuery);
+        this.searchRawQuery = rawQuery;
+        this.searchQuery = normalizedQuery;
+        this.searchToken += 1;
+        const token = this.searchToken;
+
+        if (!normalizedQuery) {
+            this.clearSearch();
+            return;
+        }
+
+        this.searchMatches = [];
+        this.currentSearchIndex = -1;
+        this.updateSearchControls(true);
+
+        if (!this.pdfDoc || !this.totalPages) {
+            this.updateSearchControls();
+            return;
+        }
+
+        try {
+            for (let pageNum = 1; pageNum <= this.totalPages; pageNum += 1) {
+                if (token !== this.searchToken) {
+                    return;
+                }
+                const pageMatches = await this.findMatchesInPage(pageNum, normalizedQuery);
+                this.searchMatches.push(...pageMatches);
+            }
+
+            if (token !== this.searchToken) {
+                return;
+            }
+
+            this.searchMatches.sort((a, b) => {
+                if (a.pageNumber !== b.pageNumber) {
+                    return a.pageNumber - b.pageNumber;
+                }
+                if (a.startIndex !== b.startIndex) {
+                    return a.startIndex - b.startIndex;
+                }
+                return (a.occurrenceIndex || 0) - (b.occurrenceIndex || 0);
+            });
+
+            this.currentSearchIndex = this.searchMatches.length > 0 ? 0 : -1;
+            this.updateSearchControls();
+
+            if (this.currentSearchIndex >= 0) {
+                await this.goToSearchMatch(this.currentSearchIndex);
+            } else {
+                this.clearSearchHighlights();
+            }
+        } catch (error) {
+            console.error('Error searching PDF:', error);
+            this.updateSearchControls();
+        }
+    }
+
+    /**
+     * Find matches in a specific page
+     */
+    async findMatchesInPage(pageNum, normalizedQuery) {
+        if (this.pageTextCache.has(pageNum)) {
+            return this.collectPageMatches(pageNum, this.pageTextCache.get(pageNum), normalizedQuery, this.searchRawQuery);
+        }
+
+        const page = await this.pdfDoc.getPage(pageNum);
+        const index = await this.buildPageTextIndex(page);
+        this.pageTextCache.set(pageNum, index);
+        return this.collectPageMatches(pageNum, index, normalizedQuery, this.searchRawQuery);
+    }
+
+    /**
+     * Build a searchable page text index with item offsets
+     */
+    async buildPageTextIndex(page) {
+        const textContent = await page.getTextContent();
+        const items = [];
+        let fullText = '';
+        let cursor = 0;
+
+        (textContent.items || []).forEach((item, itemIndex) => {
+            const str = String(item.str || '');
+            const start = cursor;
+            const end = start + str.length;
+
+            items.push({
+                itemIndex,
+                str,
+                transform: item.transform,
+                width: item.width || 0,
+                height: item.height || 0,
+                start,
+                end
+            });
+
+            fullText += str;
+            cursor = end;
+        });
+
+        return { items, fullText };
+    }
+
+    /**
+     * Collect matching items for a page
+     */
+    collectPageMatches(pageNum, cachedPage, normalizedQuery, rawQuery) {
+        const matches = [];
+        const items = cachedPage?.items || [];
+        const fullText = String(cachedPage?.fullText || '');
+        if (!items.length || !fullText) {
+            return matches;
+        }
+
+        const regex = this.buildSearchPattern(rawQuery || normalizedQuery);
+        if (!regex) {
+            return matches;
+        }
+
+        let occurrenceIndex = 0;
+        let match;
+        while ((match = regex.exec(fullText)) !== null) {
+            const queryIndex = match.index + (match[1] ? match[1].length : 0);
+            const queryText = match[2] || '';
+            const startIndex = queryIndex;
+            const endIndex = startIndex + queryText.length;
+
+            matches.push({
+                pageNumber: pageNum,
+                occurrenceIndex: occurrenceIndex++,
+                text: queryText,
+                startIndex,
+                endIndex,
+                queryLength: queryText.length,
+                itemRanges: items
+                    .filter(item => item.end > startIndex && item.start < endIndex)
+                    .map(item => ({
+                        itemIndex: item.itemIndex,
+                        startOffset: Math.max(0, startIndex - item.start),
+                        endOffset: Math.min(item.str.length, endIndex - item.start),
+                        item
+                    }))
+            });
+        }
+
+        return matches;
+    }
+
+    /**
+     * Estimate text item rectangle in viewport coordinates
+     */
+    getTextItemRect(item, viewport) {
+        if (!item || !item.transform || !viewport || !pdfjsLib?.Util) {
+            return null;
+        }
+
+        try {
+            const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+            const x = tx[4];
+            const y = tx[5];
+            const height = Math.max(Math.hypot(tx[2], tx[3]) || 0, item.height || 0, 10);
+            const width = Math.max(item.width || 0, 1) * this.scale;
+            return {
+                left: x,
+                top: y - height,
+                width,
+                height: height + 2
+            };
+        } catch (error) {
+            console.warn('Unable to calculate search highlight bounds:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Move to the previous search result
+     */
+    async previousSearchMatch() {
+        if (!this.searchMatches.length) {
+            return;
+        }
+
+        this.currentSearchIndex = (this.currentSearchIndex - 1 + this.searchMatches.length) % this.searchMatches.length;
+        await this.goToSearchMatch(this.currentSearchIndex);
+    }
+
+    /**
+     * Move to the next search result
+     */
+    async nextSearchMatch() {
+        if (!this.searchMatches.length) {
+            return;
+        }
+
+        this.currentSearchIndex = (this.currentSearchIndex + 1) % this.searchMatches.length;
+        await this.goToSearchMatch(this.currentSearchIndex);
+    }
+
+    /**
+     * Go to a specific search result
+     */
+    async goToSearchMatch(index, silent = false) {
+        const match = this.searchMatches[index];
+        if (!match) {
+            return;
+        }
+
+        if (this.currentPage !== match.pageNumber) {
+            await this.renderPage(match.pageNumber);
+        } else {
+            await this.renderTextLayer(this.currentPage);
+        }
+
+        this.currentSearchIndex = index;
+        this.updateSearchControls();
+
+        const activeOverlay = this.textLayer?.querySelector(`.pdf-search-hit[data-search-index="${index}"]`);
+        if (activeOverlay) {
+            activeOverlay.classList.add('active');
+            if (!silent) {
+                setTimeout(() => {
+                    activeOverlay.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                }, 150);
+            }
+        }
+    }
+
+    /**
+     * Render search highlights for the current page
+     */
+    renderSearchHighlights(pageNum) {
+        return this.renderTextLayer(pageNum);
+    }
+
+    /**
+     * Render a searchable text layer over the current page
+     */
+    async renderTextLayer(pageNum) {
+        if (!this.textLayer || !this.pdfDoc || !this.canvas) {
+            return;
+        }
+
+        this.textLayer.innerHTML = '';
+
+        const page = await this.pdfDoc.getPage(pageNum);
+        const viewport = page.getViewport({ scale: this.scale });
+        this.currentViewport = viewport;
+
+        const cachedPage = this.pageTextCache.get(pageNum);
+        let items = cachedPage?.items || [];
+        if (!items.length) {
+            const textContent = await page.getTextContent();
+            items = (textContent.items || []).map((item, itemIndex) => ({
+                itemIndex,
+                str: item.str || '',
+                transform: item.transform,
+                width: item.width || 0,
+                height: item.height || 0
+            }));
+            this.pageTextCache.set(pageNum, { items });
+        }
+
+        const pageMatches = this.searchQuery
+            ? this.searchMatches.filter(match => match.pageNumber === pageNum)
+            : [];
+        const activeMatch = this.searchMatches[this.currentSearchIndex] || null;
+
+        const itemMatchMap = new Map();
+        pageMatches.forEach((match) => {
+            (match.itemRanges || []).forEach((range) => {
+                if (!range || range.startOffset >= range.endOffset) {
+                    return;
+                }
+                if (!itemMatchMap.has(range.itemIndex)) {
+                    itemMatchMap.set(range.itemIndex, []);
+                }
+                itemMatchMap.get(range.itemIndex).push({
+                    matchIndex: range.startOffset,
+                    matchLength: range.endOffset - range.startOffset,
+                    occurrenceIndex: match.occurrenceIndex,
+                    startIndex: match.startIndex,
+                    endIndex: match.endIndex,
+                    pageNumber: match.pageNumber
+                });
+            });
+        });
+
+        items.forEach((item) => {
+            const span = document.createElement('span');
+            span.className = 'pdf-text-span';
+            span.dataset.itemIndex = String(item.itemIndex);
+            span.dataset.originalText = item.str || '';
+            span.style.position = 'absolute';
+            span.style.whiteSpace = 'pre';
+            span.style.transformOrigin = '0 0';
+            span.style.pointerEvents = 'none';
+            span.style.color = 'transparent';
+            span.style.webkitTextFillColor = 'transparent';
+
+            if (item.transform && pdfjsLib?.Util) {
+                const tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+                span.style.transform = `matrix(${tx[0]}, ${tx[1]}, ${tx[2]}, ${tx[3]}, ${tx[4]}, ${tx[5]})`;
+                span.style.fontSize = `${Math.max(1, Math.hypot(tx[2], tx[3]) || 1)}px`;
+            } else {
+                span.style.left = '0px';
+                span.style.top = '0px';
+                span.style.fontSize = '12px';
+            }
+
+            const itemMatches = itemMatchMap.get(item.itemIndex) || [];
+            if (!itemMatches.length) {
+                span.textContent = item.str || '';
+                this.textLayer.appendChild(span);
+                return;
+            }
+
+            const rawText = String(item.str || '');
+            const sortedMatches = itemMatches.slice().sort((a, b) => {
+                if (a.matchIndex !== b.matchIndex) {
+                    return a.matchIndex - b.matchIndex;
+                }
+                return (a.occurrenceIndex || 0) - (b.occurrenceIndex || 0);
+            });
+
+            const fragments = [];
+            let cursor = 0;
+            sortedMatches.forEach((match) => {
+                const start = match.matchIndex;
+                const end = start + match.matchLength;
+                if (start < cursor) {
+                    return;
+                }
+                fragments.push(this.escapeHtml(rawText.slice(cursor, start)));
+                const globalIndex = this.searchMatches.findIndex(candidate =>
+                    candidate.pageNumber === pageNum &&
+                    candidate.startIndex === match.startIndex &&
+                    candidate.endIndex === match.endIndex &&
+                    candidate.occurrenceIndex === match.occurrenceIndex
+                );
+                const isActive = activeMatch &&
+                    activeMatch.pageNumber === pageNum &&
+                    activeMatch.startIndex === match.startIndex &&
+                    activeMatch.endIndex === match.endIndex &&
+                    activeMatch.occurrenceIndex === match.occurrenceIndex;
+                fragments.push(`<mark class="pdf-search-hit${isActive ? ' active' : ''}" data-search-index="${globalIndex}">${this.escapeHtml(rawText.slice(start, end))}</mark>`);
+                cursor = end;
+            });
+            fragments.push(this.escapeHtml(rawText.slice(cursor)));
+
+            span.innerHTML = fragments.join('');
+            this.textLayer.appendChild(span);
+        });
+
+        const currentMatch = this.searchMatches[this.currentSearchIndex];
+        if (currentMatch && currentMatch.pageNumber === pageNum) {
+            const activeHighlight = this.textLayer.querySelector(`.pdf-search-hit[data-search-index="${this.currentSearchIndex}"]`);
+            if (activeHighlight) {
+                activeHighlight.classList.add('active');
+                if (!this.isLoading) {
+                    setTimeout(() => {
+                        activeHighlight.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                    }, 150);
+                }
+            }
+        }
+    }
+
+    /**
+     * Remove search highlight overlays
+     */
+    clearSearchHighlights() {
+        if (this.textLayer) {
+            this.textLayer.innerHTML = '';
+        }
+    }
+
+    /**
+     * Update search control text
+     */
+    updateSearchControls(isSearching = false) {
+        const totalMatches = this.searchMatches.length;
+        const currentMatch = this.currentSearchIndex >= 0 ? this.currentSearchIndex + 1 : 0;
+
+        if (this.searchCount) {
+            this.searchCount.textContent = `${currentMatch}/${totalMatches}`;
+        }
+
+        if (this.searchStatus) {
+            if (isSearching) {
+                this.searchStatus.textContent = 'Searching...';
+            } else if (!this.searchQuery) {
+                this.searchStatus.textContent = 'Type to search';
+            } else if (totalMatches === 0) {
+                this.searchStatus.textContent = 'No matches';
+            } else {
+                this.searchStatus.textContent = 'Match found';
+            }
+        }
+
+        const hasMatches = totalMatches > 0;
+        if (this.searchPrevBtn) {
+            this.searchPrevBtn.disabled = !hasMatches;
+        }
+        if (this.searchNextBtn) {
+            this.searchNextBtn.disabled = !hasMatches;
+        }
+        if (this.searchClearBtn) {
+            this.searchClearBtn.disabled = !this.searchQuery;
+        }
+    }
+
     /**
      * Render specific page
      */
@@ -107,6 +712,7 @@ class PDFViewer {
             
             // Set canvas dimensions
             const viewport = page.getViewport({ scale: this.scale });
+            this.currentViewport = viewport;
             this.canvas.width = viewport.width;
             this.canvas.height = viewport.height;
             
@@ -120,6 +726,7 @@ class PDFViewer {
             
             this.currentPage = pageNum;
             this.updatePageInfo();
+            await this.renderSearchHighlights(pageNum);
             this.renderAnnotations(pageNum);
             this.scrollToTop();
             
@@ -228,13 +835,12 @@ class PDFViewer {
      * Create annotation overlay element
      */
     createAnnotationOverlay(annotation) {
-        if (annotation.annotation_type !== 'comment') {
-            return null;
-        }
         const overlay = document.createElement('div');
         overlay.className = 'annotation-overlay';
+        const annotationType = String(annotation.annotation_type || 'comment').toLowerCase();
         overlay.dataset.annotationId = annotation.annotation_id;
-        overlay.dataset.annotationType = annotation.annotation_type;
+        overlay.dataset.annotationType = annotationType;
+        overlay.classList.add(`annotation-type-${annotationType}`);
         
         // Use percentage-based positioning for responsive scaling
         // This ensures overlays stay aligned when viewport is resized or zoomed
@@ -247,11 +853,27 @@ class PDFViewer {
         // Set minimum size in pixels to ensure visibility
         overlay.style.minWidth = '30px';
         overlay.style.minHeight = '30px';
+        overlay.style.zIndex = '4';
         
-        // Comment styling
-        overlay.style.backgroundColor = 'rgba(255, 193, 7, 0.3)';
-        overlay.style.border = '2px solid #ffc107';
+        const palette = {
+            comment: {
+                backgroundColor: 'rgba(255, 193, 7, 0.18)',
+                borderColor: '#ffc107'
+            },
+            highlight: {
+                backgroundColor: 'rgba(13, 110, 253, 0.16)',
+                borderColor: '#0d6efd'
+            },
+            suggestion: {
+                backgroundColor: 'rgba(25, 135, 84, 0.16)',
+                borderColor: '#198754'
+            }
+        };
+        const theme = palette[annotationType] || palette.comment;
+        overlay.style.backgroundColor = theme.backgroundColor;
+        overlay.style.border = `2px solid ${theme.borderColor}`;
         overlay.style.borderRadius = '4px';
+        overlay.style.boxShadow = `0 0 0 1px ${theme.borderColor}22`;
         
         // Add click handler to highlight in sidebar
         overlay.addEventListener('click', (e) => {
@@ -263,7 +885,8 @@ class PDFViewer {
         });
         
         // Add title for hover
-        overlay.title = `${annotation.annotation_type}: ${annotation.annotation_content.substring(0, 50)}...`;
+        const label = annotationType.charAt(0).toUpperCase() + annotationType.slice(1);
+        overlay.title = `${label}: ${String(annotation.annotation_content || '').substring(0, 50)}...`;
         
         return overlay;
     }

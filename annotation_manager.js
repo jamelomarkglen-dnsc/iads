@@ -454,7 +454,7 @@ class AnnotationManager {
             const result = await response.json();
             
             if (result.success) {
-                const newAnnotations = (result.annotations || []).filter(annotation => annotation.annotation_type === 'comment');
+                const newAnnotations = result.annotations || [];
                 const hasChanges = this.detectAnnotationChanges(newAnnotations);
                 
                 this.annotations = newAnnotations;
