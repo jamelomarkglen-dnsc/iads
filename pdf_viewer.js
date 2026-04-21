@@ -38,6 +38,8 @@ class PDFViewer {
         this.searchResultsPanel = null;
         this.searchResultsList = null;
         this.searchResultsCount = null;
+        this.searchResultsToggleBtn = null;
+        this.searchResultsCollapsed = false;
         this.searchDebounceTimer = null;
         this.searchToken = 0;
         this.pageTextCache = new Map();
@@ -120,7 +122,10 @@ class PDFViewer {
                     <div class="pdf-search-results-title">Search Results</div>
                     <div class="pdf-search-results-subtitle">Matches grouped by page</div>
                 </div>
-                <span class="pdf-search-results-count">0</span>
+                <div class="pdf-search-results-header-actions">
+                    <span class="pdf-search-results-count">0</span>
+                    <button type="button" class="pdf-search-results-toggle" aria-label="Hide search results" title="Hide search results">Hide</button>
+                </div>
             </div>
             <div class="pdf-search-results-list">
                 <div class="pdf-search-results-empty">Type a word or phrase to find matches in the document.</div>
@@ -129,6 +134,10 @@ class PDFViewer {
         container.appendChild(this.searchResultsPanel);
         this.searchResultsList = this.searchResultsPanel.querySelector('.pdf-search-results-list');
         this.searchResultsCount = this.searchResultsPanel.querySelector('.pdf-search-results-count');
+        this.searchResultsToggleBtn = this.searchResultsPanel.querySelector('.pdf-search-results-toggle');
+        if (this.searchResultsToggleBtn) {
+            this.searchResultsToggleBtn.addEventListener('click', () => this.toggleSearchResultsPanel());
+        }
         this.canvasWrapper = canvasWrapper;
         this.scrollToTop();
     }
@@ -554,6 +563,10 @@ class PDFViewer {
      * Render the searchable results panel grouped by page
      */
     updateSearchResultsPanel() {
+        if (this.searchResultsCollapsed) {
+            return;
+        }
+
         if (!this.searchResultsList || !this.searchResultsCount || !this.searchResultsPanel) {
             return;
         }
@@ -621,6 +634,31 @@ class PDFViewer {
                 }
             });
         });
+    }
+
+    /**
+     * Toggle the search results sidebar
+     */
+    toggleSearchResultsPanel(forceState = null) {
+        const nextState = typeof forceState === 'boolean'
+            ? forceState
+            : !this.searchResultsCollapsed;
+
+        this.searchResultsCollapsed = nextState;
+        if (this.searchResultsPanel) {
+            this.searchResultsPanel.classList.toggle('collapsed', nextState);
+        }
+        if (this.searchResultsToggleBtn) {
+            this.searchResultsToggleBtn.setAttribute('aria-label', nextState ? 'Show search results' : 'Hide search results');
+            this.searchResultsToggleBtn.title = nextState ? 'Show search results' : 'Hide search results';
+            this.searchResultsToggleBtn.textContent = nextState ? 'Show' : 'Hide';
+        }
+        if (this.canvasWrapper) {
+            this.canvasWrapper.classList.toggle('search-results-collapsed', nextState);
+        }
+        if (!nextState) {
+            this.updateSearchResultsPanel();
+        }
     }
 
     /**
