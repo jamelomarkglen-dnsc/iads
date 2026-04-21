@@ -49,8 +49,8 @@
     display: flex;
     align-items: flex-start;
     justify-content: flex-start;
-    gap: 16px;
-    padding: 20px;
+    gap: 28px;
+    padding: 24px;
     position: relative;
 }
 
@@ -239,9 +239,10 @@
 }
 
 .pdf-search-results-panel {
-    flex: 0 0 320px;
-    width: 320px;
-    max-width: 320px;
+    flex: 0 0 280px;
+    width: 280px;
+    min-width: 280px;
+    max-width: 280px;
     background: #ffffff;
     border-left: 1px solid var(--border-color);
     display: flex;
@@ -249,8 +250,9 @@
     align-self: stretch;
     max-height: calc(100vh - 160px);
     position: sticky;
-    top: 20px;
-    border-radius: 10px;
+    top: 24px;
+    margin-left: 4px;
+    border-radius: 12px;
     box-shadow: var(--shadow);
     overflow: hidden;
 }
@@ -260,7 +262,7 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    padding: 14px 16px;
+    padding: 14px 14px;
     border-bottom: 1px solid var(--border-color);
     background: #f8fbf9;
 }
@@ -293,7 +295,7 @@
 .pdf-search-results-list {
     flex: 1;
     overflow: auto;
-    padding: 12px;
+    padding: 10px;
 }
 
 .pdf-search-results-empty {
@@ -305,7 +307,7 @@
 }
 
 .pdf-search-result-group + .pdf-search-result-group {
-    margin-top: 14px;
+    margin-top: 12px;
 }
 
 .pdf-search-result-group-title {
@@ -323,7 +325,7 @@
 .pdf-search-result-group-items {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .pdf-search-result-item {
@@ -332,7 +334,7 @@
     text-align: left;
     border: 1px solid var(--border-color);
     background: #fff;
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 10px 12px;
     cursor: pointer;
     transition: all 0.18s ease;
@@ -1039,6 +1041,7 @@
     .pdf-search-results-panel {
         width: 100%;
         max-width: none;
+        min-width: 0;
         flex: 0 0 auto;
         position: relative;
         top: auto;
@@ -1085,6 +1088,7 @@
     .pdf-search-results-panel {
         width: 100%;
         max-width: none;
+        min-width: 0;
         flex: 0 0 auto;
         position: relative;
         top: auto;
