@@ -363,6 +363,18 @@ if (isset($_SESSION['role'])) {
         color: #1d3522;
         font-weight: 600;
     }
+    .progress-modal .modal-header {
+        background: #ffffff;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    }
+    .progress-modal .modal-title {
+        color: #16562c;
+        font-weight: 700;
+    }
+    .progress-modal .modal-header .text-muted {
+        color: #16562c !important;
+        font-weight: 500;
+    }
     @media (max-width: 1200px) {
         .progress-modal .progress-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));

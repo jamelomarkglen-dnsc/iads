@@ -90,40 +90,44 @@ $can_edit = true;
             white-space: normal;
         }
 
-        /* Modal Styles */
-        .modal-content {
+        /* Modal Styles - Scoped to Event Modal Only */
+        #eventModal .modal-content {
             background: #303030;
             color: #fff;
             border-radius: 8px;
         }
 
-        .modal-header {
+        #eventModal .modal-header {
             background-color: #303030;
             color: #fff;
             border-bottom: 1px solid #555;
         }
 
-        .modal-footer {
+        #eventModal .modal-footer {
             background-color: #4b4848ff;
             border-top: none;
         }
 
-        .btn-close { filter: invert(1); }
+        #eventModal .btn-close { filter: invert(1); }
 
-        .form-group label {
+        #eventModal .form-group label {
             font-weight: 500;
             margin-bottom: 5px;
             display: block;
             color: #ccc;
         }
 
-        .form-control, .form-select, textarea {
+        #eventModal .form-control, 
+        #eventModal .form-select, 
+        #eventModal textarea {
             background-color: #303030 !important;
             color: #fff !important;
             border: 1px solid #f6faf7ff !important;
         }
 
-        .form-control:focus, .form-select:focus, textarea:focus {
+        #eventModal .form-control:focus, 
+        #eventModal .form-select:focus, 
+        #eventModal textarea:focus {
             border-color: #fff !important;
             color: #fff !important;
             box-shadow: none !important;
