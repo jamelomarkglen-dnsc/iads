@@ -911,6 +911,50 @@ $requests = array_map(function ($request) use ($conn) {
             });
         });
 
+        // Auto-sync input fields with memo body
+        const updateMemoBodyLine = (pattern, replacement) => {
+            const currentBody = memoBodyTextarea.value;
+            const updatedBody = currentBody.replace(pattern, replacement);
+            memoBodyTextarea.value = updatedBody;
+        };
+
+        // Sync Memo Number - updates automatically when dean types
+        memoNumberInput.addEventListener('input', () => {
+            const memoNo = memoNumberInput.value.trim() || '___';
+            updateMemoBodyLine(
+                /Memorandum No\. .*/,
+                `Memorandum No. ${memoNo}`
+            );
+        });
+
+        // Sync Series Year
+        memoSeriesYearInput.addEventListener('input', () => {
+            const year = memoSeriesYearInput.value.trim() || new Date().getFullYear();
+            updateMemoBodyLine(
+                /Series of .*/,
+                `Series of ${year}`
+            );
+        });
+
+        // Sync Memo Date
+        memoDateInput.addEventListener('change', () => {
+            const dateValue = memoDateInput.value;
+            const formattedDate = dateValue ? formatDate(dateValue) : '__________';
+            updateMemoBodyLine(
+                /Date: .*/,
+                `Date: ${formattedDate}`
+            );
+        });
+
+        // Sync Subject
+        memoSubjectInput.addEventListener('input', () => {
+            const subject = memoSubjectInput.value.trim() || 'OUTLINE DEFENSE';
+            updateMemoBodyLine(
+                /Subject: .*/,
+                `Subject: ${subject}`
+            );
+        });
+
     })();
 </script>
 </body>
