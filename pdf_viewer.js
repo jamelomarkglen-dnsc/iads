@@ -35,6 +35,9 @@ class PDFViewer {
         this.searchPrevBtn = null;
         this.searchNextBtn = null;
         this.searchClearBtn = null;
+        this.searchResultsPanel = null;
+        this.searchResultsList = null;
+        this.searchResultsCount = null;
         this.searchDebounceTimer = null;
         this.searchToken = 0;
         this.pageTextCache = new Map();
@@ -109,6 +112,23 @@ class PDFViewer {
         canvasWrapper.appendChild(this.textLayer);
 
         container.appendChild(canvasWrapper);
+        this.searchResultsPanel = document.createElement('aside');
+        this.searchResultsPanel.className = 'pdf-search-results-panel';
+        this.searchResultsPanel.innerHTML = `
+            <div class="pdf-search-results-header">
+                <div>
+                    <div class="pdf-search-results-title">Search Results</div>
+                    <div class="pdf-search-results-subtitle">Matches grouped by page</div>
+                </div>
+                <span class="pdf-search-results-count">0</span>
+            </div>
+            <div class="pdf-search-results-list">
+                <div class="pdf-search-results-empty">Type a word or phrase to find matches in the document.</div>
+            </div>
+        `;
+        container.appendChild(this.searchResultsPanel);
+        this.searchResultsList = this.searchResultsPanel.querySelector('.pdf-search-results-list');
+        this.searchResultsCount = this.searchResultsPanel.querySelector('.pdf-search-results-count');
         this.canvasWrapper = canvasWrapper;
         this.scrollToTop();
     }
@@ -186,6 +206,7 @@ class PDFViewer {
         }
 
         this.updateSearchControls();
+        this.updateSearchResultsPanel();
     }
 
     /**
@@ -278,6 +299,7 @@ class PDFViewer {
         this.currentSearchIndex = -1;
         this.clearSearchHighlights();
         this.updateSearchControls();
+        this.updateSearchResultsPanel();
         if (this.pdfDoc && this.currentPage) {
             void this.renderTextLayer(this.currentPage);
         }
@@ -333,6 +355,7 @@ class PDFViewer {
 
             this.currentSearchIndex = this.searchMatches.length > 0 ? 0 : -1;
             this.updateSearchControls();
+            this.updateSearchResultsPanel();
 
             if (this.currentSearchIndex >= 0) {
                 await this.goToSearchMatch(this.currentSearchIndex);
@@ -413,11 +436,16 @@ class PDFViewer {
             const queryText = match[2] || '';
             const startIndex = queryIndex;
             const endIndex = startIndex + queryText.length;
+            const snippetRadius = 24;
+            const snippetStart = Math.max(0, startIndex - snippetRadius);
+            const snippetEnd = Math.min(fullText.length, endIndex + snippetRadius);
+            const snippet = `${snippetStart > 0 ? '…' : ''}${fullText.slice(snippetStart, snippetEnd).replace(/\s+/g, ' ').trim()}${snippetEnd < fullText.length ? '…' : ''}`;
 
             matches.push({
                 pageNumber: pageNum,
                 occurrenceIndex: occurrenceIndex++,
                 text: queryText,
+                snippet,
                 startIndex,
                 endIndex,
                 queryLength: queryText.length,
@@ -502,6 +530,7 @@ class PDFViewer {
 
         this.currentSearchIndex = index;
         this.updateSearchControls();
+        this.updateSearchResultsPanel();
 
         const activeOverlay = this.textLayer?.querySelector(`.pdf-search-hit[data-search-index="${index}"]`);
         if (activeOverlay) {
@@ -522,6 +551,79 @@ class PDFViewer {
     }
 
     /**
+     * Render the searchable results panel grouped by page
+     */
+    updateSearchResultsPanel() {
+        if (!this.searchResultsList || !this.searchResultsCount || !this.searchResultsPanel) {
+            return;
+        }
+
+        const totalMatches = this.searchMatches.length;
+        this.searchResultsCount.textContent = String(totalMatches);
+
+        if (!this.searchQuery) {
+            this.searchResultsList.innerHTML = '<div class="pdf-search-results-empty">Type a word or phrase to find matches in the document.</div>';
+            return;
+        }
+
+        if (!totalMatches) {
+            this.searchResultsList.innerHTML = '<div class="pdf-search-results-empty">No matches found.</div>';
+            return;
+        }
+
+        const query = this.searchRawQuery || this.searchQuery;
+        const queryRegex = new RegExp(this.escapeRegExp(query), 'ig');
+        const pageGroups = new Map();
+        this.searchMatches.forEach((match, index) => {
+            if (!pageGroups.has(match.pageNumber)) {
+                pageGroups.set(match.pageNumber, []);
+            }
+            pageGroups.get(match.pageNumber).push({ match, index });
+        });
+
+        const html = Array.from(pageGroups.entries()).map(([pageNumber, items]) => {
+            const entries = items.map(({ match, index }) => {
+                const snippet = this.escapeHtml(match.snippet || match.text || '');
+                const highlightedSnippet = query
+                    ? snippet.replace(queryRegex, found => `<mark>${found}</mark>`)
+                    : snippet;
+                const activeClass = index === this.currentSearchIndex ? ' active' : '';
+                return `
+                    <button type="button" class="pdf-search-result-item${activeClass}" data-search-index="${index}">
+                        <div class="pdf-search-result-meta">
+                            <span class="pdf-search-result-order">#${index + 1}</span>
+                            <span class="pdf-search-result-page">Page ${pageNumber}</span>
+                        </div>
+                        <div class="pdf-search-result-snippet">${highlightedSnippet}</div>
+                    </button>
+                `;
+            }).join('');
+
+            return `
+                <section class="pdf-search-result-group">
+                    <div class="pdf-search-result-group-title">
+                        <span>Page ${pageNumber}</span>
+                        <span>${items.length} match${items.length > 1 ? 'es' : ''}</span>
+                    </div>
+                    <div class="pdf-search-result-group-items">
+                        ${entries}
+                    </div>
+                </section>
+            `;
+        }).join('');
+
+        this.searchResultsList.innerHTML = html;
+        this.searchResultsList.querySelectorAll('.pdf-search-result-item').forEach((button) => {
+            button.addEventListener('click', () => {
+                const index = parseInt(button.dataset.searchIndex || '-1', 10);
+                if (index >= 0) {
+                    void this.goToSearchMatch(index);
+                }
+            });
+        });
+    }
+
+    /**
      * Render a searchable text layer over the current page
      */
     async renderTextLayer(pageNum) {
@@ -534,6 +636,10 @@ class PDFViewer {
         const page = await this.pdfDoc.getPage(pageNum);
         const viewport = page.getViewport({ scale: this.scale });
         this.currentViewport = viewport;
+        
+        // IMPORTANT: Set text layer dimensions to exactly match canvas for perfect alignment
+        this.textLayer.style.width = `${viewport.width}px`;
+        this.textLayer.style.height = `${viewport.height}px`;
 
         const cachedPage = this.pageTextCache.get(pageNum);
         let items = cachedPage?.items || [];
@@ -548,31 +654,6 @@ class PDFViewer {
             }));
             this.pageTextCache.set(pageNum, { items });
         }
-
-        const pageMatches = this.searchQuery
-            ? this.searchMatches.filter(match => match.pageNumber === pageNum)
-            : [];
-        const activeMatch = this.searchMatches[this.currentSearchIndex] || null;
-
-        const itemMatchMap = new Map();
-        pageMatches.forEach((match) => {
-            (match.itemRanges || []).forEach((range) => {
-                if (!range || range.startOffset >= range.endOffset) {
-                    return;
-                }
-                if (!itemMatchMap.has(range.itemIndex)) {
-                    itemMatchMap.set(range.itemIndex, []);
-                }
-                itemMatchMap.get(range.itemIndex).push({
-                    matchIndex: range.startOffset,
-                    matchLength: range.endOffset - range.startOffset,
-                    occurrenceIndex: match.occurrenceIndex,
-                    startIndex: match.startIndex,
-                    endIndex: match.endIndex,
-                    pageNumber: match.pageNumber
-                });
-            });
-        });
 
         items.forEach((item) => {
             const span = document.createElement('span');
@@ -596,61 +677,16 @@ class PDFViewer {
                 span.style.fontSize = '12px';
             }
 
-            const itemMatches = itemMatchMap.get(item.itemIndex) || [];
-            if (!itemMatches.length) {
-                span.textContent = item.str || '';
-                this.textLayer.appendChild(span);
-                return;
-            }
-
-            const rawText = String(item.str || '');
-            const sortedMatches = itemMatches.slice().sort((a, b) => {
-                if (a.matchIndex !== b.matchIndex) {
-                    return a.matchIndex - b.matchIndex;
-                }
-                return (a.occurrenceIndex || 0) - (b.occurrenceIndex || 0);
-            });
-
-            const fragments = [];
-            let cursor = 0;
-            sortedMatches.forEach((match) => {
-                const start = match.matchIndex;
-                const end = start + match.matchLength;
-                if (start < cursor) {
-                    return;
-                }
-                fragments.push(this.escapeHtml(rawText.slice(cursor, start)));
-                const globalIndex = this.searchMatches.findIndex(candidate =>
-                    candidate.pageNumber === pageNum &&
-                    candidate.startIndex === match.startIndex &&
-                    candidate.endIndex === match.endIndex &&
-                    candidate.occurrenceIndex === match.occurrenceIndex
-                );
-                const isActive = activeMatch &&
-                    activeMatch.pageNumber === pageNum &&
-                    activeMatch.startIndex === match.startIndex &&
-                    activeMatch.endIndex === match.endIndex &&
-                    activeMatch.occurrenceIndex === match.occurrenceIndex;
-                fragments.push(`<mark class="pdf-search-hit${isActive ? ' active' : ''}" data-search-index="${globalIndex}">${this.escapeHtml(rawText.slice(start, end))}</mark>`);
-                cursor = end;
-            });
-            fragments.push(this.escapeHtml(rawText.slice(cursor)));
-
-            span.innerHTML = fragments.join('');
+            span.textContent = item.str || '';
             this.textLayer.appendChild(span);
         });
 
         const currentMatch = this.searchMatches[this.currentSearchIndex];
-        if (currentMatch && currentMatch.pageNumber === pageNum) {
-            const activeHighlight = this.textLayer.querySelector(`.pdf-search-hit[data-search-index="${this.currentSearchIndex}"]`);
-            if (activeHighlight) {
-                activeHighlight.classList.add('active');
-                if (!this.isLoading) {
-                    setTimeout(() => {
-                        activeHighlight.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-                    }, 150);
-                }
-            }
+        if (currentMatch && currentMatch.pageNumber === pageNum && !this.isLoading) {
+            setTimeout(() => {
+                const pageEl = this.canvasWrapper || this.textLayer;
+                pageEl?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+            }, 80);
         }
     }
 
@@ -728,6 +764,7 @@ class PDFViewer {
             this.updatePageInfo();
             await this.renderSearchHighlights(pageNum);
             this.renderAnnotations(pageNum);
+            this.updateSearchResultsPanel();
             this.scrollToTop();
             
             this.isLoading = false;

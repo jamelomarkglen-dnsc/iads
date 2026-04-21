@@ -68,7 +68,7 @@ $allowRevision = ($statusLabel === 'Needs Revision');
     <title>Final Routing Feedback</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="pdf_annotation_styles.css?v=20260421-search2">
+    <link rel="stylesheet" href="pdf_annotation_styles.css?v=20260422-search6">
     <style>
         body { background: #f4f8f4; font-family: "Segoe UI", Arial, sans-serif; }
         .content { margin-left: var(--sidebar-width-expanded, 240px); transition: margin-left 0.3s ease; padding: 20px; min-height: 100vh; }
@@ -282,7 +282,7 @@ $allowRevision = ($statusLabel === 'Needs Revision');
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="pdf_viewer.js?v=20260421-search2"></script>
+<script src="pdf_viewer.js?v=20260422-search6"></script>
 <script src="annotation_manager.js?v=20260421-search"></script>
 
 <script>
