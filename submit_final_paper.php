@@ -402,7 +402,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_final_paper'])
                                     submitted_at = NOW(),
                                     final_decision_by = NULL,
                                     final_decision_notes = NULL,
-                                    final_decision_at = NULL
+                                    final_decision_at = NULL,
+                                    committee_reviews_completed_at = NULL,
+                                    outline_defense_verdict = NULL,
+                                    outline_defense_verdict_at = NULL,
+                                    review_gate_status = NULL
                                 WHERE id = ?
                             ");
                             if ($updateStmt) {

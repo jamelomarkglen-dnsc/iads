@@ -153,6 +153,66 @@ if (!function_exists('progress_tracker_fetch_rows')) {
     }
 }
 
+if (!function_exists('progress_tracker_source_row_exists')) {
+    function progress_tracker_source_row_exists(mysqli $conn, string $sourceTable, int $sourceId): bool
+    {
+        if ($sourceId <= 0) {
+            return false;
+        }
+
+        if (!preg_match('/^[A-Za-z0-9_]+$/', $sourceTable)) {
+            return false;
+        }
+
+        if (!progress_tracker_column_exists($conn, $sourceTable, 'id')) {
+            return false;
+        }
+
+        $tableName = '`' . str_replace('`', '``', $sourceTable) . '`';
+        $sql = "SELECT 1 FROM {$tableName} WHERE id = ? LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        if (!$stmt) {
+            return false;
+        }
+
+        $stmt->bind_param('i', $sourceId);
+        $stmt->execute();
+        $stmt->store_result();
+        $exists = $stmt->num_rows > 0;
+        $stmt->close();
+
+        return $exists;
+    }
+}
+
+if (!function_exists('progress_tracker_reset_step_completion')) {
+    function progress_tracker_reset_step_completion(mysqli $conn, int $studentId, string $stepKey): bool
+    {
+        if ($studentId <= 0 || $stepKey === '') {
+            return false;
+        }
+
+        ensure_progress_tracker_table($conn);
+        $stmt = $conn->prepare("
+            UPDATE progress_tracker_steps
+            SET status = 'pending',
+                completed_at = NULL,
+                source_table = NULL,
+                source_id = NULL
+            WHERE student_id = ? AND step_key = ?
+        ");
+        if (!$stmt) {
+            return false;
+        }
+
+        $stmt->bind_param('is', $studentId, $stepKey);
+        $ok = $stmt->execute();
+        $stmt->close();
+
+        return $ok;
+    }
+}
+
 if (!function_exists('progress_tracker_mark_step_complete')) {
     function progress_tracker_mark_step_complete(
         mysqli $conn,
@@ -1007,6 +1067,30 @@ if (!function_exists('get_student_progress_tracker_data')) {
         }
 
         $rows = progress_tracker_fetch_rows($conn, $studentId);
+        $rowsChanged = false;
+        if ($rows) {
+            foreach ($rows as $stepKey => $row) {
+                if (($row['status'] ?? '') !== 'complete') {
+                    continue;
+                }
+
+                $sourceTable = trim((string)($row['source_table'] ?? ''));
+                $sourceId = (int)($row['source_id'] ?? 0);
+                if ($sourceTable === '' || $sourceId <= 0) {
+                    continue;
+                }
+
+                if (!progress_tracker_source_row_exists($conn, $sourceTable, $sourceId)) {
+                    progress_tracker_reset_step_completion($conn, $studentId, (string)$stepKey);
+                    $rowsChanged = true;
+                }
+            }
+
+            if ($rowsChanged) {
+                $rows = progress_tracker_fetch_rows($conn, $studentId);
+            }
+        }
+
         if ($rows) {
             if (function_exists('ensureDefenseScheduleTypeColumn')) {
                 ensureDefenseScheduleTypeColumn($conn);
@@ -1052,6 +1136,24 @@ if (!function_exists('get_student_progress_tracker_data')) {
         $latestFinalPaper = null;
         if (progress_tracker_column_exists($conn, 'final_paper_submissions', 'id') && function_exists('fetchLatestFinalPaperSubmission')) {
             $latestFinalPaper = fetchLatestFinalPaperSubmission($conn, $studentId);
+        }
+
+        if (!$latestFinalPaper) {
+            foreach ([
+                'outline_submitted',
+                'outline_review_completed',
+                'outline_verdict_released',
+                'revision_completed',
+                'route_slip_issued',
+            ] as $stepKey) {
+                if (($rows[$stepKey]['status'] ?? 'pending') === 'complete') {
+                    progress_tracker_reset_step_completion($conn, $studentId, $stepKey);
+                    $rowsChanged = true;
+                }
+            }
+            if ($rowsChanged) {
+                $rows = progress_tracker_fetch_rows($conn, $studentId);
+            }
         }
         
         // Auto-detect Step 10: outline_submitted
