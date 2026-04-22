@@ -1143,7 +1143,6 @@ if (!function_exists('get_student_progress_tracker_data')) {
                 'outline_submitted',
                 'outline_review_completed',
                 'outline_verdict_released',
-                'revision_completed',
                 'route_slip_issued',
             ] as $stepKey) {
                 if (($rows[$stepKey]['status'] ?? 'pending') === 'complete') {
@@ -1324,6 +1323,7 @@ if (!function_exists('get_student_progress_tracker_data')) {
         ) {
             $committeeVerdictId = 0;
             $committeeVerdictAt = null;
+            $committeeFinalVerdict = '';
             $stmt = $conn->prepare("
                 SELECT id, final_verdict, final_verdict_at, submitted_at, updated_at
                 FROM committee_pdf_submissions
@@ -1356,6 +1356,20 @@ if (!function_exists('get_student_progress_tracker_data')) {
                         $conn,
                         $studentId,
                         'outline_verdict_released',
+                        'committee_pdf_submissions',
+                        $committeeVerdictId,
+                        $committeeVerdictAt
+                    );
+                    $rows = progress_tracker_fetch_rows($conn, $studentId);
+                }
+
+                $passedCommitteeVerdicts = ['passed', 'passed_minor_revisions', 'passed_major_revisions'];
+                $revisionStepStatus = $rows['revision_completed']['status'] ?? 'pending';
+                if ($revisionStepStatus !== 'complete' && in_array($committeeFinalVerdict, $passedCommitteeVerdicts, true)) {
+                    progress_tracker_mark_step_complete(
+                        $conn,
+                        $studentId,
+                        'revision_completed',
                         'committee_pdf_submissions',
                         $committeeVerdictId,
                         $committeeVerdictAt
