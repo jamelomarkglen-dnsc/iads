@@ -17,6 +17,9 @@ if (!$reviewerId || !in_array($role, $allowedRoles, true)) {
 
 ensureConceptReviewTables($conn);
 ensureConceptReviewMessagesTable($conn);
+// Keep mirrored concept paper rows aligned with live submissions so deleted submissions
+// do not leave orphaned rankings behind on the dashboard.
+syncConceptPapersFromSubmissions($conn);
 $assignmentRoleKey = $role === 'committee_chairperson' ? 'committee_chair' : $role;
 if ($role === 'adviser') {
     syncAdviserAssignmentsFromUserLinks($conn, $reviewerId);
