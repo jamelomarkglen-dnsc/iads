@@ -166,6 +166,7 @@ function renderTypeBadge(?string $type): string
     $map = [
         'Concept Paper' => 'bg-info-subtle text-info',
         'Thesis' => 'bg-primary-subtle text-primary',
+        'Capstone' => 'bg-success-subtle text-success',
         'Dissertation' => 'bg-danger-subtle text-danger',
     ];
     $class = $map[$type] ?? 'bg-secondary-subtle text-secondary';

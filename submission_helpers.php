@@ -84,6 +84,31 @@ function ensure_submission_status_schema(mysqli $conn): void
 }
 
 /**
+ * Ensure submissions.type can store the current research types without enum loss.
+ */
+if (!function_exists('ensure_submission_type_schema')) {
+    function ensure_submission_type_schema(mysqli $conn): void
+    {
+        static $checked = false;
+        if ($checked) {
+            return;
+        }
+
+        $result = $conn->query("SHOW COLUMNS FROM submissions LIKE 'type'");
+        if ($result) {
+            $column = $result->fetch_assoc();
+            $result->free();
+            $type = strtolower((string)($column['Type'] ?? ''));
+            if (str_contains($type, 'enum(')) {
+                $conn->query("ALTER TABLE submissions MODIFY COLUMN type VARCHAR(75) NOT NULL DEFAULT 'Concept Paper'");
+            }
+        }
+
+        $checked = true;
+    }
+}
+
+/**
  * Quick helper to determine if a submissions column exists.
  */
 function submissions_column_exists(mysqli $conn, string $column): bool

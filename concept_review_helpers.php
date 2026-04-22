@@ -465,6 +465,31 @@ function conceptReviewColumnExists(mysqli $conn, string $table, string $column):
     return $exists;
 }
 
+if (!function_exists('ensure_submission_type_schema')) {
+    /**
+     * Keep submissions.type compatible with modern research types like Capstone.
+     */
+    function ensure_submission_type_schema(mysqli $conn): void
+    {
+        static $checked = false;
+        if ($checked) {
+            return;
+        }
+
+        $result = $conn->query("SHOW COLUMNS FROM submissions LIKE 'type'");
+        if ($result) {
+            $column = $result->fetch_assoc();
+            $result->free();
+            $type = strtolower((string)($column['Type'] ?? ''));
+            if (str_contains($type, 'enum(')) {
+                $conn->query("ALTER TABLE submissions MODIFY COLUMN type VARCHAR(75) NOT NULL DEFAULT 'Concept Paper'");
+            }
+        }
+
+        $checked = true;
+    }
+}
+
 /**
  * Mirror concept titles from submissions into concept_papers so legacy features
  * (assignments, rankings) can keep referencing a consistent table.
@@ -476,6 +501,10 @@ function syncConceptPapersFromSubmissions(mysqli $conn): void
         return;
     }
     $synced = true;
+
+    if (function_exists('ensure_submission_type_schema')) {
+        ensure_submission_type_schema($conn);
+    }
 
     $requiredColumns = [
         ['concept_papers', 'id'],
@@ -493,6 +522,9 @@ function syncConceptPapersFromSubmissions(mysqli $conn): void
 
     $hasProposal2 = conceptReviewColumnExists($conn, 'submissions', 'concept_proposal_2');
     $hasProposal3 = conceptReviewColumnExists($conn, 'submissions', 'concept_proposal_3');
+    $hasFile1 = conceptReviewColumnExists($conn, 'submissions', 'concept_file_1');
+    $hasFile2 = conceptReviewColumnExists($conn, 'submissions', 'concept_file_2');
+    $hasFile3 = conceptReviewColumnExists($conn, 'submissions', 'concept_file_3');
     $hasCreatedAt = conceptReviewColumnExists($conn, 'submissions', 'created_at');
 
     $slotFields = [1];
@@ -506,6 +538,31 @@ function syncConceptPapersFromSubmissions(mysqli $conn): void
         $proposalSelects[] = "COALESCE(concept_proposal_3, '') AS concept_proposal_3";
     }
 
+    $submissionFilters = [
+        "LOWER(COALESCE(type, '')) LIKE '%concept%'",
+        "LOWER(COALESCE(type, '')) LIKE '%proposal%'",
+        "LOWER(COALESCE(type, '')) LIKE '%thesis%'",
+        "LOWER(COALESCE(type, '')) LIKE '%capstone%'",
+        "LOWER(COALESCE(type, '')) LIKE '%dissertation%'",
+        "COALESCE(title, '') <> ''",
+        "COALESCE(concept_proposal_1, '') <> ''",
+    ];
+    if ($hasProposal2) {
+        $submissionFilters[] = "COALESCE(concept_proposal_2, '') <> ''";
+    }
+    if ($hasProposal3) {
+        $submissionFilters[] = "COALESCE(concept_proposal_3, '') <> ''";
+    }
+    if ($hasFile1) {
+        $submissionFilters[] = "COALESCE(concept_file_1, '') <> ''";
+    }
+    if ($hasFile2) {
+        $submissionFilters[] = "COALESCE(concept_file_2, '') <> ''";
+    }
+    if ($hasFile3) {
+        $submissionFilters[] = "COALESCE(concept_file_3, '') <> ''";
+    }
+
     $proposalSql = implode(",\n               ", $proposalSelects);
     $createdAtSql = $hasCreatedAt
         ? "COALESCE(created_at, CURRENT_TIMESTAMP) AS submission_created_at"
@@ -514,10 +571,13 @@ function syncConceptPapersFromSubmissions(mysqli $conn): void
     $submissionSql = "
         SELECT id,
                student_id,
+               COALESCE(title, '') AS submission_title,
                {$createdAtSql},
-               {$proposalSql}
+               {$proposalSql},
+               LOWER(COALESCE(type, '')) AS type_key
         FROM submissions
-        WHERE type IN ('Concept Paper', 'Thesis', 'Capstone', 'Dissertation')
+        WHERE
+            " . implode("\n            OR ", $submissionFilters) . "
     ";
     $submissionResult = $conn->query($submissionSql);
     if (!$submissionResult) {
@@ -575,19 +635,49 @@ function syncConceptPapersFromSubmissions(mysqli $conn): void
             $createdAt = date('Y-m-d H:i:s');
         }
 
+        $typeKey = strtolower(trim((string)($row['type_key'] ?? '')));
+        if ($typeKey === '') {
+            $typeKey = 'concept';
+        }
+
+        $candidateTitles = [];
         foreach ($slotFields as $slot) {
             $field = "concept_proposal_{$slot}";
             $title = trim((string)($row[$field] ?? ''));
-            $marker = "{$markerPrefix}{$submissionId}:{$slot}";
+            if ($title !== '') {
+                $candidateTitles[] = [
+                    'slot' => $slot,
+                    'title' => $title,
+                ];
+            }
+        }
 
-            if ($title === '' || $studentId <= 0) {
+        if (empty($candidateTitles)) {
+            $fallbackTitle = trim((string)($row['submission_title'] ?? ''));
+            if ($fallbackTitle !== '' && $studentId > 0) {
+                $candidateTitles[] = [
+                    'slot' => 1,
+                    'title' => $fallbackTitle,
+                ];
+            }
+        }
+
+        if (empty($candidateTitles) || !in_array($typeKey, ['concept', 'thesis', 'capstone', 'dissertation'], true)) {
+            foreach ($slotFields as $slot) {
+                $marker = "{$markerPrefix}{$submissionId}:{$slot}";
                 if (isset($existingMap[$marker]) && $deleteStmt) {
                     $deleteStmt->bind_param('i', $existingMap[$marker]['id']);
                     $deleteStmt->execute();
                     unset($existingMap[$marker]);
                 }
-                continue;
             }
+            continue;
+        }
+
+        foreach ($candidateTitles as $candidate) {
+            $slot = (int)($candidate['slot'] ?? 1);
+            $title = trim((string)($candidate['title'] ?? ''));
+            $marker = "{$markerPrefix}{$submissionId}:{$slot}";
 
             if (isset($existingMap[$marker])) {
                 $existing = $existingMap[$marker];

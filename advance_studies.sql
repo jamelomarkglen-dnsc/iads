@@ -554,7 +554,7 @@ CREATE TABLE `submissions` (
   `id` int(11) NOT NULL,
   `student_id` int(11) NOT NULL,
   `title` varchar(255) NOT NULL,
-  `type` enum('Concept Paper','Thesis','Dissertation') NOT NULL,
+  `type` enum('Concept Paper','Thesis','Capstone','Dissertation') NOT NULL,
   `abstract` text NOT NULL,
   `keywords` varchar(255) DEFAULT NULL,
   `concept_proposal_1` varchar(255) DEFAULT NULL,

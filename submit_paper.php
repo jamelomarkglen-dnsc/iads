@@ -3,11 +3,14 @@ session_start();
 require_once 'db.php';
 require_once 'notifications_helper.php';
 require_once 'progress_tracker_helper.php';
+require_once 'submission_helpers.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'student') {
     header("Location: login.php");
     exit;
 }
+
+ensure_submission_type_schema($conn);
 
 
 function columnExists(mysqli $conn, string $table, string $column): bool
