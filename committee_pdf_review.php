@@ -162,12 +162,14 @@ $verdictLocked = !empty($submission['final_verdict']) && $submission['final_verd
                         <h5 class="mb-0">Manuscript Preview</h5>
                         <div class="pdf-page-info text-muted small"></div>
                     </div>
-                    <div class="annotation-toolbar mb-2">
-                        <button class="annotation-tool-btn" data-tool="comment" title="Add Comment">
-                            <i class="bi bi-chat-dots"></i>
-                        </button>
-                        <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
-                            <div class="d-flex align-items-center gap-2">
+                    <div class="pdf-toolbar">
+                        <div class="pdf-toolbar-left">
+                            <div class="annotation-toolbar">
+                                <button class="annotation-tool-btn" data-tool="comment" title="Add Comment">
+                                    <i class="bi bi-chat-dots"></i>
+                                </button>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <label for="pageJumpInput" class="small text-muted mb-0">Page</label>
                                 <input type="number" id="pageJumpInput" class="form-control form-control-sm" min="1" style="width: 90px;" placeholder="1">
                                 <button class="btn btn-sm btn-outline-secondary" id="pageJumpBtn">Go</button>
@@ -175,8 +177,12 @@ $verdictLocked = !empty($submission['final_verdict']) && $submission['final_verd
                             </div>
                             <button class="btn btn-sm btn-outline-secondary" id="prevPageBtn">Prev</button>
                             <button class="btn btn-sm btn-outline-secondary" id="nextPageBtn">Next</button>
-                            <button class="btn btn-sm btn-outline-secondary" id="zoomInBtn">+</button>
-                            <button class="btn btn-sm btn-outline-secondary" id="zoomOutBtn">-</button>
+                        </div>
+                        <div class="pdf-toolbar-right">
+                            <div class="pdf-zoom-controls">
+                                <button class="btn btn-sm btn-outline-secondary" id="zoomOutBtn">-</button>
+                                <button class="btn btn-sm btn-outline-secondary" id="zoomInBtn">+</button>
+                            </div>
                         </div>
                     </div>
                     <div id="pdf-canvas-container" class="pdf-canvas-container"></div>

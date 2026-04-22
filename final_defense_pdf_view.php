@@ -170,23 +170,31 @@ include 'sidebar.php';
                         <div class="pdf-page-info text-muted small"></div>
                     </div>
 
-                    <div class="annotation-toolbar mb-2">
-                        <?php if ($canAnnotate): ?>
-                            <button class="annotation-tool-btn" data-tool="comment" title="Add Comment">
-                                <i class="bi bi-chat-dots"></i>
-                            </button>
-                        <?php endif; ?>
-                        <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
-                            <div class="input-group input-group-sm" style="width: 150px;">
-                                <span class="input-group-text">Page</span>
-                                <input type="number" min="1" class="form-control" id="pageJumpInput" aria-label="Page number">
-                                <span class="input-group-text" id="pageJumpTotal">of 0</span>
+                    <div class="pdf-toolbar">
+                        <div class="pdf-toolbar-left">
+                            <div class="annotation-toolbar">
+                                <?php if ($canAnnotate): ?>
+                                    <button class="annotation-tool-btn" data-tool="comment" title="Add Comment">
+                                        <i class="bi bi-chat-dots"></i>
+                                    </button>
+                                <?php endif; ?>
                             </div>
-                            <button class="btn btn-sm btn-outline-secondary" id="pageJumpBtn">Go</button>
-                            <button class="btn btn-sm btn-outline-secondary" id="prevPageBtn">Prev</button>
-                            <button class="btn btn-sm btn-outline-secondary" id="nextPageBtn">Next</button>
-                            <button class="btn btn-sm btn-outline-secondary" id="zoomInBtn">+</button>
-                            <button class="btn btn-sm btn-outline-secondary" id="zoomOutBtn">-</button>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <div class="input-group input-group-sm" style="width: 150px;">
+                                    <span class="input-group-text">Page</span>
+                                    <input type="number" min="1" class="form-control" id="pageJumpInput" aria-label="Page number">
+                                    <span class="input-group-text" id="pageJumpTotal">of 0</span>
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary" id="pageJumpBtn">Go</button>
+                                <button class="btn btn-sm btn-outline-secondary" id="prevPageBtn">Prev</button>
+                                <button class="btn btn-sm btn-outline-secondary" id="nextPageBtn">Next</button>
+                            </div>
+                        </div>
+                        <div class="pdf-toolbar-right">
+                            <div class="pdf-zoom-controls">
+                                <button class="btn btn-sm btn-outline-secondary" id="zoomOutBtn">-</button>
+                                <button class="btn btn-sm btn-outline-secondary" id="zoomInBtn">+</button>
+                            </div>
                         </div>
                     </div>
                     <?php if ($normalizedRole === 'student' && !$canAnnotate): ?>
