@@ -225,6 +225,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['review_committee_requ
                     $memoDate = $memoDateInput;
                 }
             }
+            if ($decision === 'Approved' && $memoNumber === '') {
+                $memoSeriesYear = $memoSeriesYear !== '' ? $memoSeriesYear : date('Y');
+                $memoNumberSuggestions = function_exists('fetch_defense_memo_number_suggestions')
+                    ? fetch_defense_memo_number_suggestions($conn)
+                    : [];
+                $memoNumber = $memoNumberSuggestions[$memoSeriesYear] ?? '01';
+            }
             if ($decision === 'Approved') {
                 $signatureErrors = [];
                 require_user_signature(
@@ -521,6 +528,10 @@ $requests = array_map(function ($request) use ($conn) {
     return $request;
 }, $requests);
 
+$memoNumberSuggestions = function_exists('fetch_defense_memo_number_suggestions')
+    ? fetch_defense_memo_number_suggestions($conn)
+    : [];
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -777,6 +788,8 @@ $requests = array_map(function ($request) use ($conn) {
             return;
         }
 
+        const memoNumberSuggestions = <?php echo json_encode($memoNumberSuggestions, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?>;
+
         const memoNumberInput = modal.querySelector('#memoNumberInput');
         const memoSeriesYearInput = modal.querySelector('#memoSeriesYearInput');
         const memoDateInput = modal.querySelector('#memoDateInput');
@@ -796,6 +809,11 @@ $requests = array_map(function ($request) use ($conn) {
                 return value;
             }
             return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        };
+
+        const getSuggestedMemoNumber = (year) => {
+            const key = String(year || '').trim();
+            return key && memoNumberSuggestions[key] ? memoNumberSuggestions[key] : '';
         };
 
         const formatTime = (value) => {
@@ -883,14 +901,20 @@ $requests = array_map(function ($request) use ($conn) {
             memoRequestId.value = dataset.requestId || '';
             memoStudentName.value = dataset.studentName || '';
             memoFinalTitle.value = dataset.finalTitle || '';
-            memoNumberInput.value = dataset.memoNumber || '';
             memoSeriesYearInput.value = seriesYearValue;
+            const memoNumberValue = dataset.memoNumber || getSuggestedMemoNumber(seriesYearValue) || '';
+            memoNumberInput.value = memoNumberValue;
+            memoNumberInput.dataset.autofilled = dataset.memoNumber ? '0' : (memoNumberValue ? '1' : '0');
             memoDateInput.value = memoDateValue;
             memoSubjectInput.value = dataset.memoSubject || 'OUTLINE DEFENSE';
             memoReviewNotes.value = '';
 
             if (dataset.memoBody) {
                 memoBodyTextarea.value = dataset.memoBody;
+                updateMemoBodyLine(/Memorandum No\. .*/, `Memorandum No. ${memoNumberValue || '___'}`);
+                updateMemoBodyLine(/Series of .*/, `Series of ${seriesYearValue}`);
+                updateMemoBodyLine(/Date: .*/, `Date: ${formatDate(memoDateValue) || memoDateValue}`);
+                updateMemoBodyLine(/Subject: .*/, `Subject: ${memoSubjectInput.value || 'OUTLINE DEFENSE'}`);
                 return;
             }
 
@@ -904,7 +928,7 @@ $requests = array_map(function ($request) use ($conn) {
                 defenseDate: dataset.defenseDate || '',
                 defenseTime: dataset.defenseTime || '',
                 venue: dataset.venue || '',
-                memoNumber: dataset.memoNumber || '',
+                memoNumber: memoNumberValue,
                 seriesYear: seriesYearValue,
                 memoDate: memoDateValue,
                 deanName: <?php echo json_encode($deanName); ?>
@@ -920,6 +944,7 @@ $requests = array_map(function ($request) use ($conn) {
 
         // Sync Memo Number - updates automatically when dean types
         memoNumberInput.addEventListener('input', () => {
+            memoNumberInput.dataset.autofilled = '0';
             const memoNo = memoNumberInput.value.trim() || '___';
             updateMemoBodyLine(
                 /Memorandum No\. .*/,
@@ -930,6 +955,11 @@ $requests = array_map(function ($request) use ($conn) {
         // Sync Series Year
         memoSeriesYearInput.addEventListener('input', () => {
             const year = memoSeriesYearInput.value.trim() || new Date().getFullYear();
+            const suggested = getSuggestedMemoNumber(year);
+            if ((memoNumberInput.dataset.autofilled || '0') === '1' || memoNumberInput.value.trim() === '') {
+                memoNumberInput.value = suggested;
+                memoNumberInput.dataset.autofilled = suggested ? '1' : '0';
+            }
             updateMemoBodyLine(
                 /Series of .*/,
                 `Series of ${year}`

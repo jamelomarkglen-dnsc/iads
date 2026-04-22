@@ -257,6 +257,41 @@ if (!function_exists('defense_committee_format_time')) {
     }
 }
 
+if (!function_exists('fetch_defense_memo_number_suggestions')) {
+    function fetch_defense_memo_number_suggestions(mysqli $conn): array
+    {
+        $suggestions = [];
+        $sql = "
+            SELECT
+                COALESCE(NULLIF(TRIM(memo_series_year), ''), YEAR(requested_at)) AS series_year,
+                MAX(CAST(memo_number AS UNSIGNED)) AS max_number,
+                MAX(CHAR_LENGTH(TRIM(memo_number))) AS max_width
+            FROM defense_committee_requests
+            WHERE memo_number IS NOT NULL
+              AND TRIM(memo_number) <> ''
+              AND memo_number REGEXP '^[0-9]+$'
+            GROUP BY COALESCE(NULLIF(TRIM(memo_series_year), ''), YEAR(requested_at))
+        ";
+        $result = $conn->query($sql);
+        if (!$result) {
+            return $suggestions;
+        }
+
+        while ($row = $result->fetch_assoc()) {
+            $seriesYear = trim((string)($row['series_year'] ?? ''));
+            if ($seriesYear === '') {
+                continue;
+            }
+            $maxNumber = (int)($row['max_number'] ?? 0);
+            $maxWidth = max(2, (int)($row['max_width'] ?? 0));
+            $suggestions[$seriesYear] = str_pad((string)($maxNumber + 1), $maxWidth, '0', STR_PAD_LEFT);
+        }
+        $result->free();
+
+        return $suggestions;
+    }
+}
+
 if (!function_exists('build_outline_defense_memo_body')) {
     function build_outline_defense_memo_body(array $payload): string
     {
