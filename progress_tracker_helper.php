@@ -1318,6 +1318,53 @@ if (!function_exists('get_student_progress_tracker_data')) {
             );
             $rows = progress_tracker_fetch_rows($conn, $studentId);
         }
+
+        if (progress_tracker_column_exists($conn, 'committee_pdf_submissions', 'id')
+            && progress_tracker_column_exists($conn, 'committee_pdf_submissions', 'final_verdict')
+        ) {
+            $committeeVerdictId = 0;
+            $committeeVerdictAt = null;
+            $stmt = $conn->prepare("
+                SELECT id, final_verdict, final_verdict_at, submitted_at, updated_at
+                FROM committee_pdf_submissions
+                WHERE student_id = ?
+                  AND NOT EXISTS (
+                      SELECT 1 FROM committee_pdf_submissions child
+                      WHERE child.parent_submission_id = committee_pdf_submissions.id
+                  )
+                ORDER BY submitted_at DESC, id DESC
+                LIMIT 1
+            ");
+            if ($stmt) {
+                $stmt->bind_param('i', $studentId);
+                $stmt->execute();
+                $verdictRow = $stmt->get_result()->fetch_assoc();
+                if ($verdictRow) {
+                    $committeeVerdictId = (int)($verdictRow['id'] ?? 0);
+                    $committeeFinalVerdict = strtolower(trim((string)($verdictRow['final_verdict'] ?? '')));
+                    if ($committeeVerdictId > 0 && $committeeFinalVerdict !== '' && $committeeFinalVerdict !== 'pending') {
+                        $committeeVerdictAt = $verdictRow['final_verdict_at'] ?? $verdictRow['updated_at'] ?? $verdictRow['submitted_at'] ?? null;
+                    }
+                }
+                $stmt->close();
+            }
+
+            if ($committeeVerdictId > 0 && $committeeVerdictAt !== null) {
+                $verdictStepStatus = $rows['outline_verdict_released']['status'] ?? 'pending';
+                if ($verdictStepStatus !== 'complete') {
+                    progress_tracker_mark_step_complete(
+                        $conn,
+                        $studentId,
+                        'outline_verdict_released',
+                        'committee_pdf_submissions',
+                        $committeeVerdictId,
+                        $committeeVerdictAt
+                    );
+                    $rows = progress_tracker_fetch_rows($conn, $studentId);
+                }
+            }
+        }
+
         $revisionStepStatus = $rows['revision_completed']['status'] ?? 'pending';
         if ($latestFinalPaper && $revisionStepStatus !== 'complete') {
             $passedVerdicts = ['passed', 'passed with revision'];

@@ -73,8 +73,7 @@ $student_id = (int)$submission['student_id'];
 $verdict_label = get_verdict_label($verdict);
 $chairperson_name = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? '')) ?: 'Committee Chairperson';
 
-$passed_verdicts = ['passed', 'passed_minor_revisions', 'passed_major_revisions'];
-if (function_exists('progress_tracker_mark_step_complete') && in_array($verdict, $passed_verdicts, true)) {
+if (function_exists('progress_tracker_mark_step_complete')) {
     progress_tracker_mark_step_complete(
         $conn,
         $student_id,
@@ -82,13 +81,17 @@ if (function_exists('progress_tracker_mark_step_complete') && in_array($verdict,
         'committee_pdf_submissions',
         $submission_id
     );
-    progress_tracker_mark_step_complete(
-        $conn,
-        $student_id,
-        'revision_completed',
-        'committee_pdf_submissions',
-        $submission_id
-    );
+
+    $passed_verdicts = ['passed', 'passed_minor_revisions', 'passed_major_revisions'];
+    if (in_array($verdict, $passed_verdicts, true)) {
+        progress_tracker_mark_step_complete(
+            $conn,
+            $student_id,
+            'revision_completed',
+            'committee_pdf_submissions',
+            $submission_id
+        );
+    }
 }
 
 notify_user_for_role(

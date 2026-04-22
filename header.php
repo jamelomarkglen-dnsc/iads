@@ -357,7 +357,7 @@ if (isset($_SESSION['role'])) {
         box-shadow: 0 0 0 4px rgba(31, 139, 76, 0.18);
     }
     .progress-modal .progress-item.current::before {
-        background: linear-gradient(180deg, rgba(31, 139, 76, 0.9), rgba(215, 221, 214, 0.9));
+        background: #0f6b35;
     }
     .progress-modal .progress-item.current .progress-label {
         color: #1d3522;
