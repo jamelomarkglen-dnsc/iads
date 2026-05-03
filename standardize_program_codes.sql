@@ -11,14 +11,30 @@ SET program = 'PHDEM'
 WHERE program IN ('PhD in Educational Management', 'Doctor of Philosophy in Educational Management', 'PHDEM');
 
 UPDATE users 
+SET program = 'PHD-ELST' 
+WHERE program IN (
+    'PhD in English Language Studies and Teaching',
+    'Doctor of Philosophy in English Language Studies and Teaching',
+    'PhD ELST',
+    'PHD-ELST'
+);
+
+UPDATE users 
+SET program = 'PHD-SCIED' 
+WHERE program IN (
+    'PhD in Science Education',
+    'Doctor of Philosophy in Science Education',
+    'PhD SciEd',
+    'PHD-SCIED'
+);
+
+UPDATE users 
 SET program = 'MAEM' 
 WHERE program IN ('Master of Arts in Educational Management', 'MAEM');
 
 UPDATE users 
 SET program = 'MAED-ELST' 
 WHERE program IN (
-    'PhD in English Language Studies and Teaching',
-    'Doctor of Philosophy in English Language Studies and Teaching',
     'Master of Education Major in English Language Studies and Teaching',
     'MAED-ELST'
 );
@@ -55,7 +71,7 @@ WHERE program IN ('Master in Information Technology', 'MIT');
 SELECT DISTINCT program, COUNT(*) as count
 FROM users 
 WHERE program IS NOT NULL 
-  AND program NOT IN ('PHDEM', 'MAEM', 'MAED-ELST', 'MST-GENSCI', 'MST-MATH', 'MFM-AT', 'MFM-FP', 'MSMB', 'MIT')
+  AND program NOT IN ('PHDEM', 'PHD-ELST', 'PHD-SCIED', 'MAEM', 'MAED-ELST', 'MST-GENSCI', 'MST-MATH', 'MFM-AT', 'MFM-FP', 'MSMB', 'MIT')
 GROUP BY program;
 
 -- Display summary of standardized programs

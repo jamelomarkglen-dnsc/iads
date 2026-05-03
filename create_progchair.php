@@ -337,6 +337,8 @@ if (isset($_POST['create'])) {
                                     <select name="program_focus" class="form-select" required>
                                         <option value="" disabled selected>Select Program</option>
                                         <option value="PHDEM" data-desc="Doctor of Philosophy in Educational Management">Doctor of Philosophy in Educational Management (PHDEM)</option>
+                                        <option value="PHD-ELST" data-desc="Doctor of Philosophy in English Language Studies and Teaching">Doctor of Philosophy in English Language Studies and Teaching (PhD ELST)</option>
+                                        <option value="PHD-SCIED" data-desc="Doctor of Philosophy in Science Education">Doctor of Philosophy in Science Education (PhD SciEd)</option>
                                         <option value="MAEM" data-desc="Master of Arts in Educational Management">Master of Arts in Educational Management (MAEM)</option>
                                         <option value="MAED-ELST" data-desc="Master of Education Major in English Language Studies and Teaching">Master of Education Major in English Language Studies and Teaching (MAED-ELST)</option>
                                         <option value="MST-GENSCI" data-desc="Master in Science Teaching Major in General Science">Master in Science Teaching Major in General Science (MST-GENSCI)</option>
@@ -497,4 +499,3 @@ if (isset($_POST['create'])) {
 
 </body>
 </html>
-

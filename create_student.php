@@ -257,6 +257,8 @@ if ($hasProgramColumn) {
 
 $programOptions = $hasProgramColumn ? [
     'PHDEM' => 'Doctor of Philosophy in Educational Management (PHDEM)',
+    'PHD-ELST' => 'Doctor of Philosophy in English Language Studies and Teaching (PhD ELST)',
+    'PHD-SCIED' => 'Doctor of Philosophy in Science Education (PhD SciEd)',
     'MAEM' => 'Master of Arts in Educational Management (MAEM)',
     'MAED-ELST' => 'Master of Education Major in English Language Studies and Teaching (MAED-ELST)',
     'MST-GENSCI' => 'Master in Science Teaching Major in General Science (MST-GENSCI)',
