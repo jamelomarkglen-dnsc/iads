@@ -3,6 +3,7 @@ session_start();
 include 'db.php';
 require_once 'chair_scope_helper.php';
 require_once 'notifications_helper.php';
+require_once __DIR__ . '/program_helper.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'program_chairperson') {
     header("Location: login.php");
@@ -62,10 +63,12 @@ $scopeDepartment = trim((string)($scope['department'] ?? ''));
 $scopeCollege = trim((string)($scope['college'] ?? ''));
 
 if ($scopeProgram !== '') {
-    $scopeSql = "AND u.department = ?";
-    $scopeTypes = 's';
-    $scopeParams = [$scopeProgram];
-    $scopeLabel = $scopeProgram;
+    $scopeSql = '';
+    $scopeTypes = '';
+    $scopeParams = [];
+    $scopeSqlClause = program_sql_in_clause('u.department', $scopeProgram, $scopeParams, $scopeTypes);
+    $scopeSql = $scopeSqlClause !== '' ? "AND {$scopeSqlClause}" : '';
+    $scopeLabel = program_display_label($scopeProgram);
 } elseif ($scopeDepartment !== '') {
     $scopeSql = "AND u.department = ?";
     $scopeTypes = 's';

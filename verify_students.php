@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'db.php';
+require_once __DIR__ . '/program_helper.php';
 
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'faculty') {
     header("Location: login.php");
@@ -61,7 +62,7 @@ if ($facultyId > 0) {
         if ($stmt->execute()) {
             $result = $stmt->get_result();
             if ($row = $result->fetch_assoc()) {
-                $facultyScope['program'] = trim((string)($row['program'] ?? ''));
+                $facultyScope['program'] = normalize_program_code($row['program'] ?? '');
                 $facultyScope['department'] = trim((string)($row['department'] ?? ''));
                 $facultyScope['college'] = trim((string)($row['college'] ?? ''));
             }
@@ -79,15 +80,21 @@ $scopeParams = [];
 $scopeLabel = '';
 
 if ($facultyScope['program'] !== '') {
-    $scopeSql = "AND (u.program = ? OR u.department = ?)";
-    $scopeTypes = 'ss';
-    $scopeParams = [$facultyScope['program'], $facultyScope['program']];
-    $scopeLabel = $facultyScope['program'];
+    $scopeSql = '';
+    $scopeTypes = '';
+    $scopeParams = [];
+    $programClause = program_sql_in_clause('u.program', $facultyScope['program'], $scopeParams, $scopeTypes);
+    $departmentClause = program_sql_in_clause('u.department', $facultyScope['program'], $scopeParams, $scopeTypes);
+    $scopeSql = "AND ({$programClause} OR {$departmentClause})";
+    $scopeLabel = program_display_label($facultyScope['program']);
 } elseif ($facultyScope['department'] !== '') {
-    $scopeSql = "AND (u.program = ? OR u.department = ?)";
-    $scopeTypes = 'ss';
-    $scopeParams = [$facultyScope['department'], $facultyScope['department']];
-    $scopeLabel = $facultyScope['department'];
+    $scopeSql = '';
+    $scopeTypes = '';
+    $scopeParams = [];
+    $programClause = program_sql_in_clause('u.program', $facultyScope['department'], $scopeParams, $scopeTypes);
+    $departmentClause = program_sql_in_clause('u.department', $facultyScope['department'], $scopeParams, $scopeTypes);
+    $scopeSql = "AND ({$programClause} OR {$departmentClause})";
+    $scopeLabel = program_display_label($facultyScope['department']);
 } elseif ($facultyScope['college'] !== '') {
     $scopeSql = "AND u.college = ?";
     $scopeTypes = 's';

@@ -8,13 +8,14 @@
 -- Update full program names to standardized codes
 UPDATE users 
 SET program = 'PHDEM' 
-WHERE program IN ('PhD in Educational Management', 'Doctor of Philosophy in Educational Management', 'PHDEM');
+WHERE program IN ('PhD in Educational Management', 'Doctor of Philosophy in Educational Management', 'Doctor of Philosophy in Educational Management (PHDEM)', 'PHDEM');
 
 UPDATE users 
 SET program = 'PHD-ELST' 
 WHERE program IN (
     'PhD in English Language Studies and Teaching',
     'Doctor of Philosophy in English Language Studies and Teaching',
+    'Doctor of Philosophy in English Language Studies and Teaching (PhD ELST)',
     'PhD ELST',
     'PHD-ELST'
 );
@@ -24,6 +25,7 @@ SET program = 'PHD-SCIED'
 WHERE program IN (
     'PhD in Science Education',
     'Doctor of Philosophy in Science Education',
+    'Doctor of Philosophy in Science Education (PhD SciEd)',
     'PhD SciEd',
     'PHD-SCIED'
 );

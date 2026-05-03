@@ -2,6 +2,7 @@
 session_start();
 include 'db.php';
 require_once 'notifications_helper.php';
+require_once __DIR__ . '/program_helper.php';
 
 $message = "";
 $allowedRegistrationRoles = ['student'];
@@ -128,10 +129,10 @@ function verifier_matches_scope(array $verifier, string $candidateProgram, strin
     $college = normalize_scope_value($verifier['college'] ?? '');
 
     if ($program !== '') {
-        return scope_value_equals($candidateProgram, $program) || scope_value_equals($candidateDepartment, $program);
+        return program_values_match($candidateProgram, $program) || program_values_match($candidateDepartment, $program);
     }
     if ($department !== '') {
-        return scope_value_equals($candidateDepartment, $department) || scope_value_equals($candidateProgram, $department);
+        return program_values_match($candidateDepartment, $department) || program_values_match($candidateProgram, $department);
     }
     if ($college !== '') {
         return scope_value_equals($candidateCollege, $college);
@@ -172,10 +173,10 @@ function chair_matches_faculty(array $chair, string $facultyDepartment, string $
     $college = normalize_scope_value($chair['college'] ?? '');
 
     if ($program !== '') {
-        return scope_value_equals($facultyDepartment, $program);
+        return program_values_match($facultyDepartment, $program);
     }
     if ($department !== '') {
-        return scope_value_equals($facultyDepartment, $department);
+        return program_values_match($facultyDepartment, $department);
     }
     if ($college !== '') {
         return scope_value_equals($facultyCollege, $college);
@@ -190,10 +191,10 @@ function faculty_matches_student(array $faculty, string $studentProgram, string 
     $college = normalize_scope_value($faculty['college'] ?? '');
 
     if ($program !== '') {
-        return scope_value_equals($studentProgram, $program) || scope_value_equals($studentDepartment, $program);
+        return program_values_match($studentProgram, $program) || program_values_match($studentDepartment, $program);
     }
     if ($department !== '') {
-        return scope_value_equals($studentProgram, $department) || scope_value_equals($studentDepartment, $department);
+        return program_values_match($studentProgram, $department) || program_values_match($studentDepartment, $department);
     }
     if ($college !== '') {
         return scope_value_equals($studentCollege, $college);
@@ -242,7 +243,7 @@ function notify_verification_for_registration(
 
     if ($role === 'faculty') {
         $title = 'Faculty Verification Required';
-        $details = $department !== '' ? " Program: {$department}." : '';
+        $details = $department !== '' ? ' Program: ' . program_display_label($department) . '.' : '';
         $message = $fullname !== '' ? "New faculty account pending verification: {$fullname}.{$details}" : "New faculty account pending verification.{$details}";
 
         if ($hasDepartmentColumn || $hasCollegeColumn || $hasProgramColumn) {
@@ -266,7 +267,7 @@ function notify_verification_for_registration(
 
     if ($role === 'student') {
         $title = 'Student Verification Required';
-        $programLabel = $studentProgram !== '' ? " Program: {$studentProgram}." : '';
+        $programLabel = $studentProgram !== '' ? ' Program: ' . program_display_label($studentProgram) . '.' : '';
         $message = $fullname !== '' ? "New student account pending verification: {$fullname}.{$programLabel}" : "New student account pending verification.{$programLabel}";
 
         if ($hasDepartmentColumn || $hasCollegeColumn || $hasProgramColumn) {
@@ -287,19 +288,7 @@ function notify_verification_for_registration(
     }
 }
 
-$programOptions = [
-    'PHDEM' => 'Doctor of Philosophy in Educational Management (PHDEM)',
-    'PHD-ELST' => 'Doctor of Philosophy in English Language Studies and Teaching (PhD ELST)',
-    'PHD-SCIED' => 'Doctor of Philosophy in Science Education (PhD SciEd)',
-    'MAEM' => 'Master of Arts in Educational Management (MAEM)',
-    'MAED-ELST' => 'Master of Education Major in English Language Studies and Teaching (MAED-ELST)',
-    'MST-GENSCI' => 'Master in Science Teaching Major in General Science (MST-GENSCI)',
-    'MST-MATH' => 'Master in Science Teaching Major in Mathematics (MST-MATH)',
-    'MFM-AT' => 'Master in Fisheries Management Major in Aquaculture Technology (MFM-AT)',
-    'MFM-FP' => 'Master in Fisheries Management Major in Fish Processing (MFM-FP)',
-    'MSMB' => 'Master of Science in Marine Biodiversity (MSMB)',
-    'MIT' => 'Master in Information Technology (MIT)',
-];
+$programOptions = program_options();
 
 $yearOptions = [
     '1st Year',
@@ -426,6 +415,7 @@ if (isset($_POST['register'])) {
         $values = [$firstname, $lastname, $username, $passwordHashed, $email, $role];
 
         if ($role === 'student') {
+            $programCode = normalize_program_code($oldInput['program']);
             if ($hasStudentIdColumn) {
                 $columns[] = 'student_id';
                 $types .= 's';
@@ -440,7 +430,7 @@ if (isset($_POST['register'])) {
             if ($hasProgramColumn) {
                 $columns[] = 'program';
                 $types .= 's';
-                $values[] = $oldInput['program'];
+                $values[] = $programCode;
             }
             if ($hasDepartmentColumn) {
                 $columns[] = 'department';
@@ -482,8 +472,8 @@ if (isset($_POST['register'])) {
                         $fullName,
                         trim((string)($oldInput['department'] ?? '')),
                         trim((string)($oldInput['college'] ?? '')),
-                        trim((string)($program ?? '')),
-                        trim((string)($oldInput['program'] ?? '')),
+                        normalize_program_code($oldInput['program']),
+                        normalize_program_code($oldInput['program']),
                         trim((string)($oldInput['department'] ?? '')),
                         trim((string)($oldInput['college'] ?? '')),
                         $hasProgramColumn,
@@ -621,9 +611,9 @@ if (isset($_POST['register'])) {
                 </div>
                 <div class="col-md-6">
                     <select name="program" class="form-select" data-required="true">
-                        <option value="" disabled <?php echo $oldInput['program'] === '' ? 'selected' : ''; ?>>Select Program</option>
+                        <option value="" disabled <?php echo normalize_program_code($oldInput['program']) === '' ? 'selected' : ''; ?>>Select Program</option>
                         <?php foreach ($programOptions as $code => $label): ?>
-                            <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['program'] === $code ? 'selected' : ''; ?>>
+                            <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo normalize_program_code($oldInput['program']) === $code ? 'selected' : ''; ?>>
                                 <?php echo htmlspecialchars($label); ?>
                             </option>
                         <?php endforeach; ?>

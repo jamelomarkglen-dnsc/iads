@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'db.php';
+require_once __DIR__ . '/program_helper.php';
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'program_chairperson') {
     header("Location: login.php");
@@ -50,7 +51,7 @@ $errorMessage = '';
 if (isset($_POST['update_student'])) {
     $studentId = (int)($_POST['user_id'] ?? 0);
     $studentIdValue = trim($_POST['student_id_value'] ?? '');
-    $program = trim($_POST['program'] ?? '');
+    $program = normalize_program_code(trim($_POST['program'] ?? ''));
     $yearLevel = trim($_POST['year_level'] ?? '');
     $contact = trim($_POST['contact'] ?? '');
 
@@ -112,7 +113,11 @@ if ($hasProgramColumn) {
     $programResult = $conn->query("SELECT program, COUNT(*) AS total FROM users WHERE role = 'student' GROUP BY program");
     if ($programResult) {
         while ($row = $programResult->fetch_assoc()) {
-            $programCounts[$row['program'] ?? 'Unknown'] = (int)($row['total'] ?? 0);
+            $programKey = normalize_program_code((string)($row['program'] ?? ''));
+            if ($programKey === '') {
+                $programKey = trim((string)($row['program'] ?? 'Unknown'));
+            }
+            $programCounts[$programKey] = (int)($row['total'] ?? 0);
         }
         $programResult->free();
         if (!empty($programCounts)) {
@@ -145,8 +150,12 @@ if ($hasProgramColumn) {
     $programOptionResult = $conn->query("SELECT DISTINCT program FROM users WHERE role = 'student' AND program <> '' ORDER BY program ASC");
     if ($programOptionResult) {
         while ($row = $programOptionResult->fetch_assoc()) {
-            if (!empty($row['program'])) {
-                $programOptions[] = $row['program'];
+            $programKey = normalize_program_code((string)($row['program'] ?? ''));
+            if ($programKey === '') {
+                $programKey = trim((string)($row['program'] ?? ''));
+            }
+            if ($programKey !== '' && !in_array($programKey, $programOptions, true)) {
+                $programOptions[] = $programKey;
             }
         }
         $programOptionResult->free();
@@ -167,7 +176,7 @@ if ($hasYearLevelColumn) {
 }
 
 $search = trim($_GET['search'] ?? '');
-$programFilter = $_GET['program'] ?? '';
+$programFilter = normalize_program_code($_GET['program'] ?? '');
 $yearFilter = $_GET['year_level'] ?? '';
 
 $conditions = ["role = 'student'"];
@@ -183,10 +192,11 @@ if ($search !== '') {
     $types .= 'sss';
 }
 
-if ($hasProgramColumn && $programFilter !== '' && in_array($programFilter, $programOptions, true)) {
-    $conditions[] = "program = ?";
-    $params[] = $programFilter;
-    $types .= 's';
+if ($hasProgramColumn && $programFilter !== '') {
+    $programClause = program_sql_in_clause('program', $programFilter, $params, $types);
+    if ($programClause !== '') {
+        $conditions[] = $programClause;
+    }
 }
 
 if ($hasYearLevelColumn && $yearFilter !== '' && in_array($yearFilter, $yearOptions, true)) {
@@ -380,8 +390,8 @@ $uniqueProgramsInView = count($filteredProgramSet);
                             <select name="program" class="form-select">
                                 <option value="">All Programs</option>
                                 <?php foreach ($programOptions as $programOption): ?>
-                                    <option value="<?= htmlspecialchars($programOption); ?>" <?= $programFilter === $programOption ? 'selected' : ''; ?>>
-                                        <?= htmlspecialchars($programOption); ?>
+                                    <option value="<?= htmlspecialchars($programOption); ?>" <?= normalize_program_code($programFilter) === normalize_program_code($programOption) ? 'selected' : ''; ?>>
+                                        <?= htmlspecialchars(program_display_label($programOption)); ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -447,7 +457,7 @@ $uniqueProgramsInView = count($filteredProgramSet);
                         $modalId = 'manageStudent' . (int)$student['id'];
                         $conceptCount = (int)($student['concept_count'] ?? 0);
                         $conceptPercent = min(100, max(0, $conceptCount * 20));
-                        $programLabel = trim((string)($student['program'] ?? ''));
+                        $programLabel = program_display_label((string)($student['program'] ?? ''));
                         $yearLabel = trim((string)($student['year_level'] ?? ''));
                         $studentIdLabel = $hasStudentIdColumn ? trim((string)($student['student_id'] ?? '')) : '';
                     ?>
@@ -519,22 +529,9 @@ $uniqueProgramsInView = count($filteredProgramSet);
                                                 <select name="program" class="form-select">
                                                     <option value="">Select Program</option>
                                                     <?php
-                                                    $programOptions = [
-                                                        'PHDEM' => 'Doctor of Philosophy in Educational Management (PHDEM)',
-                                                        'PHD-ELST' => 'Doctor of Philosophy in English Language Studies and Teaching (PhD ELST)',
-                                                        'PHD-SCIED' => 'Doctor of Philosophy in Science Education (PhD SciEd)',
-                                                        'MAEM' => 'Master of Arts in Educational Management (MAEM)',
-                                                        'MAED-ELST' => 'Master of Education Major in English Language Studies and Teaching (MAED-ELST)',
-                                                        'MST-GENSCI' => 'Master in Science Teaching Major in General Science (MST-GENSCI)',
-                                                        'MST-MATH' => 'Master in Science Teaching Major in Mathematics (MST-MATH)',
-                                                        'MFM-AT' => 'Master in Fisheries Management Major in Aquaculture Technology (MFM-AT)',
-                                                        'MFM-FP' => 'Master in Fisheries Management Major in Fish Processing (MFM-FP)',
-                                                        'MSMB' => 'Master of Science in Marine Biodiversity (MSMB)',
-                                                        'MIT' => 'Master in Information Technology (MIT)',
-                                                    ];
-                                                    foreach ($programOptions as $code => $label):
+                                                    foreach (program_options() as $code => $label):
                                                     ?>
-                                                        <option value="<?= htmlspecialchars($code); ?>" <?= ($student['program'] ?? '') === $code ? 'selected' : ''; ?>>
+                                                        <option value="<?= htmlspecialchars($code); ?>" <?= normalize_program_code((string)($student['program'] ?? '')) === $code ? 'selected' : ''; ?>>
                                                             <?= htmlspecialchars($label); ?>
                                                         </option>
                                                     <?php endforeach; ?>

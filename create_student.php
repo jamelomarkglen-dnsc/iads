@@ -2,6 +2,7 @@
 session_start();
 include 'db.php';
 require_once 'chair_scope_helper.php';
+require_once __DIR__ . '/program_helper.php';
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'program_chairperson') {
     header("Location: login.php");
     exit;
@@ -122,7 +123,7 @@ if (isset($_POST['create_student'])) {
         $error = "Please provide a valid email address.";
     } elseif ($hasStudentIdColumn && !preg_match('/^[0-9]{2,}$/', $oldInput['student_id'])) {
         $error = "Student ID should contain digits only.";
-    } elseif ($programRequired && $oldInput['program'] === '') {
+    } elseif ($programRequired && normalize_program_code($oldInput['program']) === '') {
         $error = "Please select a program.";
     } elseif ($hasYearLevelColumn && $oldInput['year_level'] === '') {
         $error = "Please select a year level.";
@@ -171,7 +172,7 @@ if (isset($_POST['create_student'])) {
                 if ($hasProgramColumn) {
                     $insertColumns[] = 'program';
                     $insertTypes .= 's';
-                    $insertValues[] = $oldInput['program'];
+                    $insertValues[] = normalize_program_code($oldInput['program']);
                 }
                 if ($hasDepartmentColumn) {
                     $insertColumns[] = 'department';
@@ -249,25 +250,23 @@ if ($hasProgramColumn) {
     $programResult = $conn->query("SELECT program, COUNT(*) AS total FROM users WHERE role = 'student' GROUP BY program");
     if ($programResult) {
         while ($row = $programResult->fetch_assoc()) {
-            $studentStats['byProgram'][$row['program']] = (int)$row['total'];
+            $programKey = normalize_program_code((string)($row['program'] ?? ''));
+            if ($programKey === '') {
+                $programKey = trim((string)($row['program'] ?? ''));
+            }
+            if ($programKey === '') {
+                $programKey = 'Unspecified';
+            }
+            if (!isset($studentStats['byProgram'][$programKey])) {
+                $studentStats['byProgram'][$programKey] = 0;
+            }
+            $studentStats['byProgram'][$programKey] += (int)$row['total'];
         }
         $programResult->free();
     }
 }
 
-$programOptions = $hasProgramColumn ? [
-    'PHDEM' => 'Doctor of Philosophy in Educational Management (PHDEM)',
-    'PHD-ELST' => 'Doctor of Philosophy in English Language Studies and Teaching (PhD ELST)',
-    'PHD-SCIED' => 'Doctor of Philosophy in Science Education (PhD SciEd)',
-    'MAEM' => 'Master of Arts in Educational Management (MAEM)',
-    'MAED-ELST' => 'Master of Education Major in English Language Studies and Teaching (MAED-ELST)',
-    'MST-GENSCI' => 'Master in Science Teaching Major in General Science (MST-GENSCI)',
-    'MST-MATH' => 'Master in Science Teaching Major in Mathematics (MST-MATH)',
-    'MFM-AT' => 'Master in Fisheries Management Major in Aquaculture Technology (MFM-AT)',
-    'MFM-FP' => 'Master in Fisheries Management Major in Fish Processing (MFM-FP)',
-    'MSMB' => 'Master of Science in Marine Biodiversity (MSMB)',
-    'MIT' => 'Master in Information Technology (MIT)',
-] : [];
+$programOptions = $hasProgramColumn ? program_options() : [];
 
 $yearOptions = $hasYearLevelColumn ? [
     '1st Year',
@@ -404,7 +403,7 @@ $yearOptions = $hasYearLevelColumn ? [
                                 <?php foreach (array_slice($studentStats['byProgram'], 0, 3, true) as $programCode => $count): ?>
                                     <li class="d-flex justify-content-between align-items-center py-1 border-bottom">
                                         <span class="fw-semibold text-success">
-                                            <?php echo htmlspecialchars($programOptions[$programCode] ?? (string)$programCode); ?>
+                                            <?php echo htmlspecialchars(program_display_label((string)$programCode)); ?>
                                         </span>
                                         <span class="badge bg-success-subtle text-success fw-semibold"><?php echo number_format($count); ?></span>
                                     </li>
@@ -427,7 +426,7 @@ $yearOptions = $hasYearLevelColumn ? [
                     <div class="col-12 col-md-4">
                         <a href="student_dashboard.php?program=<?php echo urlencode((string)$programCode); ?>" class="quick-link-card d-flex align-items-center justify-content-between p-3 text-success text-decoration-none bg-white shadow-sm">
                             <div>
-                                <div class="fw-semibold"><?php echo htmlspecialchars($programOptions[$programCode] ?? (string)$programCode); ?></div>
+                                <div class="fw-semibold"><?php echo htmlspecialchars(program_display_label((string)$programCode)); ?></div>
                                 <div class="small text-muted">Active students</div>
                             </div>
                             <div class="badge bg-success-subtle text-success fw-bold rounded-pill px-3 py-2">
@@ -500,9 +499,9 @@ $yearOptions = $hasYearLevelColumn ? [
                             <div class="<?php echo $hasYearLevelColumn ? 'col-md-6' : 'col-12'; ?>">
                                 <div class="form-floating">
                                     <select name="program" id="program" class="form-select" <?php echo $programRequired ? 'required' : ''; ?>>
-                                        <option value="" disabled <?php echo $oldInput['program'] === '' ? 'selected' : ''; ?>>Select Program</option>
+                                        <option value="" disabled <?php echo normalize_program_code($oldInput['program']) === '' ? 'selected' : ''; ?>>Select Program</option>
                                         <?php foreach ($programOptions as $code => $label): ?>
-                                            <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['program'] === $code ? 'selected' : ''; ?>>
+                                            <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo normalize_program_code($oldInput['program']) === $code ? 'selected' : ''; ?>>
                                                 <?php echo htmlspecialchars($label); ?>
                                             </option>
                                         <?php endforeach; ?>

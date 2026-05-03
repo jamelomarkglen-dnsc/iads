@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/program_helper.php';
 
 function get_program_chair_scope(mysqli $conn, int $userId): array
 {
@@ -20,7 +21,7 @@ function get_program_chair_scope(mysqli $conn, int $userId): array
             if ($stmt->execute()) {
                 $result = $stmt->get_result();
                 if ($row = $result->fetch_assoc()) {
-                    $scope['program'] = trim((string)($row['program'] ?? ''));
+                    $scope['program'] = normalize_program_code($row['program'] ?? '');
                     $scope['department'] = trim((string)($row['department'] ?? ''));
                     $scope['college'] = trim((string)($row['college'] ?? ''));
                 }
@@ -41,8 +42,11 @@ function build_scope_condition(array $scope, string $alias = 'u'): array
     $department = trim((string)($scope['department'] ?? ''));
     $college = trim((string)($scope['college'] ?? ''));
 
+    $params = [];
+    $types = '';
     if ($program !== '') {
-        return ["{$alias}.program = ?", 's', [$program]];
+        $clause = program_sql_in_clause("{$alias}.program", $program, $params, $types);
+        return [$clause, $types, $params];
     }
     if ($department !== '') {
         return ["{$alias}.department = ?", 's', [$department]];
@@ -78,10 +82,10 @@ function student_matches_scope(mysqli $conn, int $studentId, array $scope): bool
     $studentCollege = trim((string)($student['college'] ?? ''));
 
     if ($program !== '') {
-        return strcasecmp($studentProgram, $program) === 0;
+        return program_values_match($studentProgram, $program);
     }
     if ($department !== '') {
-        return strcasecmp($studentDepartment, $department) === 0;
+        return program_values_match($studentDepartment, $department);
     }
     if ($college !== '') {
         return strcasecmp($studentCollege, $college) === 0;
@@ -100,15 +104,14 @@ function build_scope_condition_any(array $scope, string $alias = 'u'): array
     $values = [];
     $seen = [];
     foreach ($rawValues as $value) {
-        if ($value === '') {
-            continue;
+        foreach (program_match_terms($value) as $term) {
+            $key = strtolower(trim($term));
+            if ($key === '' || isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $values[] = $term;
         }
-        $key = strtolower($value);
-        if (isset($seen[$key])) {
-            continue;
-        }
-        $seen[$key] = true;
-        $values[] = $value;
     }
 
     if (empty($values)) {
@@ -169,13 +172,13 @@ function student_matches_scope_any(mysqli $conn, int $studentId, array $scope): 
     $studentCollege = trim((string)($student['college'] ?? ''));
 
     foreach ($values as $value) {
-        if (strcasecmp($studentProgram, $value) === 0) {
+        if (program_values_match($studentProgram, $value)) {
             return true;
         }
-        if (strcasecmp($studentDepartment, $value) === 0) {
+        if (program_values_match($studentDepartment, $value)) {
             return true;
         }
-        if (strcasecmp($studentCollege, $value) === 0) {
+        if (program_values_match($studentCollege, $value)) {
             return true;
         }
     }

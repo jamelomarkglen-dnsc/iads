@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'db.php';
+require_once __DIR__ . '/program_helper.php';
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'program_chairperson') {
     header("Location: login.php");
@@ -19,19 +20,7 @@ $oldInput = [
     'username' => '',
     'specialization' => '',
 ];
-$programOptions = [
-    'PHDEM' => 'Doctor of Philosophy in Educational Management (PHDEM)',
-    'PHD-ELST' => 'Doctor of Philosophy in English Language Studies and Teaching (PhD ELST)',
-    'PHD-SCIED' => 'Doctor of Philosophy in Science Education (PhD SciEd)',
-    'MAEM' => 'Master of Arts in Educational Management (MAEM)',
-    'MAED-ELST' => 'Master of Education Major in English Language Studies and Teaching (MAED-ELST)',
-    'MST-GENSCI' => 'Master in Science Teaching Major in General Science (MST-GENSCI)',
-    'MST-MATH' => 'Master in Science Teaching Major in Mathematics (MST-MATH)',
-    'MFM-AT' => 'Master in Fisheries Management Major in Aquaculture Technology (MFM-AT)',
-    'MFM-FP' => 'Master in Fisheries Management Major in Fish Processing (MFM-FP)',
-    'MSMB' => 'Master of Science in Marine Biodiversity (MSMB)',
-    'MIT' => 'Master in Information Technology (MIT)',
-];
+$programOptions = program_options();
 
 function split_name($name)
 {
@@ -66,7 +55,7 @@ if (isset($_POST['create'])) {
         $message = "<div class='alert alert-danger'>Contact number should contain 10-15 digits.</div>";
     } elseif (!filter_var($oldInput['email'], FILTER_VALIDATE_EMAIL)) {
         $message = "<div class='alert alert-danger'>Please enter a valid email address.</div>";
-    } elseif ($oldInput['department'] === '') {
+    } elseif (normalize_program_code($oldInput['department']) === '') {
         $message = "<div class='alert alert-danger'>Please select a program.</div>";
     } else {
         $email = $oldInput['email'];
@@ -83,6 +72,7 @@ if (isset($_POST['create'])) {
             [$firstname, $lastname] = split_name($oldInput['fullname']);
             $password = password_hash($passwordPlain, PASSWORD_DEFAULT);
             $sql = null;
+            $programCode = normalize_program_code($oldInput['department']);
 
             if ($hasSpecializationColumn) {
                 $sql = $conn->prepare("
@@ -100,7 +90,7 @@ if (isset($_POST['create'])) {
                         $oldInput['role'],
                         $oldInput['contact'],
                         $oldInput['gender'],
-                        $oldInput['department'],
+                        $programCode,
                         $oldInput['college'],
                         $oldInput['specialization']
                     );
@@ -121,7 +111,7 @@ if (isset($_POST['create'])) {
                         $oldInput['role'],
                         $oldInput['contact'],
                         $oldInput['gender'],
-                        $oldInput['department'],
+                        $programCode,
                         $oldInput['college']
                     );
                 }
@@ -271,7 +261,7 @@ if ($countResult) {
                     <select name="department" class="form-select" required>
                         <option value="" disabled <?php echo $oldInput['department'] === '' ? 'selected' : ''; ?>>Select Program</option>
                         <?php foreach ($programOptions as $code => $label): ?>
-                            <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['department'] === $code ? 'selected' : ''; ?>>
+                            <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo normalize_program_code($oldInput['department']) === $code ? 'selected' : ''; ?>>
                                 <?php echo htmlspecialchars($label); ?>
                             </option>
                         <?php endforeach; ?>

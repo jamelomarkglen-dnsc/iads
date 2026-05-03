@@ -4,6 +4,7 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/role_helpers.php';
 require_once __DIR__ . '/registration_invite_helpers.php';
 require_once __DIR__ . '/notifications_helper.php';
+require_once __DIR__ . '/program_helper.php';
 
 ensureRoleInfrastructure($conn);
 ensure_registration_invites_table($conn);
@@ -40,19 +41,7 @@ $oldInput = [
     'specialization' => '',
 ];
 
-$programOptions = [
-    'PHDEM' => 'Doctor of Philosophy in Educational Management (PHDEM)',
-    'PHD-ELST' => 'Doctor of Philosophy in English Language Studies and Teaching (PhD ELST)',
-    'PHD-SCIED' => 'Doctor of Philosophy in Science Education (PhD SciEd)',
-    'MAEM' => 'Master of Arts in Educational Management (MAEM)',
-    'MAED-ELST' => 'Master of Education Major in English Language Studies and Teaching (MAED-ELST)',
-    'MST-GENSCI' => 'Master in Science Teaching Major in General Science (MST-GENSCI)',
-    'MST-MATH' => 'Master in Science Teaching Major in Mathematics (MST-MATH)',
-    'MFM-AT' => 'Master in Fisheries Management Major in Aquaculture Technology (MFM-AT)',
-    'MFM-FP' => 'Master in Fisheries Management Major in Fish Processing (MFM-FP)',
-    'MSMB' => 'Master of Science in Marine Biodiversity (MSMB)',
-    'MIT' => 'Master in Information Technology (MIT)',
-];
+$programOptions = program_options();
 
 function generateUniqueUsername(mysqli $conn, string $email, string $firstName, string $lastName): string
 {
@@ -100,7 +89,7 @@ function notify_verification_for_invite_registration(
 
     if ($role === 'faculty') {
         $title = 'Faculty Verification Required';
-        $details = $department !== '' ? " Program: {$department}." : '';
+        $details = $department !== '' ? ' Program: ' . program_display_label($department) . '.' : '';
         $message = $fullname !== '' ? "New faculty account pending verification: {$fullname}.{$details}" : "New faculty account pending verification.{$details}";
         notify_role($conn, 'program_chairperson', $title, $message, 'verify_faculty.php', false);
         return;
@@ -108,7 +97,7 @@ function notify_verification_for_invite_registration(
 
     if ($role === 'program_chairperson') {
         $title = 'Program Chairperson Verification Required';
-        $details = $department !== '' ? " Program: {$department}." : '';
+        $details = $department !== '' ? ' Program: ' . program_display_label($department) . '.' : '';
         $message = $fullname !== '' ? "New program chairperson account pending verification: {$fullname}.{$details}" : "New program chairperson account pending verification.{$details}";
         notify_role($conn, 'dean', $title, $message, 'verify_program_chair.php');
     }
@@ -144,6 +133,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
         $error = 'First name and last name are required.';
     } elseif ($oldInput['contact'] === '' || $oldInput['gender'] === '' || $oldInput['college'] === '' || $oldInput['department'] === '') {
         $error = 'Please complete all required profile fields.';
+    } elseif (in_array($role, ['faculty', 'program_chairperson'], true) && normalize_program_code($oldInput['department']) === '') {
+        $error = 'Please select a valid program.';
     } else {
         $generatedUsername = generateUniqueUsername($conn, $postedEmail, $oldInput['first_name'], $oldInput['last_name']);
         $checkStmt = $conn->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
@@ -167,6 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
         $passwordHashed = password_hash($passwordPlain, PASSWORD_DEFAULT);
         $accountStatus = 'pending';
         if ($role === 'faculty') {
+            $normalizedProgram = normalize_program_code($oldInput['department']);
             $columns = ['firstname', 'lastname', 'username', 'password', 'email', 'role', 'contact', 'gender', 'department', 'college', 'account_status'];
             $values = [
                 $firstname,
@@ -177,7 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
                 'faculty',
                 $oldInput['contact'],
                 $oldInput['gender'],
-                $oldInput['department'],
+                $normalizedProgram,
                 $oldInput['college'],
                 $accountStatus,
             ];
@@ -216,7 +208,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
                         $conn,
                         $role,
                         trim($firstname . ' ' . $lastname),
-                        trim((string)$oldInput['department']),
+                        program_display_label($oldInput['department']),
                         trim((string)$oldInput['college'])
                     );
                     $success = 'Registration successful! Your account is pending verification by the Program Chairperson.';
@@ -224,6 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
                 $insertStmt->close();
             }
         } elseif ($role === 'program_chairperson') {
+            $normalizedProgram = normalize_program_code($oldInput['department']);
             $columns = ['firstname', 'lastname', 'username', 'password', 'email', 'role', 'contact', 'gender', 'department', 'college', 'program', 'account_status'];
             $values = [
                 $firstname,
@@ -234,9 +227,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
                 'program_chairperson',
                 $oldInput['contact'],
                 $oldInput['gender'],
-                $oldInput['department'],
+                $normalizedProgram,
                 $oldInput['college'],
-                $oldInput['department'],
+                $normalizedProgram,
                 $accountStatus,
             ];
             $types = 'ssssssssssss';
@@ -268,7 +261,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$error) {
                         $conn,
                         $role,
                         trim($firstname . ' ' . $lastname),
-                        trim((string)$oldInput['department']),
+                        program_display_label($oldInput['department']),
                         trim((string)$oldInput['college'])
                     );
                     $success = 'Registration successful! Your account is pending verification by the Dean.';
@@ -533,7 +526,7 @@ if ($error !== '' && !$invite) {
                                     <select name="department" class="form-select" required>
                                         <option value="">Select Program</option>
                                         <?php foreach ($programOptions as $code => $label): ?>
-                                            <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $oldInput['department'] === $code ? 'selected' : ''; ?>>
+                                            <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo normalize_program_code($oldInput['department']) === $code ? 'selected' : ''; ?>>
                                                 <?php echo htmlspecialchars($label); ?>
                                             </option>
                                         <?php endforeach; ?>

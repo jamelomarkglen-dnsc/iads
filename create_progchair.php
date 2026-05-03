@@ -1,12 +1,14 @@
 <?php
 session_start();
 include 'db.php';
+require_once __DIR__ . '/program_helper.php';
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] != 'dean') {
     header("Location: login.php");
     exit;
 }
 
 $message = "";
+$programCode = '';
 if (isset($_POST['create'])) {
     $fullname = trim($_POST['fullname'] ?? '');
     $email = trim($_POST['email'] ?? '');
@@ -15,12 +17,13 @@ if (isset($_POST['create'])) {
     $college = trim($_POST['college'] ?? '');
     $department = trim($_POST['department'] ?? '');
     $program_focus = trim($_POST['program_focus'] ?? '');
+    $programCode = normalize_program_code($program_focus);
     $username = trim($_POST['username'] ?? '');
     $passwordPlain = $_POST['password'] ?? '';
     $password = password_hash($passwordPlain, PASSWORD_DEFAULT);
     $assign_option = isset($_POST['assign_option']) ? 1 : 0;
 
-    if ($department === '' || $program_focus === '') {
+    if ($department === '' || $programCode === '') {
         $message = "<div class='alert alert-danger'>Please provide both the department and the program handled.</div>";
     } elseif ($fullname === '' || $email === '' || $username === '' || $passwordPlain === '') {
         $message = "<div class='alert alert-danger'>All required fields must be completed.</div>";
@@ -48,7 +51,7 @@ if (isset($_POST['create'])) {
             $firstname = $names[0] ?? '';
             $lastname = $names[1] ?? '';
             $role = 'program_chairperson';
-            $sql->bind_param("sssssssssss", $firstname, $lastname, $username, $password, $email, $role, $contact, $gender, $department, $college, $program_focus);
+            $sql->bind_param("sssssssssss", $firstname, $lastname, $username, $password, $email, $role, $contact, $gender, $department, $college, $programCode);
             if ($sql->execute()) {
                 $message = "<div class='alert alert-success'>Program Chairperson created successfully!</div>";
             } else {
@@ -335,18 +338,12 @@ if (isset($_POST['create'])) {
                                 <div class="mb-3">
                                     <label class="form-label">Program Handled</label>
                                     <select name="program_focus" class="form-select" required>
-                                        <option value="" disabled selected>Select Program</option>
-                                        <option value="PHDEM" data-desc="Doctor of Philosophy in Educational Management">Doctor of Philosophy in Educational Management (PHDEM)</option>
-                                        <option value="PHD-ELST" data-desc="Doctor of Philosophy in English Language Studies and Teaching">Doctor of Philosophy in English Language Studies and Teaching (PhD ELST)</option>
-                                        <option value="PHD-SCIED" data-desc="Doctor of Philosophy in Science Education">Doctor of Philosophy in Science Education (PhD SciEd)</option>
-                                        <option value="MAEM" data-desc="Master of Arts in Educational Management">Master of Arts in Educational Management (MAEM)</option>
-                                        <option value="MAED-ELST" data-desc="Master of Education Major in English Language Studies and Teaching">Master of Education Major in English Language Studies and Teaching (MAED-ELST)</option>
-                                        <option value="MST-GENSCI" data-desc="Master in Science Teaching Major in General Science">Master in Science Teaching Major in General Science (MST-GENSCI)</option>
-                                        <option value="MST-MATH" data-desc="Master in Science Teaching Major in Mathematics">Master in Science Teaching Major in Mathematics (MST-MATH)</option>
-                                        <option value="MFM-AT" data-desc="Master in Fisheries Management Major in Aquaculture Technology">Master in Fisheries Management Major in Aquaculture Technology (MFM-AT)</option>
-                                        <option value="MFM-FP" data-desc="Master in Fisheries Management Major in Fish Processing">Master in Fisheries Management Major in Fish Processing (MFM-FP)</option>
-                                        <option value="MSMB" data-desc="Master of Science in Marine Biodiversity">Master of Science in Marine Biodiversity (MSMB)</option>
-                                        <option value="MIT" data-desc="Master in Information Technology">Master in Information Technology (MIT)</option>
+                                        <option value="" disabled <?php echo $programCode === '' ? 'selected' : ''; ?>>Select Program</option>
+                                        <?php foreach (program_options() as $code => $label): ?>
+                                        <option value="<?php echo htmlspecialchars($code, ENT_QUOTES); ?>" <?php echo $programCode === $code ? 'selected' : ''; ?> data-desc="<?php echo htmlspecialchars(program_display_label($label), ENT_QUOTES); ?>">
+                                            <?php echo htmlspecialchars($label); ?>
+                                        </option>
+                                        <?php endforeach; ?>
                                     </select>
                                 </div>
                                 <div id="chairInfo" class="alert alert-soft-success mt-2"></div>
