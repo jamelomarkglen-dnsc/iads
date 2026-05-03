@@ -66,8 +66,9 @@ if ($scopeProgram !== '') {
     $scopeSql = '';
     $scopeTypes = '';
     $scopeParams = [];
-    $scopeSqlClause = program_sql_in_clause('u.department', $scopeProgram, $scopeParams, $scopeTypes);
-    $scopeSql = $scopeSqlClause !== '' ? "AND {$scopeSqlClause}" : '';
+    $programClause = program_sql_in_clause('u.program', $scopeProgram, $scopeParams, $scopeTypes);
+    $departmentClause = program_sql_in_clause('u.department', $scopeProgram, $scopeParams, $scopeTypes);
+    $scopeSql = "AND ({$programClause} OR {$departmentClause})";
     $scopeLabel = program_display_label($scopeProgram);
 } elseif ($scopeDepartment !== '') {
     $scopeSql = "AND u.department = ?";
@@ -157,13 +158,13 @@ if ($hasAccountStatus) {
     }
 }
 
-// Escalation: notify all program chairpersons if a faculty account stays pending for too long.
+// Escalation: notify only the matching program chairperson for overdue faculty accounts.
 $escalationDays = 3;
 if ($hasAccountStatus && $escalationDays > 0) {
     notifications_bootstrap($conn);
     $cutoff = date('Y-m-d H:i:s', strtotime("-{$escalationDays} days"));
     $stmt = $conn->prepare("
-        SELECT u.id, u.firstname, u.lastname, u.department, u.created_at
+        SELECT u.id, u.firstname, u.lastname, u.program, u.department, u.college, u.created_at
         FROM users u
         WHERE u.role = 'faculty'
           AND u.account_status = 'pending'
@@ -181,14 +182,37 @@ if ($hasAccountStatus && $escalationDays > 0) {
                     continue;
                 }
                 $fullName = trim(($row['firstname'] ?? '') . ' ' . ($row['lastname'] ?? ''));
-                $deptLabel = trim((string)($row['department'] ?? ''));
+                $facultyProgram = resolve_program_scope_code($row['program'] ?? '', $row['department'] ?? '');
                 $title = 'Faculty Verification Reminder';
-                $details = $deptLabel !== '' ? " Program: {$deptLabel}." : '';
+                $details = $facultyProgram !== '' ? ' Program: ' . program_display_label($facultyProgram) . '.' : '';
                 $message = $fullName !== ''
                     ? "Faculty verification pending for {$fullName} (over {$escalationDays} days).{$details}"
                     : "Faculty verification pending over {$escalationDays} days.{$details}";
                 $link = 'verify_faculty.php?focus=' . $facultyId;
 
+                $chairStmt = $conn->prepare("SELECT id, program, department, college FROM users WHERE role = 'program_chairperson'");
+                if (!$chairStmt) {
+                    continue;
+                }
+                $chairStmt->execute();
+                $chairResult = $chairStmt->get_result();
+                $targets = [];
+                if ($chairResult) {
+                    while ($chair = $chairResult->fetch_assoc()) {
+                        $chairProgram = resolve_program_scope_code($chair['program'] ?? '', $chair['department'] ?? '');
+                        if ($facultyProgram !== '' && $chairProgram !== '' && strcasecmp($chairProgram, $facultyProgram) === 0) {
+                            $targets[] = (int)($chair['id'] ?? 0);
+                        }
+                    }
+                }
+                $chairStmt->close();
+
+                $targets = array_values(array_unique(array_filter($targets)));
+                if (empty($targets)) {
+                    continue;
+                }
+
+                $alreadyNotified = false;
                 $existsStmt = $conn->prepare("SELECT 1 FROM notifications WHERE title = ? AND link = ? LIMIT 1");
                 if ($existsStmt) {
                     $existsStmt->bind_param('ss', $title, $link);
@@ -196,12 +220,12 @@ if ($hasAccountStatus && $escalationDays > 0) {
                     $existsStmt->store_result();
                     $alreadyNotified = $existsStmt->num_rows > 0;
                     $existsStmt->close();
-                    if ($alreadyNotified) {
-                        continue;
-                    }
+                }
+                if ($alreadyNotified) {
+                    continue;
                 }
 
-                notify_role($conn, 'program_chairperson', $title, $message, $link, false);
+                notify_users($conn, $targets, $title, $message, $link, false);
             }
         }
         $stmt->close();

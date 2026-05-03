@@ -168,20 +168,9 @@ function fetch_role_users(mysqli $conn, string $role, bool $hasProgram, bool $ha
 
 function chair_matches_faculty(array $chair, string $facultyDepartment, string $facultyCollege): bool
 {
-    $program = normalize_scope_value($chair['program'] ?? '');
-    $department = normalize_scope_value($chair['department'] ?? '');
-    $college = normalize_scope_value($chair['college'] ?? '');
-
-    if ($program !== '') {
-        return program_values_match($facultyDepartment, $program);
-    }
-    if ($department !== '') {
-        return program_values_match($facultyDepartment, $department);
-    }
-    if ($college !== '') {
-        return scope_value_equals($facultyCollege, $college);
-    }
-    return false;
+    $chairProgram = resolve_program_scope_code($chair['program'] ?? '', $chair['department'] ?? '');
+    $facultyProgram = resolve_program_scope_code($facultyDepartment);
+    return $chairProgram !== '' && $facultyProgram !== '' && strcasecmp($chairProgram, $facultyProgram) === 0;
 }
 
 function faculty_matches_student(array $faculty, string $studentProgram, string $studentDepartment, string $studentCollege): bool
@@ -260,8 +249,6 @@ function notify_verification_for_registration(
                 return;
             }
         }
-        // Fallback: notify all program chairpersons if no scope match or no scope data available.
-        notify_role($conn, 'program_chairperson', $title, $message, 'verify_faculty.php', false);
         return;
     }
 

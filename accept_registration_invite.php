@@ -91,7 +91,24 @@ function notify_verification_for_invite_registration(
         $title = 'Faculty Verification Required';
         $details = $department !== '' ? ' Program: ' . program_display_label($department) . '.' : '';
         $message = $fullname !== '' ? "New faculty account pending verification: {$fullname}.{$details}" : "New faculty account pending verification.{$details}";
-        notify_role($conn, 'program_chairperson', $title, $message, 'verify_faculty.php', false);
+        $facultyProgram = resolve_program_scope_code($department);
+        if ($facultyProgram !== '') {
+            $targets = [];
+            $chairResult = $conn->query("SELECT id, program, department FROM users WHERE role = 'program_chairperson'");
+            if ($chairResult) {
+                while ($chair = $chairResult->fetch_assoc()) {
+                    $chairProgram = resolve_program_scope_code($chair['program'] ?? '', $chair['department'] ?? '');
+                    if ($chairProgram !== '' && strcasecmp($chairProgram, $facultyProgram) === 0) {
+                        $targets[] = (int)($chair['id'] ?? 0);
+                    }
+                }
+                $chairResult->free();
+            }
+            $targets = array_values(array_unique(array_filter($targets)));
+            if (!empty($targets)) {
+                notify_users($conn, $targets, $title, $message, 'verify_faculty.php', false);
+            }
+        }
         return;
     }
 

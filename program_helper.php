@@ -215,3 +215,15 @@ function program_sql_in_clause(string $column, ?string $value, array &$params, s
 
     return "{$column} IN ({$placeholders})";
 }
+
+function resolve_program_scope_code(?string ...$values): string
+{
+    foreach ($values as $value) {
+        $code = normalize_program_code($value);
+        if ($code !== '') {
+            return $code;
+        }
+    }
+
+    return '';
+}
