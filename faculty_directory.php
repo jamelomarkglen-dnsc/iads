@@ -191,19 +191,9 @@ if ($stmt) {
 
 <div class="content dashboard-content">
     <div class="container-fluid py-4">
-        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-            <div>
-                <h1 class="h4 fw-semibold text-success mb-1">Faculty Management Directory</h1>
-                <p class="text-muted mb-0">Review and update faculty, adviser, committee, and panel assignments.</p>
-            </div>
-            <div class="d-flex gap-2">
-                <a href="assign_faculty_replacement.php" class="btn btn-success">
-                    <i class="bi bi-person-gear me-2"></i> Assign Reviewers
-                </a>
-                <a href="create_faculty.php" class="btn btn-outline-success">
-                    <i class="bi bi-person-plus-fill me-2"></i> Add Faculty
-                </a>
-            </div>
+        <div class="mb-4">
+            <h1 class="h4 fw-semibold text-success mb-1">Faculty Management Directory</h1>
+            <p class="text-muted mb-0">Review and update faculty, adviser, committee, and panel assignments.</p>
         </div>
 
         <?php if ($successMessage): ?>
