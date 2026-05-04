@@ -311,24 +311,9 @@ $uniqueProgramsInView = count($filteredProgramSet);
 <div class="directory-content">
     <div class="container-fluid py-4">
         <div class="directory-hero mb-4">
-            <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
-                <div>
-                    <p class="mb-1 text-uppercase small fw-semibold">Student Directory</p>
-                    <h1 class="h3 fw-bold mb-2">Manage every learner in one polished view.</h1>
-                    <p class="mb-0">Search, filter, and update student records while tracking concept submissions and program assignments.</p>
-                </div>
-                <div class="d-flex flex-wrap gap-2 align-items-center">
-                    <a href="create_student.php" class="btn btn-light text-success fw-semibold">
-                        <i class="bi bi-person-plus-fill me-1"></i> Add Student
-                    </a>
-                    <a href="assign_panel.php" class="btn btn-outline-light">
-                        <i class="bi bi-people me-1"></i> Assign Panels
-                    </a>
-                    <a href="student_dashboard.php" class="btn btn-outline-light">
-                        <i class="bi bi-speedometer2 me-1"></i> Student Dashboard
-                    </a>
-                </div>
-            </div>
+            <p class="mb-1 text-uppercase small fw-semibold">Student Directory</p>
+            <h1 class="h3 fw-bold mb-2">Manage every learner in one polished view.</h1>
+            <p class="mb-0">Search, filter, and update student records while tracking concept submissions and program assignments.</p>
         </div>
 
         <div class="row g-3 mb-4">
