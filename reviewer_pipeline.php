@@ -306,6 +306,21 @@ $insightBullets = [
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="progchair.css">
     <style>
+        .content {
+            margin-left: var(--sidebar-width-expanded, 240px);
+            transition: margin-left 0.3s ease;
+        }
+        #sidebar.collapsed ~ .content {
+            margin-left: var(--sidebar-width-collapsed, 84px);
+        }
+        @media (max-width: 992px) {
+            .content {
+                margin-left: 0;
+            }
+            #sidebar.collapsed ~ .content {
+                margin-left: 0;
+            }
+        }
         .pipeline-hero {
             border-radius: 18px;
             padding: 1.75rem;
@@ -669,5 +684,14 @@ $insightBullets = [
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const sidebar = document.getElementById('sidebar');
+    const toggleSidebar = document.getElementById('toggleSidebar');
+    if (sidebar && toggleSidebar) {
+        toggleSidebar.addEventListener('click', () => {
+            sidebar.classList.toggle('collapsed');
+        });
+    }
+</script>
 </body>
 </html>
