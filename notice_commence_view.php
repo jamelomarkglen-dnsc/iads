@@ -109,7 +109,7 @@ function notice_status_badge(string $status): string
         }
         .letter-head {
             height: auto;
-            max-height: 220px;
+            max-height: 140px;
             border-bottom: 1px solid #d9e2d6;
         }
         .letter-foot {
@@ -131,9 +131,9 @@ function notice_status_badge(string $status): string
             display: block;
         }
         .letter-body {
-            padding: 24px 44px;
+            padding: 12px 44px;
             font-size: 0.96rem;
-            line-height: 1.5;
+            line-height: 1.4;
             text-align: justify;
             text-justify: inter-word;
             white-space: pre-line;
@@ -148,18 +148,18 @@ function notice_status_badge(string $status): string
             }
             .content { margin: 0 !important; }
             .notice-card { border: none; box-shadow: none; max-width: 100%; margin: 0; }
-            .letter-head { max-height: 180px; }
-            .letter-foot { height: 100px; max-height: 100px; }
-            .letter-body { padding: 16px 24px; font-size: 10.5pt; line-height: 1.45; }
+            .letter-head { max-height: 120px; }
+            .letter-foot { height: 120px;            max-height: 120px; }
+            .letter-body { padding: 10px 24px; font-size: 10.5pt; line-height: 1.35; }
         }
         .notice-card { border-radius: 18px; border: 1px solid rgba(22, 86, 44, 0.12); box-shadow: 0 18px 40px rgba(15, 61, 31, 0.08); }
-        .notice-body { line-height: 1.5; text-align: justify; text-justify: inter-word; }
-        .notice-body p { margin: 0 0 0.75rem; }
+        .notice-body { line-height: 1.4; text-align: justify; text-justify: inter-word; }
+        .notice-body p { margin: 0 0 0.4rem; }
         .notice-body p:last-child { margin-bottom: 0; }
-        .signature-grid { margin-top: 24px; }
+        .signature-grid { margin-top: 8px; }
         .signature-block { text-align: center; }
-        .signature-image { max-height: 70px; max-width: 180px; object-fit: contain; }
-        .signature-line { width: 220px; margin: 8px auto 6px; border-top: 1px solid #1f2d22; }
+        .signature-image { max-height: 50px; max-width: 180px; object-fit: contain; }
+        .signature-line { width: 220px; margin: 4px auto 3px; border-top: 1px solid #1f2d22; }
         .signature-placeholder { color: #6c757d; font-size: 0.85rem; min-height: 22px; }
     </style>
 </head>
@@ -214,7 +214,7 @@ function notice_status_badge(string $status): string
                     <img src="memopic.jpg" alt="">
                 </div>
                 <div class="card-body letter-body">
-                    <div class="mb-4">
+                    <div class="mb-2">
                         <div class="row align-items-start g-2">
                             <div class="col-sm-8">
                                 <div class="fw-semibold">TO&nbsp;&nbsp;:&nbsp;&nbsp;<?= htmlspecialchars($studentName); ?></div>
@@ -224,8 +224,7 @@ function notice_status_badge(string $status): string
                                 <strong>DATE&nbsp;&nbsp;:</strong> <?= htmlspecialchars($noticeDateLabel ?: 'Date not set'); ?>
                             </div>
                         </div>
-                        <div class="text-muted small mt-2">
-                            <strong>SUBJECT&nbsp;&nbsp;:</strong> <?= htmlspecialchars($subject); ?>
+                        <div class="text-muted small mt-1">                            <strong>SUBJECT&nbsp;&nbsp;:</strong> <?= htmlspecialchars($subject); ?>
                         </div>
                     </div>
 
@@ -237,12 +236,12 @@ function notice_status_badge(string $status): string
                         $noticeBodyHtml .= '<p>' . nl2br(htmlspecialchars($paragraph)) . '</p>';
                     }
                     ?>
-                    <div class="notice-body mb-4"><?= $noticeBodyHtml; ?></div>
+                    <div class="notice-body mb-2"><?= $noticeBodyHtml; ?></div>
 
                     <div class="row signature-grid">
                         <div class="col-md-6">
                             <div class="text-muted small">Recommending approval:</div>
-                            <div class="signature-block mt-2">
+                            <div class="signature-block mt-1">
                                 <?php if ($chairSignaturePath !== ''): ?>
                                     <img src="<?= htmlspecialchars($chairSignaturePath); ?>" alt="Program chairperson e-signature" class="signature-image">
                                 <?php else: ?>
@@ -255,7 +254,7 @@ function notice_status_badge(string $status): string
                         </div>
                         <div class="col-md-6">
                             <div class="text-muted small">Approved:</div>
-                            <div class="signature-block mt-2">
+                            <div class="signature-block mt-1">
                                 <?php if ($deanSignaturePath !== ''): ?>
                                     <img src="<?= htmlspecialchars($deanSignaturePath); ?>" alt="Dean e-signature" class="signature-image">
                                 <?php else: ?>
