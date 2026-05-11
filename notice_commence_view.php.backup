@@ -159,14 +159,7 @@ function notice_status_badge(string $status): string
         .signature-grid { margin-top: 8px; }
         .signature-block { text-align: center; }
         .signature-image { max-height: 50px; max-width: 180px; object-fit: contain; }
-        .signature-line { display: none; }
-        .signature-block .fw-semibold { 
-            border-bottom: 1px solid #1f2d22; 
-            display: inline-block;
-            padding-bottom: 2px;
-            min-width: 220px;
-            margin-bottom: 4px;
-        }
+        .signature-line { width: 220px; margin: 4px auto 3px; border-top: 1px solid #1f2d22; }
         .signature-placeholder { color: #6c757d; font-size: 0.85rem; min-height: 22px; }
     </style>
 </head>
