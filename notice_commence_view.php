@@ -81,7 +81,7 @@ function notice_status_badge(string $status): string
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
-        body { background: #f6f8f5; color: #1f2d22; }
+        body { background: #f6f8f5; color: #1f2d22; font-family: Calibri, sans-serif; }
         .content { margin-left: var(--sidebar-width-expanded, 240px); transition: margin-left 0.3s ease; }
         #sidebar.collapsed ~ .content { margin-left: var(--sidebar-width-collapsed, 70px); }
         @media (max-width: 992px) {
@@ -137,6 +137,7 @@ function notice_status_badge(string $status): string
             text-align: justify;
             text-justify: inter-word;
             white-space: pre-line;
+            font-family: Calibri, sans-serif;
         }
         @media print {
             @page { size: letter; margin: 0.4in; }
@@ -150,7 +151,7 @@ function notice_status_badge(string $status): string
             .notice-card { border: none; box-shadow: none; max-width: 100%; margin: 0; }
             .letter-head { max-height: 120px; }
             .letter-foot { height: 120px;            max-height: 120px; }
-            .letter-body { padding: 10px 24px; font-size: 10.5pt; line-height: 1.35; }
+            .letter-body { padding: 10px 24px; font-size: 10.5pt; line-height: 1.35; font-family: Calibri, sans-serif; }
         }
         .notice-card { border-radius: 18px; border: 1px solid rgba(22, 86, 44, 0.12); box-shadow: 0 18px 40px rgba(15, 61, 31, 0.08); }
         .notice-body { line-height: 1.4; text-align: justify; text-justify: inter-word; }
@@ -224,14 +225,14 @@ function notice_status_badge(string $status): string
                     <div class="mb-2">
                         <div class="row align-items-start g-2">
                             <div class="col-sm-8">
-                                <div class="fw-semibold">TO&nbsp;&nbsp;:&nbsp;&nbsp;<?= htmlspecialchars($studentName); ?></div>
-                                <div class="text-muted small ms-4"><?= htmlspecialchars($programLabel); ?></div>
+                                <div class="fw-semibold">TO&nbsp;&nbsp;:&nbsp;&nbsp;<strong><?= htmlspecialchars($studentName); ?></strong></div>
+                                <div class="text-muted small" style="margin-left: 3.5rem;"><?= htmlspecialchars($programLabel); ?></div>
                             </div>
                             <div class="col-sm-4 text-sm-end text-muted small">
-                                <strong>DATE&nbsp;&nbsp;:</strong> <?= htmlspecialchars($noticeDateLabel ?: 'Date not set'); ?>
+                                <strong>DATE&nbsp;&nbsp;:</strong> <strong><?= htmlspecialchars($noticeDateLabel ?: 'Date not set'); ?></strong>
                             </div>
                         </div>
-                        <div class="text-muted small mt-1">                            <strong>SUBJECT&nbsp;&nbsp;:</strong> <?= htmlspecialchars($subject); ?>
+                        <div class="text-muted small mt-1">                            <strong>SUBJECT&nbsp;&nbsp;:</strong> <strong><?= htmlspecialchars($subject); ?></strong>
                         </div>
                     </div>
 
@@ -240,7 +241,16 @@ function notice_status_badge(string $status): string
                     $noticeParagraphs = array_filter(array_map('trim', $noticeParagraphs), 'strlen');
                     $noticeBodyHtml = '';
                     foreach ($noticeParagraphs as $paragraph) {
-                        $noticeBodyHtml .= '<p>' . nl2br(htmlspecialchars($paragraph)) . '</p>';
+                        $escapedParagraph = nl2br(htmlspecialchars($paragraph));
+                        // Make specific phrases bold
+                        // Make title in quotes bold and italic
+                        $escapedParagraph = preg_replace('/"([^"]+)"/', '<strong><em>"$1"</em></strong>', $escapedParagraph);
+                        // Make dates bold (pattern: Month DD, YYYY)
+                        $escapedParagraph = preg_replace('/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b/', '<strong>$0</strong>', $escapedParagraph);
+                        $escapedParagraph = str_ireplace('has been approved', 'has been <strong>approved</strong>', $escapedParagraph);
+                        $escapedParagraph = str_ireplace('within one year', '<strong>within one year</strong>', $escapedParagraph);
+                        $escapedParagraph = str_ireplace('adhere to the approved protocols and methodologies', '<strong>adhere to the approved protocols and methodologies</strong>', $escapedParagraph);
+                        $noticeBodyHtml .= '<p>' . $escapedParagraph . '</p>';
                     }
                     ?>
                     <div class="notice-body mb-2"><?= $noticeBodyHtml; ?></div>
