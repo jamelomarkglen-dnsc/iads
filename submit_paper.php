@@ -796,9 +796,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
 
                 $titleSnippet = $title !== '' ? " titled \"{$title}\"" : '';
                 $message = "{$studentName} submitted a new research entry{$titleSnippet}.";
+                // Notify only program chairpersons whose program matches the student
+                notify_program_chairs_for_student(
+                    $conn,
+                    $student_id,
+                    'New research submission',
+                    $message,
+                    'submissions.php'
+                );
+                // Notify other roles (these may need similar filtering in the future)
                 notify_roles(
                     $conn,
-                    ['program_chairperson', 'committee_chairperson', 'committee_chair', 'adviser'],
+                    ['committee_chairperson', 'committee_chair', 'adviser'],
                     'New research submission',
                     $message,
                     'submissions.php'
