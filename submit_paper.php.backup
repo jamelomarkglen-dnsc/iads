@@ -801,7 +801,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action === 'delete_submission') {
                     ['program_chairperson', 'committee_chairperson', 'committee_chair', 'adviser'],
                     'New research submission',
                     $message,
-                    'submissions.php'
+                    'submissions.php?view=all'
                 );
                 if (function_exists('progress_tracker_mark_step_complete')) {
                     progress_tracker_mark_step_complete($conn, $student_id, 'concept_submitted', 'submissions', $submissionId);
