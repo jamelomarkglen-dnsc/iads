@@ -515,6 +515,12 @@ if ($userLastLogin !== '') {
                         </a>
                     <?php endif; ?>
 
+                    <?php if ($role === 'dean'): ?>
+                        <a href="dean.php" class="nav-link <?php echo ($currentPage == 'dean.php') ? 'active' : ''; ?>">
+                            <i class="bi bi-speedometer2"></i> <span class="link-text">Dashboard</span>
+                        </a>
+                    <?php endif; ?>
+
                     <?php if ($role === 'adviser'): ?>
                         <a href="adviser.php" class="nav-link <?php echo ($currentPage == 'adviser.php') ? 'active' : ''; ?>">
                             <i class="bi bi-speedometer2"></i> <span class="link-text">Dashboard</span>
@@ -639,9 +645,6 @@ if ($userLastLogin !== '') {
                 <?php endif; ?>
 
                 <?php if ($role === 'dean'): ?>
-                    <a href="dean.php" class="nav-link <?php echo ($currentPage == 'dean.php') ? 'active' : ''; ?>">
-                        <i class="bi bi-house-door"></i> <span class="link-text">Dashboard</span>
-                    </a>
                     <a href="staff_invites.php" class="nav-link <?php echo ($currentPage == 'staff_invites.php') ? 'active' : ''; ?>">
                         <i class="bi bi-link-45deg"></i> <span class="link-text">Registration Invites</span>
                     </a>
