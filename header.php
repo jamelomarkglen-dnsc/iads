@@ -58,7 +58,7 @@ if (isset($_SESSION['role'])) {
 ?>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-<nav class="navbar navbar-expand-lg navbar-dark shadow-sm px-4 sticky-top" style="background-color: #16562cff; padding-top: 10px; padding-bottom: 10px;">
+<nav class="navbar navbar-expand-lg navbar-dark shadow-sm px-4 sticky-top" style="background-color: #16562cff; z-index: 10000; padding-top: 10px; padding-bottom: 10px;">
     <div class="d-flex align-items-center position-relative">
         <a href="<?php echo htmlspecialchars($dashboardLink); ?>" class="text-decoration-none">
             <div class="d-flex align-items-center">
@@ -213,6 +213,26 @@ if (isset($_SESSION['role'])) {
     .notif-item:hover,
     .notif-item:focus {
         background-color: #eef2f5;
+    }
+    /* Fix z-index and pointer-events for navbar and notifications */
+    .navbar.sticky-top {
+        z-index: 10000 !important;
+        pointer-events: auto;
+    }
+    .navbar .dropdown {
+        z-index: 10001;
+        pointer-events: auto;
+    }
+    .navbar button, .navbar a {
+        pointer-events: auto !important;
+    }
+    #notifMenu {
+        z-index: 10002 !important;
+        pointer-events: auto;
+    }
+    .dropdown-menu {
+        z-index: 10002;
+        pointer-events: auto;
     }
     .progress-trigger {
         display: inline-flex;
