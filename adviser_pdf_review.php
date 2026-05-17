@@ -536,6 +536,9 @@ if (($_SESSION['role'] ?? '') === 'adviser') {
                             <button class="btn btn-sm btn-outline-primary" id="nextPageBtn">
                                 Next <i class="bi bi-chevron-right"></i>
                             </button>
+                            <button class="annotation-tool-btn ms-2" data-tool="comment" title="Add Comment">
+                                <i class="bi bi-chat-left-text"></i> Comment
+                            </button>
                         </div>
                         <div class="pdf-toolbar-right">
                             <div class="pdf-zoom-controls">
@@ -543,15 +546,6 @@ if (($_SESSION['role'] ?? '') === 'adviser') {
                                 <button id="zoomInBtn" title="Zoom In">+</button>
                             </div>
                         </div>
-                    </div>
-                    
-                    <!-- Annotation Toolbar - ANNOTATION TOOLS ARE HERE -->
-                    <div class="pdf-toolbar">
-                    <div class="annotation-toolbar">
-                        <button class="annotation-tool-btn" data-tool="comment" title="Add Comment">
-                            <i class="bi bi-chat-left-text"></i> Comment
-                        </button>
-                    </div>
                     </div>
                     
                     <!-- PDF Canvas Container -->
@@ -748,3 +742,4 @@ if (($_SESSION['role'] ?? '') === 'adviser') {
     </script>
 </body>
 </html>
+
