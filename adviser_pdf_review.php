@@ -75,7 +75,7 @@ if ($error_message) {
             .content {
                 margin-left: var(--sidebar-width-expanded, 240px);
                 transition: margin-left 0.3s ease;
-                padding: 20px;
+                padding: 5px;
                 min-height: 100vh;
             }
             #sidebar.collapsed ~ .content {
@@ -175,7 +175,7 @@ if (($_SESSION['role'] ?? '') === 'adviser') {
         .content {
             margin-left: var(--sidebar-width-expanded, 240px);
             transition: margin-left 0.3s ease;
-            padding: 20px;
+            padding: 5px;
             min-height: 100vh;
         }
         
@@ -198,9 +198,9 @@ if (($_SESSION['role'] ?? '') === 'adviser') {
         /* Page header improvements */
         .page-header {
             background: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 20px;
+            border-radius: 8px;
+            padding: 8px 12px;
+            margin-bottom: 8px;
             box-shadow: 0 2px 8px rgba(22, 86, 44, 0.08);
         }
         
@@ -223,12 +223,12 @@ if (($_SESSION['role'] ?? '') === 'adviser') {
         
         .pdf-review-container {
             display: flex;
-            gap: 20px;
+            gap: 10px;
             background: white;
-            border-radius: 12px;
-            padding: 20px;
+            border-radius: 8px;
+            padding: 6px;
             box-shadow: 0 2px 8px rgba(22, 86, 44, 0.08);
-            min-height: calc(100vh - 200px);
+            min-height: calc(100vh - 40px);
         }
         
         .pdf-viewer-wrapper {
@@ -237,7 +237,7 @@ if (($_SESSION['role'] ?? '') === 'adviser') {
         }
         
         .comment-panel {
-            width: 350px;
+            width: 280px;
             flex-shrink: 0;
         }
         
@@ -261,7 +261,7 @@ if (($_SESSION['role'] ?? '') === 'adviser') {
         .pdf-toolbar {
             background: #f8f9fa;
             border-radius: 8px;
-            padding: 12px;
+            padding: 8px;
             margin-bottom: 15px;
             display: flex;
             justify-content: space-between;

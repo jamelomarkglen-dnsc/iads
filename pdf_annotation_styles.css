@@ -28,7 +28,7 @@
    ===================================================== */
 .pdf-review-container {
     display: flex;
-    height: calc(100vh - 120px);
+    height: calc(100vh - 30px);
     gap: 0;
     background: #f8f9fa;
 }
@@ -49,9 +49,10 @@
     display: flex;
     align-items: flex-start;
     justify-content: flex-start;
-    gap: 28px;
-    padding: 24px;
+    gap: 12px;
+    padding: 8px;
     position: relative;
+    min-height: calc(100vh - 100px);
 }
 
 .pdf-canvas {
@@ -500,7 +501,7 @@
 }
 
 .comment-panel-header {
-    padding: 16px;
+    padding: 8px;
     background: var(--primary-color);
     color: white;
     font-weight: 600;
@@ -922,7 +923,7 @@
 }
 
 .annotation-dialog-header {
-    padding: 16px;
+    padding: 8px;
     background: var(--primary-color);
     color: white;
     font-weight: 600;
@@ -947,7 +948,7 @@
 }
 
 .annotation-dialog-body {
-    padding: 16px;
+    padding: 8px;
 }
 
 .annotation-form-group {
