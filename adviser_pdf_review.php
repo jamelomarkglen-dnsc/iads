@@ -536,7 +536,8 @@ if (($_SESSION['role'] ?? '') === 'adviser') {
                             <button class="btn btn-sm btn-outline-primary" id="nextPageBtn">
                                 Next <i class="bi bi-chevron-right"></i>
                             </button>
-                            <button class="annotation-tool-btn ms-2" data-tool="comment" title="Add Comment">
+                            <span class="mx-3" style="border-left: 1px solid #dee2e6; height: 30px;"></span>
+                            <button class="annotation-tool-btn" data-tool="comment" title="Add Comment">
                                 <i class="bi bi-chat-left-text"></i> Comment
                             </button>
                         </div>
@@ -547,7 +548,6 @@ if (($_SESSION['role'] ?? '') === 'adviser') {
                             </div>
                         </div>
                     </div>
-                    
                     <!-- PDF Canvas Container -->
                     <div class="pdf-canvas-container" id="pdf-canvas-container"></div>
                 </div>
