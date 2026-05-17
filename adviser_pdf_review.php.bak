@@ -574,8 +574,9 @@ if (($_SESSION['role'] ?? '') === 'adviser') {
         <div class="annotation-dialog-body">
             <div class="annotation-form-group">
                 <label>Type</label>
-                <div style="padding: 8px 0; font-weight: 500;">Comment</div>
-                <input type="hidden" name="annotation_type" value="comment">
+                <select name="annotation_type">
+                    <option value="comment">Comment</option>
+                </select>
             </div>
             <div class="annotation-form-group">
                 <label>Content</label>

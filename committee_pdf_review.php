@@ -304,12 +304,9 @@ $verdictLocked = !empty($submission['final_verdict']) && $submission['final_verd
     </div>
     <div class="annotation-dialog-body">
         <div class="annotation-form-group">
-            <label>Annotation Type</label>
-            <select name="annotation_type">
-                <option value="comment">Comment</option>
-                <option value="highlight">Highlight</option>
-                <option value="suggestion">Suggestion</option>
-            </select>
+            <label>Type</label>
+            <div style="padding: 8px 0; font-weight: 500;">Comment</div>
+            <input type="hidden" name="annotation_type" value="comment">
         </div>
         <div class="annotation-form-group">
             <label>Content</label>
