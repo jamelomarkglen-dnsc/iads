@@ -268,7 +268,7 @@ include 'sidebar.php';
         .hero-card {
             position: relative;
             border-radius: 24px;
-            padding: 32px;
+            padding: 24px;
             background: linear-gradient(135deg, #0f3d1f 0%, #16562c 60%, #1f6f3a 100%);
             color: #f8fafc;
             box-shadow: 0 28px 60px rgba(15, 61, 31, 0.35);
@@ -333,17 +333,18 @@ include 'sidebar.php';
             font-weight: 600;
         }
         .stat-card p { margin-bottom: 0; color: var(--muted); }
-        .advisor-highlights { display: flex; flex-direction: column; gap: 16px; min-width: 260px; }
+        .advisor-highlights { display: flex; flex-direction: column; gap: 12px; min-width: 260px; }
         .highlight-card {
             background: rgba(15, 61, 31, 0.22);
             border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 18px;
-            padding: 16px 20px;
+            border-radius: 14px;
+            padding: 12px 16px;
             color: #f8fafc;
             box-shadow: 0 18px 30px rgba(15, 61, 31, 0.2);
             backdrop-filter: blur(6px);
         }
         .highlight-card small { opacity: .8; }
+        .highlight-card h4 { font-size: 1.5rem; margin-bottom: 0; }
         .progress-track {
             width: 100%;
             height: 8px;
@@ -361,7 +362,7 @@ include 'sidebar.php';
             background: linear-gradient(90deg, #ffd166, #f59e0b);
         }
         .advisor-overview {
-            margin-top: 24px;
+            margin-top: 16px;
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 16px;
@@ -369,14 +370,14 @@ include 'sidebar.php';
         .overview-card {
             background: rgba(15, 23, 42, 0.35);
             border: 1px solid rgba(255, 255, 255, 0.14);
-            border-radius: 16px;
-            padding: 16px 20px;
+            border-radius: 12px;
+            padding: 12px 16px;
             color: #f8fafc;
-            min-height: 120px;
+            min-height: 90px;
             box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
         }
         .overview-card small { color: rgba(248, 250, 252, 0.75); }
-        .overview-card .value { font-size: 1.4rem; font-weight: 600; color: #fff; }
+        .overview-card .value { font-size: 1.2rem; font-weight: 600; color: #fff; }
         .overview-card i { color: rgba(248, 250, 252, 0.6); }
         .card { border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow); }
         .card h5 { font-weight: 600; color: var(--ink); }
