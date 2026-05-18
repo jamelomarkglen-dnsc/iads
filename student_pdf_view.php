@@ -446,7 +446,7 @@ $version_info = get_version_chain_info($conn, $submission_id);
             <!-- Upload Revision Section -->
             <?php if ($submission['submission_status'] !== 'approved'): ?>
             <div class="card mt-4">
-                <div class="card-header bg-info text-white">
+                <div class="card-header bg-success text-white">
                     <h5 class="mb-0"><i class="bi bi-arrow-repeat"></i> Upload Revised PDF</h5>
                 </div>
                 <div class="card-body">
@@ -457,7 +457,7 @@ $version_info = get_version_chain_info($conn, $submission_id);
                             <input type="file" class="form-control" id="revisionFile" name="pdf_file" accept=".pdf" required>
                             <small class="text-muted">Maximum file size: 50MB</small>
                         </div>
-                        <button type="submit" class="btn btn-info">
+                        <button type="submit" class="btn btn-success">
                             <i class="bi bi-upload"></i> Upload Revised PDF
                         </button>
                     </form>
