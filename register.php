@@ -594,7 +594,8 @@ if (isset($_POST['register'])) {
             </div>
             <div class="row mb-3">
                 <div class="col-md-6">
-                    <input type="text" name="student_id" class="form-control" placeholder="Student ID" value="<?php echo htmlspecialchars($oldInput['student_id']); ?>" data-required="true">
+                    <input type="text" name="student_id" class="form-control" id="student_id" placeholder="Student ID" value="<?php echo htmlspecialchars($oldInput['student_id']); ?>" pattern="^\d{4}-\d{5,}$" title="Student ID Format: Year-Number (e.g., 2024-12345)" required>
+                    <small class="form-text text-muted d-block mt-1"><i class="bi bi-info-circle"></i> Required format: Year-Number (e.g., 2024-12345)</small>
                 </div>
                 <div class="col-md-6">
                     <select name="program" class="form-select" data-required="true">

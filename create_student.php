@@ -481,9 +481,11 @@ $yearOptions = $hasYearLevelColumn ? [
                                 <div class="form-floating">
                                     <input type="text" name="student_id" class="form-control" id="student_id" placeholder="Student ID"
                                            value="<?php echo htmlspecialchars($oldInput['student_id'], ENT_QUOTES); ?>" required
-                                           inputmode="numeric" pattern="\d{2,}">
+                                           pattern="^\d{4}-\d{5,}$" title="Student ID Format: Year-Number (e.g., 2024-12345)">
                                     <label for="student_id">Student ID Number</label>
                                 </div>
+                                <div class="form-text"><i class="bi bi-info-circle"></i> Required format: Year-Number (e.g., 2024-12345)</div>
+                            </div>
                                 <div class="form-text">Digits only, matching registrar records.</div>
                             </div>
                         <?php else: ?>
