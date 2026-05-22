@@ -1254,14 +1254,6 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                     <input type="hidden" name="student_id" value="<?= (int)$student['student_id']; ?>">
                                 </form>
                                 <div class="mt-3">
-                                    <div class="alert alert-info py-2 px-3 mb-3 small border-0 d-flex align-items-start" style="background: rgba(13, 110, 253, 0.08); color: #084298;">
-                                        <i class="bi bi-lightbulb-fill me-2 mt-1" style="font-size: 1rem;"></i>
-                                        <div>
-                                            <strong>Smart Rating Assistant:</strong> Rate all 3 titles and watch the recommendations auto-fill! 
-                                            <span class="d-block mt-1" style="opacity: 0.9;">Highest rating → <strong>Recommend for Pursuit</strong> • Middle rating → <strong>Needs Revision</strong> • Lowest rating → <strong>Not Recommended</strong></span>
-                                            <span class="d-block mt-1" style="opacity: 0.85; font-size: 0.9em;">💡 Works with any rating combination (5-3-1, 4-2-1, etc.). You can manually override if needed.</span>
-                                        </div>
-                                    </div>
                                     <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
                                         <?php foreach ($student['items'] as $item): ?>
                                             <?php
