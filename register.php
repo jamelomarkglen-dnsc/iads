@@ -335,8 +335,8 @@ if (isset($_POST['register'])) {
             if ($oldInput['firstname'] === '' || $oldInput['lastname'] === '') {
                 $errors[] = "First and last name are required.";
             }
-            if ($hasStudentIdColumn && !preg_match('/^[0-9]{2,}$/', $oldInput['student_id'])) {
-                $errors[] = "Student ID should contain digits only.";
+            if ($hasStudentIdColumn && !preg_match('/^\d{4}-\d{5,}$/', $oldInput['student_id'])) {
+                $errors[] = "Student ID must follow format: Year-Number (e.g., 2024-12345)";
             }
             if ($oldInput['contact'] === '' || $oldInput['gender'] === '') {
                 $errors[] = "Contact number and gender are required.";

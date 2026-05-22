@@ -121,8 +121,8 @@ if (isset($_POST['create_student'])) {
         $error = "Password must be at least 8 characters.";
     } elseif (!filter_var($oldInput['email'], FILTER_VALIDATE_EMAIL)) {
         $error = "Please provide a valid email address.";
-    } elseif ($hasStudentIdColumn && !preg_match('/^[0-9]{2,}$/', $oldInput['student_id'])) {
-        $error = "Student ID should contain digits only.";
+    } elseif ($hasStudentIdColumn && !preg_match('/^\d{4}-\d{5,}$/', $oldInput['student_id'])) {
+        $error = "Student ID must follow format: Year-Number (e.g., 2024-12345)";
     } elseif ($programRequired && normalize_program_code($oldInput['program']) === '') {
         $error = "Please select a program.";
     } elseif ($hasYearLevelColumn && $oldInput['year_level'] === '') {
