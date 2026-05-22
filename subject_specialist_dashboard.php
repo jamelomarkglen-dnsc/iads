@@ -1254,6 +1254,14 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                                     <input type="hidden" name="student_id" value="<?= (int)$student['student_id']; ?>">
                                 </form>
                                 <div class="mt-3">
+                                    <div class="alert alert-info py-2 px-3 mb-3 small border-0 d-flex align-items-start" style="background: rgba(13, 110, 253, 0.08); color: #084298;">
+                                        <i class="bi bi-lightbulb-fill me-2 mt-1" style="font-size: 1rem;"></i>
+                                        <div>
+                                            <strong>Smart Rating Assistant:</strong> Rate all 3 titles and watch the recommendations auto-fill! 
+                                            <span class="d-block mt-1" style="opacity: 0.9;">Highest rating → <strong>Recommend for Pursuit</strong> • Middle rating → <strong>Needs Revision</strong> • Lowest rating → <strong>Not Recommended</strong></span>
+                                            <span class="d-block mt-1" style="opacity: 0.85; font-size: 0.9em;">💡 Works with any rating combination (5-3-1, 4-2-1, etc.). You can manually override if needed.</span>
+                                        </div>
+                                    </div>
                                     <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
                                         <?php foreach ($student['items'] as $item): ?>
                                             <?php
@@ -1782,6 +1790,104 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
             });
         });
         update();
+    })();
+
+    // Auto-fill recommendation dropdowns based on rating rankings
+    (function() {
+        const studentGroups = document.querySelectorAll('[data-student-review-group]');
+        if (!studentGroups.length) {
+            return;
+        }
+
+        studentGroups.forEach((group) => {
+            const studentId = group.getAttribute('data-student-id');
+            const reviewItems = group.querySelectorAll('[data-review-item]');
+            
+            // Collect all rating radios and recommendation dropdowns for this student
+            const itemsData = [];
+            reviewItems.forEach((item) => {
+                const assignmentId = item.getAttribute('data-assignment-id');
+                const ratingRadios = item.querySelectorAll('input[type="radio"][name^="score_"]');
+                const recommendationSelect = item.querySelector('select[name="recommendation"]');
+                
+                if (ratingRadios.length && recommendationSelect) {
+                    itemsData.push({
+                        assignmentId,
+                        ratingRadios: Array.from(ratingRadios),
+                        recommendationSelect,
+                    });
+                }
+            });
+
+            if (!itemsData.length) {
+                return;
+            }
+
+            const addVisualFeedback = (selectElement) => {
+                // Add smooth visual feedback when auto-filling
+                selectElement.style.transition = 'background-color 0.4s ease, border-color 0.4s ease';
+                selectElement.style.backgroundColor = '#d1f4e0';
+                selectElement.style.borderColor = '#198754';
+                
+                setTimeout(() => {
+                    selectElement.style.backgroundColor = '';
+                    selectElement.style.borderColor = '';
+                }, 1200);
+            };
+
+            const updateRecommendations = () => {
+                // Collect current ratings for each title
+                const ratings = [];
+                itemsData.forEach((item) => {
+                    const checkedRadio = item.ratingRadios.find(r => r.checked);
+                    if (checkedRadio) {
+                        const score = parseInt(checkedRadio.getAttribute('data-score-value'), 10);
+                        if (!isNaN(score)) {
+                            ratings.push({
+                                assignmentId: item.assignmentId,
+                                score,
+                                recommendationSelect: item.recommendationSelect,
+                            });
+                        }
+                    }
+                });
+
+                // Only auto-fill if all 3 titles have ratings
+                if (ratings.length !== 3) {
+                    return;
+                }
+
+                // Sort by score (highest to lowest)
+                ratings.sort((a, b) => b.score - a.score);
+
+                // Assign recommendations based on ranking:
+                // 1st (highest score) → "pursue" (Recommend for Pursuit)
+                // 2nd (middle score) → "revise" (Needs Revision)
+                // 3rd (lowest score) → "reject" (Not Recommended)
+                if (ratings[0] && ratings[0].recommendationSelect.value !== 'pursue') {
+                    ratings[0].recommendationSelect.value = 'pursue';
+                    addVisualFeedback(ratings[0].recommendationSelect);
+                }
+                if (ratings[1] && ratings[1].recommendationSelect.value !== 'revise') {
+                    ratings[1].recommendationSelect.value = 'revise';
+                    addVisualFeedback(ratings[1].recommendationSelect);
+                }
+                if (ratings[2] && ratings[2].recommendationSelect.value !== 'reject') {
+                    ratings[2].recommendationSelect.value = 'reject';
+                    addVisualFeedback(ratings[2].recommendationSelect);
+                }
+            };
+
+            // Attach change listeners to all rating radios
+            itemsData.forEach((item) => {
+                item.ratingRadios.forEach((radio) => {
+                    radio.addEventListener('change', updateRecommendations);
+                });
+            });
+
+            // Run once on load in case ratings are already selected
+            updateRecommendations();
+        });
     })();
 
     (function() {
