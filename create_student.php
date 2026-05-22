@@ -486,8 +486,6 @@ $yearOptions = $hasYearLevelColumn ? [
                                 </div>
                                 <div class="form-text"><i class="bi bi-info-circle"></i> Required format: Year-Number (e.g., 2024-12345)</div>
                             </div>
-                                <div class="form-text">Digits only, matching registrar records.</div>
-                            </div>
                         <?php else: ?>
                             <div class="col-md-6">
                                 <div class="alert alert-warning mb-0">
