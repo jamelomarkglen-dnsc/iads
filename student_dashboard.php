@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 session_start();
 include 'db.php';
 require_once 'notifications_helper.php';
@@ -904,12 +904,12 @@ if ($totalSubmissions === 0) {
         ['label' => 'Concept / Thesis / Capstone / Dissertation Submitted', 'complete' => false],
         ['label' => 'Concept Review Assigned / In Review', 'complete' => false],
         ['label' => 'Final Concept Recommended', 'complete' => false],
+        ['label' => 'Defense Committee Memo Issued', 'complete' => false],
         ['label' => 'Concept Paper Submitted to Adviser (PDF Submission)', 'complete' => false],
         ['label' => 'Endorsement Request Submitted', 'complete' => false],
         ['label' => 'Endorsement Verified', 'complete' => false],
         ['label' => 'Payment Proof Submitted', 'complete' => false],
         ['label' => 'Payment Verified', 'complete' => false],
-        ['label' => 'Defense Committee Memo Issued', 'complete' => false],
         ['label' => 'Outline Defense Manuscript Submitted', 'complete' => false],
         ['label' => 'Outline Defense Review Completed', 'complete' => false],
         ['label' => 'Outline Defense Verdict Released', 'complete' => false],
@@ -956,12 +956,12 @@ if ($totalSubmissions === 0) {
         ['label' => 'Concept / Thesis / Capstone / Dissertation Submitted', 'complete' => $conceptSubmissionComplete],
         ['label' => 'Concept Review Assigned / In Review', 'complete' => $conceptReviewAssigned],
         ['label' => 'Final Concept Recommended', 'complete' => $conceptRecommended],
+        ['label' => 'Defense Committee Memo Issued', 'complete' => $committeeMemoIssued],
         ['label' => 'Concept Paper Submitted to Adviser (PDF Submission)', 'complete' => $conceptPdfSubmitted],
         ['label' => 'Endorsement Request Submitted', 'complete' => $endorsementSubmitted],
         ['label' => 'Endorsement Verified', 'complete' => $endorsementVerified],
         ['label' => 'Payment Proof Submitted', 'complete' => $paymentSubmitted],
         ['label' => 'Payment Verified', 'complete' => $paymentVerified],
-        ['label' => 'Defense Committee Memo Issued', 'complete' => $committeeMemoIssued],
         ['label' => 'Outline Defense Manuscript Submitted', 'complete' => $outlineSubmitted],
         ['label' => 'Outline Defense Review Completed', 'complete' => $outlineReviewCompleted],
         ['label' => 'Outline Defense Verdict Released', 'complete' => $outlineVerdictReleased],
