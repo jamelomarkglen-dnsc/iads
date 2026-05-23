@@ -214,7 +214,7 @@ if (isset($_GET['chair_assign_search']) && $_GET['chair_assign_search'] === '1')
 
     $searchLimit = 25;
     $searchSql = "
-        SELECT
+        SELECT DISTINCT
             u.id,
             COALESCE(u.student_id, '') AS student_id,
             COALESCE(u.firstname, '') AS firstname,
@@ -223,7 +223,11 @@ if (isset($_GET['chair_assign_search']) && $_GET['chair_assign_search'] === '1')
             COALESCE(u.program, '') AS program,
             COALESCE(u.year_level, '') AS year_level
         FROM users u
+        INNER JOIN concept_papers cp ON cp.student_id = u.id
+        INNER JOIN concept_reviewer_assignments cra ON cra.student_id = u.id
+        INNER JOIN final_pick_messages fpm ON fpm.student_id = u.id
         WHERE u.role = 'student'
+          AND u.account_status = 'approved'
           AND {$unassignedClause}
     ";
     if ($studentScopeCondition !== '') {
@@ -370,9 +374,13 @@ if (isset($_GET['chair_assign_debug']) && $_GET['chair_assign_debug'] === '1') {
         $lastName = (string)($studentRow['lastname'] ?? '');
         $firstName = (string)($studentRow['firstname'] ?? '');
         $positionSql = "
-            SELECT COUNT(*) AS position
+            SELECT COUNT(DISTINCT u.id) AS position
             FROM users u
+            INNER JOIN concept_papers cp ON cp.student_id = u.id
+            INNER JOIN concept_reviewer_assignments cra ON cra.student_id = u.id
+            INNER JOIN final_pick_messages fpm ON fpm.student_id = u.id
             WHERE u.role = 'student'
+              AND u.account_status = 'approved'
               AND {$unassignedClause}
         ";
         if ($studentScopeCondition !== '') {
@@ -465,10 +473,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['chair_assign_advisee'] ?? 
         if ($chairQuickLookupValue !== '') {
             $quickLookupRow = null;
             $quickLookupSql = "
-                SELECT u.id,
+                SELECT DISTINCT u.id,
                        CONCAT(COALESCE(u.firstname,''), ' ', COALESCE(u.lastname,'')) AS full_name
                 FROM users u
+                INNER JOIN concept_papers cp ON cp.student_id = u.id
+                INNER JOIN concept_reviewer_assignments cra ON cra.student_id = u.id
+                INNER JOIN final_pick_messages fpm ON fpm.student_id = u.id
                 WHERE u.role = 'student'
+                  AND u.account_status = 'approved'
                   AND {$unassignedClause}
                   AND (
                         u.student_id = ?
@@ -799,9 +811,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['chair_assign_advisee'] ?? 
 
 if ($adviserAssignmentEnabled) {
     $countSql = "
-        SELECT COUNT(*) AS total
+        SELECT COUNT(DISTINCT u.id) AS total
         FROM users u
+        INNER JOIN concept_papers cp ON cp.student_id = u.id
+        INNER JOIN concept_reviewer_assignments cra ON cra.student_id = u.id
+        INNER JOIN final_pick_messages fpm ON fpm.student_id = u.id
         WHERE u.role = 'student'
+          AND u.account_status = 'approved'
           AND {$unassignedClause}
     ";
     if ($studentScopeCondition !== '') {
@@ -814,7 +830,7 @@ if ($adviserAssignmentEnabled) {
     }
 
     $listSql = "
-        SELECT
+        SELECT DISTINCT
             u.id,
             u.student_id,
             u.firstname,
@@ -823,7 +839,11 @@ if ($adviserAssignmentEnabled) {
             u.year_level,
             u.email
         FROM users u
+        INNER JOIN concept_papers cp ON cp.student_id = u.id
+        INNER JOIN concept_reviewer_assignments cra ON cra.student_id = u.id
+        INNER JOIN final_pick_messages fpm ON fpm.student_id = u.id
         WHERE u.role = 'student'
+          AND u.account_status = 'approved'
           AND {$unassignedClause}
     ";
     if ($studentScopeCondition !== '') {
