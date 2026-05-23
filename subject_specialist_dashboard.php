@@ -1464,6 +1464,29 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
     </div>
 </div>
 
+<!-- Validation Error Modal -->
+<div class="modal fade" id="validationErrorModal" tabindex="-1" aria-labelledby="validationErrorModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <div class="modal-header bg-success border-0">
+                <h5 class="modal-title d-flex align-items-center text-white fw-bold" id="validationErrorModalLabel">
+                    <i class="bi bi-info-circle-fill me-2"></i>
+                    Validation Notice
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-4">
+                <p class="mb-0 text-dark" id="validationErrorMessage" style="font-size: 1.05rem; line-height: 1.7;"></p>
+            </div>
+            <div class="modal-footer border-0 bg-light">
+                <button type="button" class="btn btn-success px-4" data-bs-dismiss="modal">
+                    <i class="bi bi-check-circle me-1"></i> Understood
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <?php if (in_array($role, ['adviser', 'panel', 'committee_chair', 'committee_chairperson', 'faculty'], true)): ?>
 <script>
@@ -1602,7 +1625,13 @@ $heroBadgeClass = 'badge bg-success-subtle text-success fs-6';
                     syncGroupState(group);
                     const result = collectGroupReviews(group);
                     if (result.error) {
-                        alert(result.error);
+                        const modalElement = document.getElementById('validationErrorModal');
+                        const messageElement = document.getElementById('validationErrorMessage');
+                        if (modalElement && messageElement) {
+                            messageElement.textContent = result.error;
+                            const modal = new bootstrap.Modal(modalElement);
+                            modal.show();
+                        }
                         return;
                     }
                     bulkForm.querySelectorAll('[data-generated-input]').forEach((input) => input.remove());
