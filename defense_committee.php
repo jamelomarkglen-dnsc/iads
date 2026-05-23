@@ -47,7 +47,8 @@ $studentScopeTypes = '';
 $studentScopeParams = [];
 [$studentScopeClause, $studentScopeTypes, $studentScopeParams] = build_scope_condition_any($chairScope, 'u');
 $studentSql = "
-    SELECT u.id, u.firstname, u.lastname, u.email, u.program
+    SELECT u.id, u.firstname, u.lastname, u.email, u.program,
+           COALESCE(u.adviser_id, u.advisor_id, 0) AS adviser_id
     FROM users u
 ";
 $studentSql .= " WHERE u.role = 'student'";
@@ -435,7 +436,7 @@ foreach ($requests as $row) {
                             <input type="hidden" name="create_committee_request" value="1">
                             <div class="mb-3">
                                 <label class="form-label text-muted small">Student</label>
-                                <select name="student_id" class="form-select" required>
+                                <select name="student_id" id="studentSelect" class="form-select" required>
                                     <option value="">Select student</option>
                                     <?php foreach ($studentOptions as $student): ?>
                                         <?php
@@ -444,12 +445,16 @@ foreach ($requests as $row) {
                                             if (!empty($student['email'])) {
                                                 $studentLabel .= ' - ' . $student['email'];
                                             }
+                                            $studentAdviserId = (int)($student['adviser_id'] ?? 0);
                                         ?>
-                                        <option value="<?php echo (int)$student['id']; ?>">
+                                        <option value="<?php echo (int)$student['id']; ?>" data-adviser-id="<?php echo $studentAdviserId; ?>">
                                             <?php echo htmlspecialchars($studentLabel); ?>
                                         </option>
                                     <?php endforeach; ?>
                                 </select>
+                                <small class="form-text text-muted">
+                                    <i class="bi bi-info-circle"></i> The adviser will auto-fill based on the selected student.
+                                </small>
                             </div>
 
                             <div class="form-section-title">Defense Committee Review Schedule</div>
@@ -480,8 +485,13 @@ foreach ($requests as $row) {
 
                             <div class="form-section-title">Committee Selection</div>
                             <div class="mb-3">
-                                <label class="form-label text-muted small">Adviser</label>
-                                <select name="adviser_id" class="form-select" required>
+                                <label class="form-label text-muted small">
+                                    Adviser 
+                                    <span class="badge bg-success-subtle text-success" id="adviserAutoFillBadge" style="display:none;">
+                                        <i class="bi bi-check-circle-fill me-1"></i>Auto-filled
+                                    </span>
+                                </label>
+                                <select name="adviser_id" id="adviserSelect" class="form-select" required>
                                     <option value="">Select adviser</option>
                                     <?php foreach ($adviserOptions as $adviser): ?>
                                         <option value="<?php echo (int)$adviser['id']; ?>">
@@ -700,6 +710,75 @@ foreach ($requests as $row) {
 
         venueSelect.addEventListener('change', toggleOther);
         toggleOther();
+    })();
+
+    // Auto-fill adviser based on selected student
+    (() => {
+        const studentSelect = document.getElementById('studentSelect');
+        const adviserSelect = document.getElementById('adviserSelect');
+        const adviserBadge = document.getElementById('adviserAutoFillBadge');
+        
+        if (!studentSelect || !adviserSelect) {
+            return;
+        }
+        
+        studentSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const adviserId = selectedOption.getAttribute('data-adviser-id');
+            
+            if (adviserId && parseInt(adviserId) > 0) {
+                // Check if adviser exists in dropdown
+                const adviserExists = Array.from(adviserSelect.options).some(opt => opt.value === adviserId);
+                
+                if (adviserExists) {
+                    // Auto-select the adviser
+                    adviserSelect.value = adviserId;
+                    
+                    // Show visual feedback
+                    if (adviserBadge) {
+                        adviserBadge.style.display = 'inline-block';
+                    }
+                    
+                    // Add green highlight animation
+                    adviserSelect.style.transition = 'all 0.3s ease';
+                    adviserSelect.style.borderColor = '#198754';
+                    adviserSelect.style.backgroundColor = '#d1f4e0';
+                    
+                    // Remove highlight after 2 seconds
+                    setTimeout(() => {
+                        adviserSelect.style.borderColor = '';
+                        adviserSelect.style.backgroundColor = '';
+                    }, 2000);
+                } else {
+                    // Adviser not in dropdown - show warning
+                    const studentName = selectedOption.textContent.split(' - ')[0];
+                    alert('Warning: The assigned adviser for ' + studentName + ' is not available in the dropdown. Please select an appropriate adviser manually.');
+                    adviserSelect.value = '';
+                    if (adviserBadge) {
+                        adviserBadge.style.display = 'none';
+                    }
+                }
+            } else {
+                // No adviser assigned yet
+                adviserSelect.value = '';
+                if (adviserBadge) {
+                    adviserBadge.style.display = 'none';
+                }
+            }
+        });
+        
+        // Hide badge if adviser is manually changed
+        adviserSelect.addEventListener('change', function() {
+            const studentSelect = document.getElementById('studentSelect');
+            const selectedStudentOption = studentSelect.options[studentSelect.selectedIndex];
+            const expectedAdviserId = selectedStudentOption.getAttribute('data-adviser-id');
+            
+            if (this.value !== expectedAdviserId) {
+                if (adviserBadge) {
+                    adviserBadge.style.display = 'none';
+                }
+            }
+        });
     })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
