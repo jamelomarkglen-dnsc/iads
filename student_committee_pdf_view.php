@@ -355,7 +355,7 @@ $annotations = fetch_committee_submission_annotations($conn, $submission_id);
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="pdf_viewer.js?v=20260422-search13"></script>
-<script src="annotation_manager.js?v=20260421-search"></script>
+<script src="annotation_manager.js?v=20260525fix"></script>
 
 <script>
     const pdfViewer = new PDFViewer({
