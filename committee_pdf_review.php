@@ -321,7 +321,7 @@ $verdictLocked = !empty($submission['final_verdict']) && $submission['final_verd
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="pdf_viewer.js?v=20260422-search13"></script>
-<script src="annotation_manager.js"></script>
+<script src="annotation_manager.js?v=20260525fix"></script>
 
 <script>
     const pdfViewer = new PDFViewer({

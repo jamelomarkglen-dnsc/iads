@@ -306,9 +306,9 @@ class AnnotationManager {
         if (!this.annotationDialog) return;
         
         // Set annotation type
-        const typeSelect = this.annotationDialog.querySelector('select[name="annotation_type"]');
-        if (typeSelect) {
-            typeSelect.value = this.currentAnnotationData.annotation_type;
+        const typeElement = this.annotationDialog.querySelector('input[name="annotation_type"], select[name="annotation_type"]');
+        if (typeElement) {
+            typeElement.value = this.currentAnnotationData.annotation_type;
         }
         
         // Set selected text if available
@@ -358,10 +358,10 @@ class AnnotationManager {
         
         // Get form data
         const contentTextarea = this.annotationDialog.querySelector('textarea[name="annotation_content"]');
-        const typeSelect = this.annotationDialog.querySelector('select[name="annotation_type"]');
+        const typeElement = this.annotationDialog.querySelector('input[name="annotation_type"], select[name="annotation_type"]');
         
         const annotationContent = contentTextarea.value.trim();
-        const annotationType = typeSelect.value;
+        const annotationType = typeElement ? typeElement.value : 'comment';
         
         if (!annotationContent) {
             this.showMessage('Please enter annotation content', 'error');
